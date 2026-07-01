@@ -26,8 +26,30 @@ const storage = {
 // Cambia API_ENDPOINT por la URL de tu proxy si usas la opción A.
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
 const API_ENDPOINT = "https://api.anthropic.com/v1/messages";
+// Endpoints relativos: en local los atiende Express (vía proxy de Vite),
+// en Vercel los atienden las funciones serverless de /api.
 const SCRAPER_ENDPOINT =
-  import.meta.env.VITE_UXIA_SCRAPER_ENDPOINT || "http://127.0.0.1:8787/api/scrape";
+  import.meta.env.VITE_UXIA_SCRAPER_ENDPOINT || "/api/scrape";
+const OPP_ENDPOINT =
+  import.meta.env.VITE_UXIA_OPP_ENDPOINT || "/api/opportunities";
+
+// Días transcurridos desde que se capturó/guardó una vacante.
+function parseCapture(job) {
+  if (job.capturedAt) return job.capturedAt;
+  if (job.fecha) {
+    const m = String(job.fecha).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+  }
+  return null;
+}
+
+function daysSince(job) {
+  const t = parseCapture(job);
+  if (t == null) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+
+const STALE_DAYS = 3; // días sin acción para considerarse pendiente
 
 async function callClaude(body) {
   if (!API_KEY) {
@@ -394,6 +416,7 @@ function OutreachBox({ item, mode, message, loading, copied, onGenerate, onCopy 
 // ─── App ───────────────────────────────────────────────────────────────────
 export default function RadarUXIA() {
   const [tab, setTab] = useState("radar");
+  const [showNotif, setShowNotif] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [expandedSearch, setExpandedSearch] = useState(false);
   const [scanError, setScanError] = useState("");
@@ -489,6 +512,7 @@ Responde solo el mensaje final.`,
           id: `job-${Date.now()}`,
           estado: "nueva",
           fecha: new Date().toLocaleDateString("es-CO"),
+          capturedAt: Date.now(),
           score: typeof parsed.score === "number" ? parsed.score : localScore(parsed),
           mensaje: parsed.mensaje || fallbackOutreach(parsed, parsed.categoria === "lead comercial" ? "lead" : "job"),
         };
@@ -545,6 +569,7 @@ ${pasted}`,
         id: `job-${Date.now()}-${i}`,
         estado: "nueva",
         fecha: new Date().toLocaleDateString("es-CO"),
+        capturedAt: Date.now(),
         score: typeof j.score === "number" ? j.score : localScore(j),
       }));
       await persist([...stamped, ...jobs]);
@@ -683,10 +708,45 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
   };
 
   // ── Escaneo de oportunidades (prospección de clientes) ──
+  const runOppScraper = async () => {
+    const params = new URLSearchParams({ q: query, limit: "14" });
+    const response = await fetch(`${OPP_ENDPOINT}?${params.toString()}`);
+    if (!response.ok) throw new Error("scraper de oportunidades no disponible");
+    const data = await response.json();
+    return Array.isArray(data.opportunities) ? data.opportunities : [];
+  };
+
   const scanOpportunities = async () => {
     setOppScanning(true);
     setOppError("");
     setOppResults([]);
+
+    // 1) Scraping público (empresas y personas), sin depender de la API de Claude.
+    try {
+      const scraped = await runOppScraper();
+      if (Array.isArray(scraped) && scraped.length > 0) {
+        setOppResults(
+          scraped.map((o, i) => ({ ...o, id: o.id || `opp-${Date.now()}-${i}`, score: typeof o.score === "number" ? o.score : 50 }))
+        );
+        setOppScanning(false);
+        return;
+      }
+    } catch (scraperError) {
+      // Sin backend disponible: si no hay key, avisamos abajo.
+      if (!API_KEY) {
+        setOppError("El radar comercial necesita el backend. Corre npm run scraper (o despliega en Vercel) e intenta de nuevo.");
+        setOppScanning(false);
+        return;
+      }
+    }
+
+    if (!API_KEY) {
+      setOppError("No se encontraron señales claras esta vez. Prueba de nuevo o ajusta el término en la pestaña Buscar.");
+      setOppScanning(false);
+      return;
+    }
+
+    // 2) Respaldo con IA (solo si hay VITE_ANTHROPIC_API_KEY configurada).
     try {
       const data = await callClaude({
           model: "claude-sonnet-4-6",
@@ -725,6 +785,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
       id: `job-${Date.now()}`,
       estado: "nueva",
       fecha: new Date().toLocaleDateString("es-CO"),
+      capturedAt: Date.now(),
     };
     await persist([stamped, ...jobs]);
     setSavedIds((prev) => [...prev, job.id]);
@@ -738,6 +799,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         id: `job-${Date.now()}-${i}`,
         estado: "nueva",
         fecha: new Date().toLocaleDateString("es-CO"),
+        capturedAt: Date.now(),
       }));
     await persist([...nuevos, ...jobs]);
     setSavedIds(scanResults.map((j) => j.id));
@@ -761,7 +823,15 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
     total: jobs.length,
     remotas: jobs.filter((j) => j.remoto === "remoto").length,
     aplicadas: jobs.filter((j) => j.estado === "aplicada").length,
+    pendientes: jobs.filter((j) => j.estado !== "aplicada" && j.estado !== "descartada").length,
   };
+
+  // Notificaciones: vacantes sin acción (ni aplicada ni descartada) por varios días.
+  const staleJobs = jobs
+    .filter((j) => j.estado !== "aplicada" && j.estado !== "descartada")
+    .map((j) => ({ job: j, dias: daysSince(j) }))
+    .filter((x) => x.dias != null && x.dias >= STALE_DAYS)
+    .sort((a, b) => b.dias - a.dias);
 
   const sources = buildSources(query, remoteOnly);
   const postSources = buildPostSources(query);
@@ -841,6 +911,9 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               <p className="text-sm" style={{ color: C.dim }}>
                 Vacantes UX/UI · prioridad: español + remoto · IA como bono
               </p>
+              <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+                Una idea de <span style={{ color: C.amber }}>MediaLab Ingeniería</span>
+              </p>
             </div>
           </div>
         </header>
@@ -867,6 +940,79 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
             </button>
           ))}
         </nav>
+
+        {/* ── Indicadores del tablero (siempre visibles) ── */}
+        <div className="mb-4">
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              ["Capturadas", stats.total, C.text],
+              ["Remotas", stats.remotas, C.green],
+              ["Aplicadas", stats.aplicadas, C.cyan],
+              ["Pendientes", stats.pendientes, stats.pendientes ? C.amber : C.faint],
+            ].map(([label, val, color]) => (
+              <button
+                key={label}
+                onClick={() => setTab("tablero")}
+                className="rounded-xl px-2 py-2.5 text-center"
+                style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
+              >
+                <div className="text-lg font-bold" style={{ color, fontFamily: FONT.display }}>{val}</div>
+                <div className="text-[10px] leading-tight" style={{ color: C.faint }}>{label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Notificaciones: sin acción por varios días */}
+          {staleJobs.length > 0 && (
+            <div className="mt-2 rounded-xl overflow-hidden" style={{ backgroundColor: `${C.coral}12`, border: `1px solid ${C.coral}44` }}>
+              <button
+                onClick={() => setShowNotif((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium" style={{ color: C.coral, fontFamily: FONT.display }}>
+                  <span className="inline-flex items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: C.coral, color: "#1A0805", width: 20, height: 20 }}>
+                    {staleJobs.length}
+                  </span>
+                  {staleJobs.length === 1 ? "1 vacante sin acción" : `${staleJobs.length} vacantes sin acción`} · {STALE_DAYS}+ días
+                </span>
+                <span className="text-xs" style={{ color: C.coral }}>{showNotif ? "Ocultar" : "Ver"}</span>
+              </button>
+              {showNotif && (
+                <div className="px-3.5 pb-3 space-y-1.5">
+                  {staleJobs.slice(0, 6).map(({ job, dias }) => (
+                    <div key={job.id} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium truncate" style={{ color: C.text }}>{job.titulo}</div>
+                        <div className="text-[11px] truncate" style={{ color: C.faint }}>{job.empresa} · hace {dias} días</div>
+                      </div>
+                      <div className="flex gap-1.5 shrink-0">
+                        <button
+                          onClick={() => updateEstado(job.id, "aplicada")}
+                          className="text-[11px] px-2 py-1 rounded-md font-medium"
+                          style={{ backgroundColor: `${C.cyan}1A`, color: C.cyan, border: `1px solid ${C.cyan}44` }}
+                        >
+                          Aplicada
+                        </button>
+                        <button
+                          onClick={() => updateEstado(job.id, "descartada")}
+                          className="text-[11px] px-2 py-1 rounded-md font-medium"
+                          style={{ color: C.dim, border: `1px solid ${C.border}` }}
+                        >
+                          Descartar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {staleJobs.length > 6 && (
+                    <button onClick={() => setTab("tablero")} className="text-[11px] mt-1" style={{ color: C.coral }}>
+                      Ver las {staleJobs.length} en el tablero →
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* ── RADAR EN VIVO ── */}
         {tab === "radar" && (
@@ -939,9 +1085,15 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                     fontFamily: FONT.display,
                   }}
                 >
-                  {scanning ? "Cruzando fuentes..." : "Buscar combinaciones"}
+                  {scanning ? "Cruzando fuentes..." : "Búsqueda ampliada"}
                 </button>
               </div>
+              <p className="text-xs mt-2 leading-relaxed" style={{ color: C.faint }}>
+                <span style={{ color: C.amber }}>Buscar en todo</span>: usa tu término tal cual en todas las fuentes.
+                {" "}
+                <span style={{ color: C.cyan }}>Búsqueda ampliada</span>: además cruza automáticamente varios roles
+                (UX, UI, Product, UX Research, UX Engineer, Ingeniero UX) para no dejar vacantes fuera.
+              </p>
               {scanError && <p className="text-sm mt-2" style={{ color: C.coral }}>{scanError}</p>}
             </div>
 
@@ -1036,6 +1188,9 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                               {j.salario && j.salario !== "No especificado" && (
                                 <Badge color={C.dim} bg={`${C.dim}14`}>{j.salario}</Badge>
                               )}
+                              {j.fechaPublicacion && (
+                                <Badge color={C.faint} bg={`${C.faint}14`}>Publicada: {j.fechaPublicacion}</Badge>
+                              )}
                             </div>
                             {j.resumen && (
                               <p className="text-xs mt-2 leading-relaxed" style={{ color: C.dim }}>{j.resumen}</p>
@@ -1094,10 +1249,10 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                 Radar comercial · señales de demanda
               </h2>
               <p className="text-sm mb-3 leading-relaxed" style={{ color: C.dim }}>
-                Aquí no buscas empleo: buscas clientes. La IA rastrea CEO, fundadores y líderes de
-                talento o producto que expresan retos o dolores de UX, o que buscan consultoría,
-                agencia, aliado o partner de diseño. Ideal para ofrecer los servicios de MediaLab.
-                Cubre lo indexado públicamente en español.
+                Aquí no buscas empleo: buscas clientes. El radar rastrea <strong style={{ color: C.text }}>empresas y personas</strong>
+                {" "}(no solo CEOs o líderes): fundadores, equipos, marcas o profesionales que expresan retos o
+                dolores de UX, que buscan consultoría, agencia, aliado o partner de diseño, o que quieren aprender
+                producto. Ideal para ofrecer los servicios de MediaLab Ingeniería. Cubre lo indexado públicamente en español.
               </p>
               <button
                 onClick={scanOpportunities}
@@ -1371,20 +1526,6 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         {/* ── TABLERO ── */}
         {tab === "tablero" && (
           <section>
-            {/* Métricas */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              {[
-                ["Capturadas", stats.total, C.text],
-                ["Remotas", stats.remotas, C.green],
-                ["Aplicadas", stats.aplicadas, C.cyan],
-              ].map(([label, val, color]) => (
-                <div key={label} className="rounded-xl px-4 py-3 text-center" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
-                  <div className="text-xl font-bold" style={{ color, fontFamily: FONT.display }}>{val}</div>
-                  <div className="text-xs" style={{ color: C.faint }}>{label}</div>
-                </div>
-              ))}
-            </div>
-
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 mb-4">
               {[
@@ -1449,6 +1590,12 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                           ))}
                           {j.salario && j.salario !== "No especificado" && (
                             <Badge color={C.dim} bg={`${C.dim}14`}>{j.salario}</Badge>
+                          )}
+                          {j.fechaPublicacion && (
+                            <Badge color={C.faint} bg={`${C.faint}14`}>Publicada: {j.fechaPublicacion}</Badge>
+                          )}
+                          {j.estado !== "aplicada" && j.estado !== "descartada" && daysSince(j) != null && daysSince(j) >= STALE_DAYS && (
+                            <Badge color={C.coral} bg={`${C.coral}14`}>Sin acción {daysSince(j)} días</Badge>
                           )}
                         </div>
                         {j.resumen && (

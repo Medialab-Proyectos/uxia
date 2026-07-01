@@ -156,12 +156,9 @@ function buildDirectLinkedInPost(query) {
   ];
 }
 
-async function scrapeApifyLinkedInPosts(query, remoteOnly, limit) {
+async function runApifyPostSearch(searchQueries, limit) {
   const token = process.env.APIFY_TOKEN;
-  if (!token) return [];
-
-  const searchQueries = buildApifyPostQueries(query, remoteOnly);
-
+  if (!token || !searchQueries.length) return [];
   try {
     const response = await fetch(
       `https://api.apify.com/v2/acts/harvestapi~linkedin-post-search/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`,
@@ -182,16 +179,21 @@ async function scrapeApifyLinkedInPosts(query, remoteOnly, limit) {
     );
     if (!response.ok) throw new Error(`Apify ${response.status}`);
     const data = await response.json();
-    const rows = Array.isArray(data) ? data : data.items || data.results || [];
-    return rows
-      .map((row) => normalizeApifyPost(row))
-      .filter(Boolean)
-      .slice(0, limit)
-      .map(scoreJob);
+    return Array.isArray(data) ? data : data.items || data.results || [];
   } catch (error) {
-    console.warn("Apify LinkedIn Posts fallo:", error.message);
+    console.warn("Apify post search fallo:", error.message);
     return [];
   }
+}
+
+async function scrapeApifyLinkedInPosts(query, remoteOnly, limit) {
+  const searchQueries = buildApifyPostQueries(query, remoteOnly);
+  const rows = await runApifyPostSearch(searchQueries, limit);
+  return rows
+    .map((row) => normalizeApifyPost(row))
+    .filter(Boolean)
+    .slice(0, limit)
+    .map(scoreJob);
 }
 
 function buildApifyPostQueries(query, remoteOnly) {
@@ -237,7 +239,7 @@ function normalizeApifyPost(row) {
     inferAuthorFromLinkedInTitle(row.title || "");
   const combined = `${title} ${text}`;
   const postedAt = row.postedAt || row.date || row.createdAt || row.publishedAt || row.postedDate || "";
-  if (!url || !looksLikeJobPost(combined) || isTooOld(postedAt, combined) || requiresAdvancedEnglish(combined) || !isSpanishText(combined)) return null;
+  if (!url || !looksLikeJobPost(combined) || isTooOld(postedAt, combined) || looksClosed(combined) || requiresAdvancedEnglish(combined) || !isSpanishText(combined)) return null;
 
   const emails = [...new Set(combined.match(EMAIL_RE) || [])];
   return {
@@ -284,7 +286,7 @@ async function scrapeGoogleXrayJobs(query, remoteOnly, limit) {
       const title = cleanText($(el).text());
       const block = cleanText($(el).closest("div").text());
       const combined = `${title} ${block}`;
-      if (isBadTitle(title) || !looksLikeJobPost(combined) || isTooOld("", combined) || requiresAdvancedEnglish(combined) || !isSpanishText(combined)) return;
+      if (isBadTitle(title) || !looksLikeJobPost(combined) || isTooOld("", combined) || looksClosed(combined) || requiresAdvancedEnglish(combined) || !isSpanishText(combined)) return;
       seen.add(url);
       const emails = [...new Set(combined.match(EMAIL_RE) || [])];
       items.push(scoreJob({
@@ -304,6 +306,7 @@ async function scrapeGoogleXrayJobs(query, remoteOnly, limit) {
         prioridad: "media",
         señalesIA: extractAiSignals(combined),
         resumen: summarize(combined),
+        fechaPublicacion: normalizeDateLabel("", combined),
         score: 0,
         mensaje: "",
       }));
@@ -338,7 +341,7 @@ async function scrapeLinkedInPosts(query, remoteOnly, limit) {
     const title = cleanText(link.text());
     const snippet = cleanText($(el).find(".b_caption p, p").first().text());
     const combined = `${title} ${snippet}`;
-    if (isBadTitle(title) || !looksLikeJobPost(combined) || !isSpanishText(combined)) return;
+    if (isBadTitle(title) || !looksLikeJobPost(combined) || isTooOld("", combined) || looksClosed(combined) || !isSpanishText(combined)) return;
 
     seen.add(url);
     const emails = [...new Set(combined.match(EMAIL_RE) || [])];
@@ -360,13 +363,14 @@ async function scrapeLinkedInPosts(query, remoteOnly, limit) {
       prioridad: "media",
       señalesIA: extractAiSignals(combined),
       resumen: summarize(combined),
+      fechaPublicacion: normalizeDateLabel("", combined),
       score: 0,
       mensaje: "",
     });
   });
 
   const detailed = await enrichWithDetails(items);
-  return detailed.map(scoreJob);
+  return detailed.filter((job) => !job.cerrada).map(scoreJob);
 }
 
 async function scrapeSource(source, query, remoteOnly, limit) {
@@ -388,7 +392,7 @@ async function scrapeSource(source, query, remoteOnly, limit) {
       card.find(source.titleSelector).first().text() || $(el).text()
     );
     const cardText = cleanText(card.text());
-    if (isBadTitle(title) || !looksRelevant(`${title} ${cardText}`) || !isSpanishText(`${title} ${cardText}`)) return;
+    if (isBadTitle(title) || !looksRelevant(`${title} ${cardText}`) || looksClosed(`${title} ${cardText}`) || !isSpanishText(`${title} ${cardText}`)) return;
 
     items.push({
       id: `${source.key}-${hash(url)}`,
@@ -407,12 +411,13 @@ async function scrapeSource(source, query, remoteOnly, limit) {
       prioridad: "media",
       señalesIA: extractAiSignals(cardText),
       resumen: "Oferta encontrada en fuente pública",
+      fechaPublicacion: normalizeDateLabel("", cardText),
       score: 0,
     });
   });
 
   const detailed = await enrichWithDetails(items);
-  return detailed.map(scoreJob);
+  return detailed.filter((job) => !job.cerrada).map(scoreJob);
 }
 
 async function enrichWithDetails(items) {
@@ -434,6 +439,8 @@ async function enrichWithDetails(items) {
           salario: item.salario !== "No especificado" ? item.salario : extractSalary(text),
           señalesIA: [...new Set([...item.señalesIA, ...extractAiSignals(text)])].slice(0, 3),
           resumen: summarize(text),
+          fechaPublicacion: item.fechaPublicacion || normalizeDateLabel("", text),
+          cerrada: looksClosed(text),
         };
       } catch (e) {
         return item;
@@ -558,7 +565,11 @@ function looksLikeJobPost(text) {
 }
 
 function looksLikeOpportunity(text) {
-  return /(consultor[ií]a|agencia|partner|aliado|rediseñ|mejorar la ux|usabilidad|conversi[oó]n|retenci[oó]n|curso|aprender)/i.test(text);
+  return /(consultor[ií]a|agencia|partner|aliado|socio|rediseñ|mejorar (la )?(ux|usabilidad|experiencia)|usabilidad|conversi[oó]n|retenci[oó]n|curso|aprender|necesitamos ayuda|nos cuesta|estamos teniendo)/i.test(text);
+}
+
+function looksClosed(text) {
+  return /(ya no acepta postulaciones|oferta (cerrada|finalizada|vencida|expirada|no disponible)|convocatoria cerrada|vacante cerrada|posici[oó]n cerrada|proceso (cerrado|finalizado)|ya (fue )?cubierta|position closed|no longer accepting|applications closed|this job is no longer|expired)/i.test(text);
 }
 
 function inferPostTitle(title, snippet) {
@@ -731,4 +742,245 @@ function hash(text) {
     value = (value * 31 + text.charCodeAt(i)) >>> 0;
   }
   return value.toString(36);
+}
+
+// ─── Radar comercial: señales de demanda (scraping, sin API de Claude) ───────
+// Detecta EMPRESAS y PERSONAS que expresan dolores de UX o buscan
+// consultoría / agencia / aliado / partner de diseño, y quienes quieren aprender.
+export async function scrapeOpportunities({ query = "", limit = 12 } = {}) {
+  // Fuente principal: LinkedIn posts vía Apify (misma infraestructura del radar de empleos).
+  const apify = await scrapeApifyOpportunities(query, Math.min(10, limit));
+  // Complemento: X-ray de Google/Bing (puede quedar vacío si bloquean el bot).
+  const searches = buildOpportunitySearches(query);
+  const perSearch = Math.max(3, Math.ceil((limit + 4) / searches.length));
+  const chunks = await Promise.allSettled(
+    searches.map((s) => scrapeOpportunitySearch(s, perSearch))
+  );
+  const web = chunks.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  return dedupeOpportunities([...apify, ...web])
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
+async function scrapeApifyOpportunities(query, limit) {
+  const searchQueries = buildApifyOpportunityQueries(query);
+  const rows = await runApifyPostSearch(searchQueries, limit);
+  return rows
+    .map((row) => normalizeApifyOpportunity(row))
+    .filter(Boolean)
+    .slice(0, limit)
+    .map(scoreOpportunity);
+}
+
+function buildApifyOpportunityQueries(query) {
+  const extra = cleanText(query);
+  return [
+    "buscamos agencia UX",
+    "necesitamos consultoría de diseño",
+    "buscamos aliado de diseño UX",
+    "mejorar la usabilidad de nuestra app",
+    "rediseñar nuestro producto digital",
+    "recomiendan estudio de diseño UX",
+    "necesitamos mejorar la experiencia de usuario",
+    "quiero aprender UX producto",
+    extra && !/^ux(\s|$)/i.test(extra) ? `${extra} UX consultoría` : "",
+  ]
+    .map((q) => cleanText(q).slice(0, 85))
+    .filter(Boolean)
+    .filter((q, index, arr) => arr.indexOf(q) === index);
+}
+
+function normalizeApifyOpportunity(row) {
+  const text = cleanText(
+    row.text || row.postText || row.content || row.description || row.commentary || row.caption || row.snippet || ""
+  );
+  const url = row.url || row.postUrl || row.linkedinUrl || row.link || row.inputUrl || "";
+  const author =
+    row.authorName || row.author?.name || row.profileName || row.actorName || row.companyName || "";
+  const combined = `${row.title || row.headline || ""} ${text}`;
+  if (!url || !looksLikeOpportunity(combined) || !isSpanishText(combined)) return null;
+
+  const emails = [...new Set(combined.match(EMAIL_RE) || [])];
+  const postedAt = row.postedAt || row.date || row.createdAt || row.publishedAt || row.postedDate || "";
+  return {
+    id: `opp-apify-${hash(url)}`,
+    empresa: cleanText(row.companyName || author) || inferOppCompany(combined, url),
+    persona: cleanText(author) || "Autor de la publicación",
+    fuente: "LinkedIn Posts",
+    url,
+    ubicacion: inferPrimaryLocation(combined),
+    contacto: emails[0] || (/dm|mensaje directo|inbox|escr[ií]beme/i.test(combined) ? "DM o mensaje directo" : "No especificado"),
+    canal: emails[0] ? "correo" : "LinkedIn",
+    categoria: inferOppCategory(combined),
+    dolor: extractPain(combined),
+    tipo: inferOppType(combined),
+    encaje: inferOppFit(combined),
+    señalesIA: extractAiSignals(combined),
+    fechaPublicacion: normalizeDateLabel(postedAt, combined),
+  };
+}
+
+function inferOppType(text) {
+  if (/agencia/i.test(text)) return "busca agencia";
+  if (/consultor/i.test(text)) return "busca consultoría";
+  if (/partner|aliado|socio/i.test(text)) return "busca partner";
+  if (/rediseñ/i.test(text)) return "rediseño";
+  if (/aprender|curso|formaci[oó]n|bootcamp/i.test(text)) return "aprendizaje";
+  if (/problema|dolor|nos cuesta|baja|mala|poca/i.test(text)) return "dolor";
+  return "reto";
+}
+
+function buildOpportunitySearches(query) {
+  const extra = cleanText(query);
+  const base = [
+    {
+      engine: "google",
+      tipo: "busca agencia",
+      q: 'site:linkedin.com/posts ("buscamos agencia" OR "necesitamos una agencia" OR "buscamos consultoría" OR "aliado de diseño" OR "partner de UX" OR "socio de diseño")',
+    },
+    {
+      engine: "google",
+      tipo: "rediseño",
+      q: 'site:linkedin.com/posts ("rediseñar" OR "mejorar la UX" OR "mejorar la usabilidad" OR "nuestro producto digital" OR "nuestra app") (UX OR usabilidad OR producto OR plataforma)',
+    },
+    {
+      engine: "bing",
+      tipo: "dolor UX",
+      q: '("estamos teniendo problemas" OR "nos cuesta" OR "baja conversión" OR "poca retención" OR "mala usabilidad" OR "abandono de usuarios") (UX OR producto OR app OR plataforma) (Colombia OR LATAM OR empresa)',
+    },
+    {
+      engine: "google",
+      tipo: "busca partner",
+      q: 'site:linkedin.com/posts ("estamos buscando" OR "recomiendan") ("estudio de diseño" OR "consultoría UX" OR "agencia de producto" OR "freelance UX")',
+    },
+    {
+      engine: "bing",
+      tipo: "aprendizaje",
+      q: '("quiero aprender UX" OR "estoy aprendiendo producto" OR "cómo mejorar como diseñador" OR "curso de UX") (Colombia OR LATAM OR español)',
+    },
+  ];
+  if (extra && !/^ux(\s|$)/i.test(extra)) {
+    base.push({
+      engine: "bing",
+      tipo: "dolor UX",
+      q: `("necesitamos" OR "buscamos" OR "nos cuesta") (UX OR usabilidad OR diseño OR producto) ${extra}`,
+    });
+  }
+  return base;
+}
+
+async function scrapeOpportunitySearch(search, limit) {
+  const isGoogle = search.engine === "google";
+  const searchUrl = isGoogle
+    ? `https://www.google.com/search?q=${encodeURIComponent(search.q)}&hl=es-419&gl=co&tbs=qdr:m2`
+    : `https://www.bing.com/search?q=${encodeURIComponent(search.q)}&setlang=es-CO&cc=co`;
+  let html;
+  try {
+    html = await fetchText(searchUrl);
+  } catch (error) {
+    console.warn(`Oportunidades (${search.engine}) fallo:`, error.message);
+    return [];
+  }
+  const $ = cheerio.load(html);
+  const items = [];
+  const seen = new Set();
+  const anchorSel = isGoogle ? "a" : "li.b_algo h2 a, li.b_algo a";
+
+  $(anchorSel).each((_, el) => {
+    if (items.length >= limit) return false;
+    const raw = $(el).attr("href") || "";
+    const url = isGoogle ? normalizeGoogleUrl(raw) : normalizeSearchUrl(raw);
+    if (!url || seen.has(url) || isBadUrl(url)) return;
+    const title = cleanText($(el).text());
+    const block = cleanText($(el).closest("div, li").text());
+    const combined = `${title} ${block}`;
+    if (!title || title.length < 8 || isBadTitle(title)) return;
+    if (!looksLikeOpportunity(combined) || !isSpanishText(combined)) return;
+    seen.add(url);
+
+    const emails = [...new Set(combined.match(EMAIL_RE) || [])];
+    const persona = inferAuthorFromLinkedInTitle(title);
+    const esPost = /linkedin\.com\/(posts|in)\//i.test(url);
+    items.push(scoreOpportunity({
+      id: `opp-${hash(url)}`,
+      empresa: inferOppCompany(combined, url),
+      persona: persona || (esPost ? "Autor de la publicación" : "Equipo responsable"),
+      fuente: isGoogle ? "Google X-ray" : "Bing",
+      url,
+      ubicacion: inferPrimaryLocation(combined),
+      contacto: emails[0] || (/dm|mensaje directo|inbox|escríbeme|escribime/i.test(combined) ? "DM o mensaje directo" : "No especificado"),
+      canal: emails[0] ? "correo" : (/linkedin/i.test(url) ? "LinkedIn" : "plataforma"),
+      categoria: inferOppCategory(combined),
+      dolor: extractPain(combined),
+      tipo: search.tipo,
+      encaje: inferOppFit(combined),
+      señalesIA: extractAiSignals(combined),
+    }));
+  });
+  return items;
+}
+
+function scoreOpportunity(opp) {
+  let score = 25;
+  const text = `${opp.dolor} ${opp.encaje} ${opp.empresa}`;
+  if (opp.dolor && opp.dolor.length > 12) score += 30; // claridad del dolor
+  if (opp.persona && !/autor|equipo/i.test(opp.persona)) score += 20; // decisor identificable
+  if (isPrimaryRegion({ ubicacion: opp.ubicacion, url: opp.url })) score += 20;
+  if (/(consultor|agencia|partner|aliado|rediseñ|usabilidad|conversi|retenci)/i.test(text)) score += 15;
+  if (hasDirectContact(opp.contacto)) score += 10;
+  const finalScore = Math.min(100, score);
+  return {
+    ...opp,
+    prioridad: finalScore >= 75 ? "alta" : finalScore >= 55 ? "media" : "baja",
+    score: finalScore,
+    mensaje: buildOpportunityMessage(opp),
+  };
+}
+
+function buildOpportunityMessage(opp) {
+  const quien = opp.empresa && !/no especificad/i.test(opp.empresa) ? opp.empresa : "tu equipo";
+  const dolor = opp.dolor || "el reto de producto/UX que compartieron";
+  return `Hola, vi lo que compartieron sobre ${dolor}. Desde MediaLab Ingeniería ayudamos a equipos a mejorar UX, usabilidad, conversión y producto digital con investigación y diseño práctico. ¿Te parece si conectamos y te comparto una idea concreta para ${quien}?`;
+}
+
+function inferOppCompany(text, url) {
+  const at = text.match(/(?:@|en)\s+([A-ZÁÉÍÓÚÑ][\w.& ]{2,40})/);
+  if (at) return cleanText(at[1]).slice(0, 50);
+  if (/linkedin\.com\/(posts|in)\//i.test(url)) return "Persona / marca en LinkedIn";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch (e) {
+    return "No especificada";
+  }
+}
+
+function inferOppCategory(text) {
+  if (/curso|aprender|aprendiendo|formaci[oó]n|bootcamp/i.test(text)) return "curso";
+  if (/freelance|independiente|por proyecto/i.test(text)) return "freelance";
+  if (/partner|aliado|socio/i.test(text)) return "partner MediaLab";
+  return "lead comercial";
+}
+
+function inferOppFit(text) {
+  if (/curso|aprender|formaci[oó]n/i.test(text)) return "Encaja con formación y comunidad de MediaLab";
+  if (/consultor|agencia|partner|aliado/i.test(text)) return "Busca aliado de diseño: encaje directo con MediaLab";
+  return "Dolor de UX/producto que MediaLab puede resolver";
+}
+
+function extractPain(text) {
+  const clean = cleanText(text);
+  const sentence = clean
+    .split(/[.!?·|]/)
+    .find((part) => /(problema|dolor|nos cuesta|no logramos|baja|poca|mala|mejorar|rediseñ|usabilidad|conversi|retenci|abandono|buscamos|necesitamos|aliado|consultor|agencia)/i.test(part));
+  return cleanText(sentence || clean).slice(0, 120);
+}
+
+function dedupeOpportunities(opps) {
+  const seen = new Set();
+  return opps.filter((o) => {
+    const key = `${o.empresa}|${o.url}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

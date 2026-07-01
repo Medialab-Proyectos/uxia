@@ -91,6 +91,37 @@ npm run build      # genera /dist
 npm run preview    # previsualiza el build
 ```
 
+## Arquitectura y despliegue en Vercel
+
+El proyecto ya está listo para Vercel sin exponer tokens en el navegador:
+
+- **Frontend** (Vite/React) → se compila a `/dist` y Vercel lo sirve como estático.
+- **Backend** → funciones serverless en la carpeta `/api`:
+  - `api/scrape.js` → radar de empleos.
+  - `api/opportunities.js` → radar comercial (señales de demanda).
+  - Ambas reutilizan el mismo core en `server/scraper.js`.
+- El frontend llama a rutas **relativas** (`/api/scrape`, `/api/opportunities`), así que
+  el mismo código corre en local y en Vercel sin cambios.
+
+### Correr en local
+Se necesitan dos procesos (el proxy de Vite reenvía `/api` al servidor Express):
+
+```bash
+npm run scraper   # backend en http://127.0.0.1:8787  (atiende /api/*)
+npm run dev       # frontend en http://127.0.0.1:4173  (proxy /api → 8787)
+```
+
+### Desplegar en Vercel
+1. Sube el repo a GitHub e impórtalo en Vercel (framework detectado: **Vite**).
+2. En **Settings → Environment Variables** agrega:
+   - `APIFY_TOKEN` = tu token de Apify (privado, **sin** prefijo `VITE_`).
+   - `VITE_ANTHROPIC_API_KEY` (opcional) solo si quieres el respaldo con IA.
+3. Deploy. Las funciones de `/api` quedan disponibles automáticamente.
+
+> **Nota:** El radar comercial (Oportunidades) ahora funciona con **scraping** (Apify +
+> X-ray de Google/Bing) y **no requiere** la API de Claude. La key de Anthropic solo se usa
+> como respaldo opcional para *Analizar post* y para generar mensajes de outreach.
+
 ## Nota legal
 
 Esta app prioriza enlaces de búsqueda e importación manual de texto que tú copias.

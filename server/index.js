@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scrapeJobs } from "./scraper.js";
+import { scrapeJobs, scrapeOpportunities } from "./scraper.js";
 
 loadEnvFile();
 
@@ -33,6 +33,21 @@ app.get("/api/scrape", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "No se pudo completar el scraping público",
+      detail: error.message,
+    });
+  }
+});
+
+app.get("/api/opportunities", async (req, res) => {
+  const query = String(req.query.q || "").trim();
+  const limit = Math.min(Number(req.query.limit || 12), 20);
+
+  try {
+    const opportunities = await scrapeOpportunities({ query, limit });
+    res.json({ opportunities, count: opportunities.length });
+  } catch (error) {
+    res.status(500).json({
+      error: "No se pudieron detectar señales de demanda",
       detail: error.message,
     });
   }
