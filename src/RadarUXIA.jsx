@@ -52,6 +52,11 @@ function daysSince(job) {
 
 const STALE_DAYS = 3; // días sin acción para considerarse pendiente
 
+// Identidad estable de un resultado, para marcarlo entre búsquedas distintas.
+function interesKey(job) {
+  return String(job.url || `${job.titulo || ""}|${job.empresa || ""}`).toLowerCase().trim();
+}
+
 async function callClaude(body) {
   if (!API_KEY) {
     throw new Error("Falta VITE_ANTHROPIC_API_KEY en el archivo .env");
@@ -436,13 +441,16 @@ export default function RadarUXIA() {
   const [loaded, setLoaded] = useState(false);
   const [outreachMessages, setOutreachMessages] = useState({});
   const [outreachLoading, setOutreachLoading] = useState("");
+  const [interesList, setInteresList] = useState([]);
 
-  // Cargar vacantes guardadas
+  // Cargar vacantes guardadas + lista "Me interesa"
   useEffect(() => {
     (async () => {
       try {
         const res = await storage.get("radar-jobs");
         if (res && res.value) setJobs(JSON.parse(res.value));
+        const resInteres = await storage.get("radar-interes");
+        if (resInteres && resInteres.value) setInteresList(JSON.parse(resInteres.value));
       } catch (e) {
         // sin datos previos: primera vez
       } finally {
@@ -459,6 +467,39 @@ export default function RadarUXIA() {
       console.error("No se pudo guardar", e);
     }
   };
+
+  const persistInteres = async (next) => {
+    setInteresList(next);
+    try {
+      await storage.set("radar-interes", JSON.stringify(next));
+    } catch (e) {
+      console.error("No se pudo guardar la lista Me interesa", e);
+    }
+  };
+
+  // Identidad estable de un resultado (los ids de escaneo cambian en cada búsqueda).
+  const interesOf = (job) => interesList.find((x) => x.key === interesKey(job));
+
+  const markInteres = async (job, value) => {
+    const key = interesKey(job);
+    const current = interesList.find((x) => x.key === key);
+    const rest = interesList.filter((x) => x.key !== key);
+    if (current && current.interes === value) {
+      await persistInteres(rest); // volver a tocar el mismo botón = quitar
+      return;
+    }
+    const entry = {
+      ...job,
+      key,
+      interes: value,
+      id: `int-${Date.now()}`,
+      fecha: new Date().toLocaleDateString("es-CO"),
+      capturedAt: Date.now(),
+    };
+    await persistInteres([entry, ...rest]);
+  };
+
+  const removeInteres = (key) => persistInteres(interesList.filter((x) => x.key !== key));
 
   const generateOutreach = async (item, mode = "job") => {
     setOutreachLoading(item.id);
@@ -827,6 +868,10 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
     pendientes: jobs.filter((j) => j.estado !== "aplicada" && j.estado !== "descartada").length,
   };
 
+  // Listas alternas "Me interesa" / "No me interesa".
+  const interesSi = interesList.filter((x) => x.interes === "si");
+  const interesNo = interesList.filter((x) => x.interes === "no");
+
   // Notificaciones: vacantes sin acción (ni aplicada ni descartada) por varios días.
   const staleJobs = jobs
     .filter((j) => j.estado !== "aplicada" && j.estado !== "descartada")
@@ -930,6 +975,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
           {[
             ["radar", "Buscar"],
             ["oportunidades", "Oportunidades"],
+            ["interes", `Me interesa${interesSi.length ? ` · ${interesSi.length}` : ""}`],
             ["tablero", `Tablero${jobs.length ? ` · ${jobs.length}` : ""}`],
             ["importar", "Analizar post"],
           ].map(([key, label]) => (
@@ -1205,7 +1251,36 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                               <p className="text-xs mt-2 leading-relaxed" style={{ color: C.dim }}>{j.resumen}</p>
                             )}
                             <ContactLine contacto={j.contacto} />
-                            <div className="flex gap-2 mt-3 items-center">
+                            <div className="flex gap-2 mt-3 items-center flex-wrap">
+                              {(() => {
+                                const estado = interesOf(j)?.interes;
+                                return (
+                                  <>
+                                    <button
+                                      onClick={() => markInteres(j, "si")}
+                                      className="text-xs px-3 py-1 rounded-md font-medium"
+                                      style={{
+                                        backgroundColor: estado === "si" ? C.green : `${C.green}14`,
+                                        color: estado === "si" ? "#0B1A0E" : C.green,
+                                        border: `1px solid ${C.green}55`,
+                                      }}
+                                    >
+                                      {estado === "si" ? "★ Me interesa" : "Me interesa"}
+                                    </button>
+                                    <button
+                                      onClick={() => markInteres(j, "no")}
+                                      className="text-xs px-3 py-1 rounded-md font-medium"
+                                      style={{
+                                        backgroundColor: estado === "no" ? C.coral : "transparent",
+                                        color: estado === "no" ? "#1A0805" : C.dim,
+                                        border: `1px solid ${estado === "no" ? C.coral : C.border}`,
+                                      }}
+                                    >
+                                      No me interesa
+                                    </button>
+                                  </>
+                                );
+                              })()}
                               <button
                                 onClick={() => saveScanned(j)}
                                 disabled={savedIds.includes(j.id)}
@@ -1356,6 +1431,84 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                     </article>
                   ))}
               </div>
+            )}
+          </section>
+        )}
+
+        {/* ── ME INTERESA (lista alterna) ── */}
+        {tab === "interes" && (
+          <section>
+            <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.green}33` }}>
+              <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
+                Me interesa · lista alterna
+              </h2>
+              <p className="text-sm leading-relaxed" style={{ color: C.dim }}>
+                Marca cada resultado de búsqueda como «Me interesa» o «No me interesa». Aquí quedan
+                separados de tu tablero para revisarlos después. Puedes moverlos al tablero cuando decidas.
+              </p>
+            </div>
+
+            {interesList.length === 0 ? (
+              <div className="rounded-xl p-8 text-center" style={{ backgroundColor: C.panel, border: `1px dashed ${C.border}` }}>
+                <p className="text-sm mb-1" style={{ color: C.dim }}>Aún no has marcado resultados.</p>
+                <p className="text-xs" style={{ color: C.faint }}>
+                  En «Buscar», usa «Me interesa» / «No me interesa» en cada oferta.
+                </p>
+              </div>
+            ) : (
+              <>
+                {[
+                  { title: "Me interesan", color: C.green, items: interesSi },
+                  { title: "No me interesan", color: C.coral, items: interesNo },
+                ].filter((g) => g.items.length > 0).map((group) => (
+                  <div key={group.title} className="mb-6">
+                    <h3 className="text-sm font-semibold mb-2" style={{ color: group.color, fontFamily: FONT.display }}>
+                      {group.title} · {group.items.length}
+                    </h3>
+                    <div className="space-y-3">
+                      {group.items.map((j) => (
+                        <article key={j.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, opacity: j.interes === "no" ? 0.6 : 1 }}>
+                          <div className="flex gap-3">
+                            <ScoreRing score={j.score} />
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-sm leading-snug" style={{ fontFamily: FONT.display }}>{j.titulo}</h3>
+                              <p className="text-xs mt-0.5" style={{ color: C.dim }}>
+                                {j.empresa} · {j.fuente} · {j.ubicacion}
+                              </p>
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {j.esColombia && <Badge color={C.amber} bg={`${C.amber}14`}>Colombia</Badge>}
+                                {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
+                                {j.idioma === "español" && <Badge color={C.cyan} bg={`${C.cyan}14`}>Español</Badge>}
+                                {j.fechaPublicacion && <Badge color={C.faint} bg={`${C.faint}14`}>Publicada: {j.fechaPublicacion}</Badge>}
+                              </div>
+                              <ContactLine contacto={j.contacto} />
+                              <div className="flex gap-2 mt-3 items-center flex-wrap">
+                                {j.interes === "no" ? (
+                                  <button onClick={() => markInteres(j, "si")} className="text-xs px-3 py-1 rounded-md font-medium" style={{ backgroundColor: `${C.green}14`, color: C.green, border: `1px solid ${C.green}55` }}>
+                                    Me interesa
+                                  </button>
+                                ) : (
+                                  <button onClick={() => saveScanned(j)} className="text-xs px-3 py-1 rounded-md font-medium" style={{ backgroundColor: `${C.cyan}1A`, color: C.cyan, border: `1px solid ${C.cyan}44` }}>
+                                    Guardar en tablero
+                                  </button>
+                                )}
+                                {j.url && (
+                                  <a href={j.url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{ color: C.amber, textDecoration: "none" }}>
+                                    Ver oferta →
+                                  </a>
+                                )}
+                                <button onClick={() => removeInteres(j.key)} className="text-xs px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}33` }}>
+                                  Quitar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
             )}
           </section>
         )}
