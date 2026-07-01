@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import logoUrl from "./logos/logouxia.fw.png";
 
 // ─── Almacenamiento local (reemplaza window.storage del artefacto) ──────────
 // Persiste en el navegador con localStorage. Mismo API async que usaba el artefacto.
@@ -897,25 +898,22 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Encabezado */}
         <header className="mb-8">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ border: `2px solid ${C.amber}`, background: `radial-gradient(circle, ${C.amber}22, transparent 70%)` }}
-            >
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: C.amber }} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: FONT.display }}>
-                Radar UX·IA
-              </h1>
-              <p className="text-sm" style={{ color: C.dim }}>
-                Vacantes UX/UI · prioridad: español + remoto · IA como bono
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-                Una idea de <span style={{ color: C.amber }}>MediaLab Ingeniería</span>
-              </p>
-            </div>
+          <div
+            className="inline-flex rounded-2xl px-4 py-3 mb-3"
+            style={{ background: "linear-gradient(135deg, #FFFFFF, #F0F2F6)", boxShadow: `0 0 0 1px ${C.border}` }}
+          >
+            <img
+              src={logoUrl}
+              alt="Radar UX·IA"
+              style={{ height: 44, width: "auto", display: "block" }}
+            />
           </div>
+          <p className="text-sm" style={{ color: C.dim }}>
+            Vacantes UX/UI · prioridad: español + remoto · IA como bono
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
+            Una idea de <span style={{ color: C.amber }}>MediaLab Ingeniería</span>
+          </p>
         </header>
 
         <nav className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
