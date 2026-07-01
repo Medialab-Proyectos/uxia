@@ -472,11 +472,14 @@ function scoreJob(job) {
   if (isPrimaryRegion(job)) score += 20;
   else score -= 20;
   if (job.fuente === "LinkedIn" || job.fuente === "LinkedIn Posts") score += 10;
+  const esColombia = isColombia(job);
+  if (esColombia) score += 12; // prioriza Colombia por encima del resto de LATAM
   if (job.fechaPublicacion && /meses|month/i.test(job.fechaPublicacion)) score -= 25;
   if (requiresAdvancedEnglish(`${job.titulo} ${job.resumen}`)) score -= 35;
   const finalScore = Math.min(100, score);
   return {
     ...job,
+    esColombia,
     regionPrioridad: isPrimaryRegion(job) ? "Colombia/LATAM" : "secundaria",
     prioridad: finalScore >= 80 ? "alta" : finalScore >= 60 ? "media" : "baja",
     score: finalScore,
@@ -498,7 +501,24 @@ function isPrimaryRegion(job) {
   return /colombia|bogot|medell|cali|latam|latin america|américa latina|america latina|remoto|remote/.test(text);
 }
 
+// Identifica ofertas claramente de Colombia. Se basa en la UBICACIÓN y el dominio
+// de país; NO en el resumen (los avisos LATAM listan varios países y darían falsos
+// positivos). Si la ubicación nombra otro país, no es Colombia.
+function isColombia(job) {
+  const loc = `${job.ubicacion || ""}`.toLowerCase();
+  const url = String(job.url || "").toLowerCase();
+  const nombraColombia = /colombia|bogot[aá]|medell[ií]n|\bcali\b|barranquilla|cartagena|bucaramanga|pereira|manizales/.test(loc);
+  const otroPais = /m[eé]xico|argentina|chile|per[uú]|uruguay|ecuador|bolivia|venezuela|paraguay|espa[ñn]a|brasil|estados unidos|usa/.test(loc);
+  if (otroPais && !nombraColombia) return false;
+  if (nombraColombia) return true;
+  if (/co\.linkedin\.com|co\.computrabajo\.com|elempleo\.com|magneto365\.com\/co/.test(url)) return true;
+  return false;
+}
+
 function comparePriority(a, b) {
+  // Colombia primero (garantiza que sobrevivan al recorte por límite).
+  const colombiaDelta = Number(Boolean(b.esColombia ?? isColombia(b))) - Number(Boolean(a.esColombia ?? isColombia(a)));
+  if (colombiaDelta) return colombiaDelta;
   const linkedInDelta = Number(isLinkedInSource(b)) - Number(isLinkedInSource(a));
   if (linkedInDelta) return linkedInDelta;
   const manualDelta = Number(Boolean(b.entradaManual)) - Number(Boolean(a.entradaManual));

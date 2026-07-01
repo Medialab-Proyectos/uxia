@@ -818,7 +818,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
       if (filter === "español") return j.idioma === "español" && j.estado !== "descartada";
       return j.estado === filter;
     })
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => (Number(Boolean(b.esColombia)) - Number(Boolean(a.esColombia))) || (b.score - a.score));
 
   const stats = {
     total: jobs.length,
@@ -840,28 +840,34 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
 
   const resultGroups = [
     {
+      title: "Colombia",
+      desc: "Ofertas ubicadas en Colombia (cualquier fuente). Prioridad máxima.",
+      color: C.amber,
+      items: scanResults.filter((j) => j.esColombia),
+    },
+    {
       title: "LinkedIn Posts",
       desc: "Convocatorias publicadas como posts de reclutadores o empresas.",
       color: C.amber,
-      items: scanResults.filter((j) => j.fuente === "LinkedIn Posts"),
+      items: scanResults.filter((j) => !j.esColombia && j.fuente === "LinkedIn Posts"),
     },
     {
       title: "LinkedIn Jobs",
-      desc: "Vacantes del buscador público de empleos de LinkedIn.",
+      desc: "Vacantes del buscador público de empleos de LinkedIn (resto de LATAM).",
       color: C.cyan,
-      items: scanResults.filter((j) => j.fuente === "LinkedIn"),
+      items: scanResults.filter((j) => !j.esColombia && j.fuente === "LinkedIn"),
     },
     {
-      title: "Colombia / LATAM",
-      desc: "Ofertas remotas o ubicadas en Colombia y América Latina.",
+      title: "Resto de LATAM",
+      desc: "Ofertas remotas o de otros países de América Latina.",
       color: C.green,
-      items: scanResults.filter((j) => j.fuente !== "LinkedIn Posts" && j.fuente !== "LinkedIn" && j.regionPrioridad === "Colombia/LATAM"),
+      items: scanResults.filter((j) => !j.esColombia && j.fuente !== "LinkedIn Posts" && j.fuente !== "LinkedIn" && j.regionPrioridad === "Colombia/LATAM"),
     },
     {
       title: "Secundarias",
       desc: "Otras fuentes útiles cuando el encaje es bueno.",
       color: C.dim,
-      items: scanResults.filter((j) => j.regionPrioridad !== "Colombia/LATAM" && j.fuente !== "LinkedIn Posts" && j.fuente !== "LinkedIn"),
+      items: scanResults.filter((j) => !j.esColombia && j.regionPrioridad !== "Colombia/LATAM" && j.fuente !== "LinkedIn Posts" && j.fuente !== "LinkedIn"),
     },
   ].filter((group) => group.items.length > 0);
 
@@ -1168,7 +1174,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                       <div className="space-y-3">
                         {group.items
                           .slice()
-                          .sort((a, b) => b.score - a.score)
+                          .sort((a, b) => (Number(Boolean(b.esColombia)) - Number(Boolean(a.esColombia))) || (b.score - a.score))
                           .map((j) => (
                       <article key={j.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
                         <div className="flex gap-3">
@@ -1181,6 +1187,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                               {j.empresa} · {j.fuente} · {j.ubicacion}
                             </p>
                             <div className="flex flex-wrap gap-1.5 mt-2">
+                              {j.esColombia && <Badge color={C.amber} bg={`${C.amber}14`}>Colombia</Badge>}
                               {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
                               {j.remoto === "híbrido" && <Badge color={C.amber} bg={`${C.amber}14`}>Híbrido</Badge>}
                               {j.idioma === "español" && <Badge color={C.cyan} bg={`${C.cyan}14`}>Español</Badge>}
@@ -1584,6 +1591,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                           {j.empresa} · {j.fuente} · {j.ubicacion} · {j.fecha}
                         </p>
                         <div className="flex flex-wrap gap-1.5 mt-2">
+                          {j.esColombia && <Badge color={C.amber} bg={`${C.amber}14`}>Colombia</Badge>}
                           {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
                           {j.remoto === "híbrido" && <Badge color={C.amber} bg={`${C.amber}14`}>Híbrido</Badge>}
                           {j.idioma === "español" && <Badge color={C.cyan} bg={`${C.cyan}14`}>Español</Badge>}
