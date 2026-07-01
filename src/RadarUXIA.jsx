@@ -908,7 +908,15 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
             Vacantes UX/UI · prioridad: español + remoto · IA como bono
           </p>
           <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            Una idea de <span style={{ color: C.amber }}>MediaLab Ingeniería</span>
+            Una idea de{" "}
+            <a
+              href="https://medialab.design/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: C.amber, textDecoration: "none" }}
+            >
+              MediaLab Ingeniería
+            </a>
           </p>
         </header>
 
