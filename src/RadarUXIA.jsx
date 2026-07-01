@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import logoUrl from "./logos/logouxia.fw.png";
+import logoUrl from "./logos/logouxiaoscuro.fw.png";
 
 // ─── Almacenamiento local (reemplaza window.storage del artefacto) ──────────
 // Persiste en el navegador con localStorage. Mismo API async que usaba el artefacto.
@@ -898,16 +898,12 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Encabezado */}
         <header className="mb-8">
-          <div
-            className="inline-flex rounded-2xl px-4 py-3 mb-3"
-            style={{ background: "linear-gradient(135deg, #FFFFFF, #F0F2F6)", boxShadow: `0 0 0 1px ${C.border}` }}
-          >
-            <img
-              src={logoUrl}
-              alt="Radar UX·IA"
-              style={{ height: 44, width: "auto", display: "block" }}
-            />
-          </div>
+          <img
+            src={logoUrl}
+            alt="Radar UX·IA"
+            className="mb-3"
+            style={{ height: 48, width: "auto", display: "block" }}
+          />
           <p className="text-sm" style={{ color: C.dim }}>
             Vacantes UX/UI · prioridad: español + remoto · IA como bono
           </p>
