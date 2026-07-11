@@ -306,14 +306,14 @@ function ContactLine({ contacto }) {
   if (!contacto || contacto === "No especificado") return null;
   const emailMatch = contacto.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
   return (
-    <div className="mt-2 px-2.5 py-1.5 rounded-md flex items-start gap-1.5" style={{ backgroundColor: "#1F2937", border: "1px solid #2D3B4E" }}>
-      <span className="text-xs" style={{ color: "#2AABB3", flexShrink: 0 }}>✉</span>
+    <div className="mt-2 px-2.5 py-1.5 rounded-md flex items-start gap-1.5" style={{ backgroundColor: "#EAF4F2", border: "1px solid #B7D8D4" }}>
+      <span className="text-xs" style={{ color: "#17727A", flexShrink: 0 }}>✉</span>
       {emailMatch ? (
-        <a href={`mailto:${emailMatch[0]}`} className="text-xs break-all" style={{ color: "#2AABB3", textDecoration: "none" }}>
+        <a href={`mailto:${emailMatch[0]}`} className="text-xs break-all" style={{ color: "#17727A", textDecoration: "none" }}>
           {contacto}
         </a>
       ) : (
-        <span className="text-xs break-words" style={{ color: "#8B97A6" }}>{contacto}</span>
+        <span className="text-xs break-words" style={{ color: "#667085" }}>{contacto}</span>
       )}
     </div>
   );
@@ -386,7 +386,7 @@ function OutreachBox({ item, mode, message, loading, copied, onGenerate, onCopy 
   const text = message || item.mensaje || fallbackOutreach(item, mode);
   const channel = item.canal || recommendedChannel(item);
   return (
-    <div className="mt-3 rounded-md p-3" style={{ backgroundColor: "#111820", border: `1px solid ${C.border}` }}>
+    <div className="mt-3 rounded-md p-3" style={{ backgroundColor: C.panelHi, border: `1px solid ${C.border}` }}>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <div className="flex flex-wrap gap-1.5">
           <Badge color={C.cyan} bg={`${C.cyan}14`}>Canal: {channel}</Badge>
@@ -444,12 +444,20 @@ export default function RadarUXIA({ token = "" } = {}) {
   const [outreachLoading, setOutreachLoading] = useState("");
   const [interesList, setInteresList] = useState([]);
 
-  // Cargar vacantes guardadas + lista "Me interesa"
+  // Cargar vacantes: primero de Supabase (las llena Claude Code); si no hay, respaldo local.
   useEffect(() => {
     (async () => {
       try {
-        const res = await storage.get("radar-jobs");
-        if (res && res.value) setJobs(JSON.parse(res.value));
+        let cargadas = null;
+        if (opsData.opsDataReady()) {
+          try { cargadas = await opsData.listVacantes(token); } catch { cargadas = null; }
+        }
+        if (cargadas && cargadas.length) {
+          setJobs(cargadas);
+        } else {
+          const res = await storage.get("radar-jobs");
+          if (res && res.value) setJobs(JSON.parse(res.value));
+        }
         const resInteres = await storage.get("radar-interes");
         if (resInteres && resInteres.value) setInteresList(JSON.parse(resInteres.value));
       } catch (e) {
@@ -458,6 +466,7 @@ export default function RadarUXIA({ token = "" } = {}) {
         setLoaded(true);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persist = async (next) => {
@@ -1195,7 +1204,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                                       className="text-xs px-3 py-1 rounded-md font-medium"
                                       style={{
                                         backgroundColor: estado === "si" ? C.green : `${C.green}14`,
-                                        color: estado === "si" ? "#0B1A0E" : C.green,
+                                        color: estado === "si" ? "#ffffff" : C.green,
                                         border: `1px solid ${C.green}55`,
                                       }}
                                     >
@@ -1322,47 +1331,47 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                   .slice()
                   .sort((a, b) => b.score - a.score)
                   .map((o) => (
-                    <article key={o.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
-                      <div className="flex gap-3">
+                    <details key={o.id} className="rounded-md" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+                      <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
                         <ScoreRing score={o.score} />
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm leading-snug" style={{ fontFamily: FONT.display }}>
+                          <h3 className="font-semibold text-sm leading-snug truncate" style={{ fontFamily: FONT.display }}>
                             {o.empresa}
                           </h3>
-                          <p className="text-xs mt-0.5" style={{ color: C.dim }}>
+                          <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>
                             {o.persona} · {o.fuente}
                           </p>
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {o.tipo && <Badge color={C.coral} bg={`${C.coral}14`}>{o.tipo}</Badge>}
-                          </div>
-                          {o.dolor && (
-                            <p className="text-sm mt-2 leading-relaxed" style={{ color: C.text }}>
-                              «{o.dolor}»
-                            </p>
-                          )}
-                          {o.encaje && (
-                            <p className="text-xs mt-1 leading-relaxed" style={{ color: C.dim }}>
-                              Encaje: {o.encaje}
-                            </p>
-                          )}
-                          <ContactLine contacto={o.contacto} />
-                          <OutreachBox
-                            item={o}
-                            mode="lead"
-                            message={outreachMessages[o.id]}
-                            loading={outreachLoading === o.id}
-                            copied={copied === `msg-${o.id}`}
-                            onGenerate={() => generateOutreach(o, "lead")}
-                            onCopy={(text) => copyLink(text, `msg-${o.id}`)}
-                          />
-                          {o.url && (
-                            <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-xs inline-block mt-2 px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}44`, textDecoration: "none" }}>
-                              Ver publicación →
-                            </a>
-                          )}
                         </div>
+                        <span className="shrink-0 text-xs" style={{ color: C.faint }}>▾</span>
+                      </summary>
+                      <div className="px-4 pb-4">
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {o.tipo && <Badge color={C.coral} bg={`${C.coral}14`}>{o.tipo}</Badge>}
+                          {o.ubicacion && <Badge color={C.dim} bg={`${C.faint}14`}>{o.ubicacion}</Badge>}
+                        </div>
+                        {o.dolor && (
+                          <p className="text-sm leading-relaxed" style={{ color: C.text }}>«{o.dolor}»</p>
+                        )}
+                        {o.encaje && (
+                          <p className="text-xs mt-1 leading-relaxed" style={{ color: C.dim }}>Encaje: {o.encaje}</p>
+                        )}
+                        <ContactLine contacto={o.contacto} />
+                        <OutreachBox
+                          item={o}
+                          mode="lead"
+                          message={outreachMessages[o.id]}
+                          loading={outreachLoading === o.id}
+                          copied={copied === `msg-${o.id}`}
+                          onGenerate={() => generateOutreach(o, "lead")}
+                          onCopy={(text) => copyLink(text, `msg-${o.id}`)}
+                        />
+                        {o.url && (
+                          <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-xs inline-block mt-2 px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}44`, textDecoration: "none" }}>
+                            Ver publicación →
+                          </a>
+                        )}
                       </div>
-                    </article>
+                    </details>
                   ))}
               </div>
             )}
@@ -1659,25 +1668,29 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             ) : (
               <div className="space-y-3">
                 {visible.map((j) => (
-                  <article
+                  <details
                     key={j.id}
-                    className="rounded-md p-4"
+                    className="rounded-md"
                     style={{
                       backgroundColor: C.panel,
                       border: `1px solid ${C.border}`,
                       opacity: j.estado === "descartada" ? 0.55 : 1,
                     }}
                   >
-                    <div className="flex gap-3">
+                    <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
                       <ScoreRing score={j.score} />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm leading-snug" style={{ fontFamily: FONT.display }}>
+                        <h3 className="font-semibold text-sm leading-snug truncate" style={{ fontFamily: FONT.display }}>
                           {j.titulo}
                         </h3>
-                        <p className="text-xs mt-0.5" style={{ color: C.dim }}>
-                          {j.empresa} · {j.fuente} · {j.ubicacion} · {j.fecha}
+                        <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>
+                          {j.empresa} · {j.fuente}{j.ubicacion ? ` · ${j.ubicacion}` : ""}
                         </p>
-                        <div className="flex flex-wrap gap-1.5 mt-2">
+                      </div>
+                      <span className="shrink-0 text-xs" style={{ color: C.faint }}>▾</span>
+                    </summary>
+                    <div className="px-4 pb-4">
+                        <div className="flex flex-wrap gap-1.5">
                           {j.esColombia && <Badge color={C.amber} bg={`${C.amber}14`}>Colombia</Badge>}
                           {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
                           {j.remoto === "híbrido" && <Badge color={C.amber} bg={`${C.amber}14`}>Híbrido</Badge>}
@@ -1754,9 +1767,8 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                             Eliminar
                           </button>
                         </div>
-                      </div>
                     </div>
-                  </article>
+                  </details>
                 ))}
               </div>
             )}

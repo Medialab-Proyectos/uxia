@@ -320,3 +320,19 @@ export async function updateOportunidad(token, id, patch) {
     prefer: "return=minimal",
   });
 }
+
+// ---------- vacantes (Radar empleos) — la app SOLO lee y da seguimiento ----------
+const mapVacante = (row) => ({ ...(row.data || {}), id: row.id, score: row.score, estado: row.estado, createdAt: row.created_at });
+
+export async function listVacantes(token) {
+  const rows = await rest(token, "vacantes", { query: "?select=*&order=score.desc" });
+  return (rows || []).map(mapVacante);
+}
+
+export async function updateVacante(token, id, patch) {
+  await rest(token, `vacantes?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: { ...(patch.estado ? { estado: patch.estado } : {}), updated_at: new Date().toISOString() },
+    prefer: "return=minimal",
+  });
+}

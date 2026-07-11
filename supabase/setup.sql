@@ -34,6 +34,17 @@ create table if not exists oportunidades (
 );
 create index if not exists oportunidades_estado_idx on oportunidades (estado, score desc);
 
+-- 2b) Vacantes de empleo del Radar (las llena Claude Code; la app solo lee/sigue) --
+create table if not exists vacantes (
+  id text primary key,
+  score int not null default 0,
+  estado text not null default 'nueva',
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists vacantes_estado_idx on vacantes (estado, score desc);
+
 -- 3) Método de conexión por persona ---------------------------------------------
 alter table people add column if not exists contact_method text default 'auto';
 
@@ -41,7 +52,7 @@ alter table people add column if not exists contact_method text default 'auto';
 do $$
 declare t text;
 begin
-  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades']
+  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes']
   loop
     execute format('alter table %I enable row level security;', t);
     execute format('drop policy if exists "auth_all_%1$s" on %1$I;', t);

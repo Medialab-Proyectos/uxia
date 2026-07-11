@@ -67,6 +67,7 @@ async function refreshSession(session) {
 
 function AppShell() {
   const [module, setModule] = React.useState(() => localStorage.getItem("uxia.activeModule") || "operations");
+  const [menuOpen, setMenuOpen] = React.useState(false);
   const [session, setSession] = React.useState(() => readStoredSession());
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
@@ -154,17 +155,28 @@ function AppShell() {
     <div>
       <nav className="sticky top-0 z-50 border-b border-[#E7E0D5] bg-[#FFFCF7] px-3 py-2 sm:px-5">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0" />
-            <div className="min-w-0">
-              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">MediaLab Ingeniería</span>
-              {authNotice && <p className="mt-1 text-xs font-semibold text-[#17727A]">{authNotice}</p>}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">MediaLab Ingeniería</span>
+                {authNotice && <p className="mt-1 text-xs font-semibold text-[#17727A]">{authNotice}</p>}
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <button
               type="button"
-              onClick={() => selectModule("operations")}
+              onClick={() => setMenuOpen((value) => !value)}
+              aria-label="Menú"
+              aria-expanded={menuOpen}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-xl leading-none text-[#344054] sm:hidden"
+            >
+              {menuOpen ? "✕" : "☰"}
+            </button>
+          </div>
+          <div className={`${menuOpen ? "grid" : "hidden"} grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center`}>
+            <button
+              type="button"
+              onClick={() => { selectModule("operations"); setMenuOpen(false); }}
               className="flex min-h-[44px] items-center justify-center rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
               style={{
                 borderColor: module === "operations" ? "#17727A" : "#D0D5DD",
@@ -176,7 +188,7 @@ function AppShell() {
             </button>
             <button
               type="button"
-              onClick={() => selectModule("radar")}
+              onClick={() => { selectModule("radar"); setMenuOpen(false); }}
               className="flex min-h-[44px] items-center justify-center rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
               style={{
                 borderColor: module === "radar" ? "#E8751A" : "#D0D5DD",
@@ -192,8 +204,8 @@ function AppShell() {
             />
             <button
               type="button"
-              onClick={handleLogout}
-              className="col-span-2 flex min-h-[44px] items-center justify-center rounded-md bg-[#E8751A] px-3 py-1.5 text-sm font-semibold text-[#1A1205] sm:col-span-1"
+              onClick={() => { handleLogout(); setMenuOpen(false); }}
+              className="flex min-h-[44px] items-center justify-center rounded-md bg-[#E8751A] px-3 py-1.5 text-sm font-semibold text-[#1A1205]"
             >
               Cerrar sesión
             </button>

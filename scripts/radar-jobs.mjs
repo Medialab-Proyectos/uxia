@@ -1,8 +1,8 @@
-// Radar — carga de oportunidades SIN Apify. La búsqueda la hace Claude Code
-// (web search) y cura las oportunidades en operations/_run/oportunidades.json;
+// Radar — carga de vacantes SIN Apify. La búsqueda la hace Claude Code
+// (web search) y cura las vacantes en operations/_run/vacantes.json;
 // este script solo INSERTA en Supabase las NUEVAS (no pisa el seguimiento).
 //
-// Uso:  node --env-file=.env scripts/radar-fetch.mjs [ruta/oportunidades.json]
+// Uso:  node --env-file=.env scripts/radar-fetch.mjs [ruta/vacantes.json]
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -14,9 +14,9 @@ if (!URL || !KEY) {
   process.exit(1);
 }
 
-const file = process.argv[2] || resolve(process.cwd(), "operations", "_run", "oportunidades.json");
+const file = process.argv[2] || resolve(process.cwd(), "operations", "_run", "vacantes.json");
 const parsed = JSON.parse(readFileSync(file, "utf8"));
-const opps = Array.isArray(parsed) ? parsed : parsed.oportunidades || [];
+const opps = Array.isArray(parsed) ? parsed : parsed.vacantes || [];
 
 function hash(str) {
   let h = 0;
@@ -41,10 +41,10 @@ async function sb(path, init = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-const existing = await sb("oportunidades?select=id");
+const existing = await sb("vacantes?select=id");
 const have = new Set((existing || []).map((r) => r.id));
 const nuevos = rows.filter((r) => !have.has(r.id));
 if (nuevos.length) {
-  await sb("oportunidades", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(nuevos) });
+  await sb("vacantes", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(nuevos) });
 }
-console.log(`Oportunidades en el archivo: ${rows.length} · nuevas guardadas en Supabase: ${nuevos.length} · ya existían: ${rows.length - nuevos.length}`);
+console.log(`Vacantes en el archivo: ${rows.length} · nuevas guardadas en Supabase: ${nuevos.length} · ya existían: ${rows.length - nuevos.length}`);

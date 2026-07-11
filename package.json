@@ -10,6 +10,8 @@
     "daily:fetch": "node --env-file=.env scripts/daily-fetch.mjs",
     "daily:push": "node --env-file=.env scripts/daily-push.mjs",
     "radar:fetch": "node --env-file=.env scripts/radar-fetch.mjs",
+    "radar:jobs": "node --env-file=.env scripts/radar-jobs.mjs",
+    "radar:all": "node --env-file=.env scripts/radar-fetch.mjs && node --env-file=.env scripts/radar-jobs.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
