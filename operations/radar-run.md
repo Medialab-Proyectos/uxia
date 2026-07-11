@@ -1,38 +1,31 @@
-# Runbook del Radar — búsqueda que corre Claude Code (no la interfaz)
+# Runbook del Radar — la búsqueda la corre Claude Code (sin Apify, sin interfaz)
 
-La interfaz del Radar **ya no busca ni scrapea**. La búsqueda la corre **Claude Code
-por dentro** (reutiliza el scraper `server/scraper.js`) y guarda las oportunidades
-**nuevas** en Supabase (tabla `oportunidades`). La app solo las **muestra, busca y
-les da seguimiento** (me interesa / descartar).
+La interfaz del Radar **ya no busca ni scrapea** (se quitó Apify). La búsqueda la
+hace **Claude Code**: busca en la web señales de demanda reales, las cura y las
+**inserta en Supabase** (tabla `oportunidades`). La app solo **muestra, busca y da
+seguimiento** (me interesa / descartar).
 
 ## Requisitos (en `.env`)
-- `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` (para guardar en Supabase).
-- `APIFY_TOKEN` (fuente real del scraper; sin él, Google/Bing X-ray suelen dar 0).
-- Tabla `oportunidades` creada (está en `supabase/setup.sql`).
+- `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
+- Tabla `oportunidades` creada (`supabase/setup.sql`).
 
-## Cuando el CEO diga "busca oportunidades" / "llena el radar", Claude Code hace:
+## Cuando el CEO diga "corre el md del radar", Claude Code hace:
+1. **Busca en la web** (WebSearch) señales reales: empresas/startups que escalan
+   producto digital, levantan capital, o buscan agencia/consultoría UX/producto.
+   Prioriza Colombia y LATAM.
+2. **Cura solo oportunidades reales con URL verificable** (no inventa leads) en
+   `operations/_run/oportunidades.json`. Formato por objeto:
+   `{ empresa, persona, fuente, url, ubicacion, contacto, canal, categoria, dolor,
+      tipo, encaje, señalesIA, prioridad, score, mensaje }`.
+3. **Inserta las nuevas** en Supabase (no pisa el seguimiento existente):
+   ```bash
+   npm run radar:fetch
+   ```
+4. El CEO abre **Radar → Oportunidades**, recarga, prioriza por score y marca
+   "me interesa" / "descartar".
 
-```bash
-npm run radar:fetch                      # término por defecto (UX/conversión/retención)
-npm run radar:fetch "consultoría UX fintech"   # término específico
-```
-
-Qué hace el comando (`scripts/radar-fetch.mjs`):
-1. Corre el scraper existente (`scrapeOpportunities`) con el término.
-2. Trae las señales de demanda (empresas/personas que buscan UX, agencia, partner, rediseño, formación).
-3. Guarda en Supabase **solo las oportunidades nuevas** (no pisa las que ya marcaste
-   "me interesa" o "descartada").
-4. Reporta cuántas encontró y cuántas eran nuevas.
-
-## Después
-El CEO abre **Radar → Oportunidades** y **recarga**: ve las nuevas, las prioriza por
-score y marca "me interesa" / "descartar" para seguimiento.
-
-## Sugerencia de barrido diario
-Correr varias veces con términos distintos para cubrir segmentos:
-```bash
-npm run radar:fetch "rediseño de producto digital"
-npm run radar:fetch "necesitamos consultoría UX"
-npm run radar:fetch "buscamos agencia de diseño"
-npm run radar:fetch "aprender UX producto"
-```
+## Nota honesta
+La búsqueda web de Claude Code es US-first, así que para leads con **contacto
+directo** en español/LATAM rinde menos que una fuente tipo LinkedIn. Lo que se
+inserta son **señales de prospección reales** (empresa + URL + el porqué del encaje);
+el contacto suele quedar "No especificado" hasta abrir la conversación.
