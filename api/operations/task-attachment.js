@@ -15,10 +15,11 @@ export default async function handler(req, res) {
       return;
     }
 
-    const attachment = saveTaskAttachment({
+    const attachment = await saveTaskAttachment({
       companyId: parsed.fields.companyId || "sin-empresa",
       client: parsed.fields.client || "Proyecto general",
       fileName: file.filename,
+      contentType: file.contentType,
       buffer: file.buffer,
     });
     res.status(200).json({ ok: true, attachment });

@@ -15,10 +15,11 @@ export default async function handler(req, res) {
       return;
     }
 
-    const document = saveContextDocument({
+    const document = await saveContextDocument({
       companyId: parsed.fields.companyId || "sin-empresa",
       client: parsed.fields.client || "",
       fileName: file.filename,
+      contentType: file.contentType,
       buffer: file.buffer,
     });
     res.status(200).json({ ok: true, document });

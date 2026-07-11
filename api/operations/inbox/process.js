@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    res.status(200).json(processOperationsInbox());
+    res.status(200).json(await processOperationsInbox());
   } catch (error) {
     res.status(500).json({
       error: "No se pudo procesar la documentacion",

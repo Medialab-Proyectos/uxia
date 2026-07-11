@@ -15,9 +15,10 @@ export default async function handler(req, res) {
       return;
     }
 
-    const logo = saveCompanyLogo({
+    const logo = await saveCompanyLogo({
       companyId: parsed.fields.companyId || "sin-empresa",
       fileName: file.filename,
+      contentType: file.contentType,
       buffer: file.buffer,
     });
     res.status(200).json({ ok: true, logo });

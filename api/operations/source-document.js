@@ -15,7 +15,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = processUploadedTaskSource({
+    const result = await processUploadedTaskSource({
       companyId: parsed.fields.companyId || "sin-empresa",
       client: parsed.fields.client || "Proyecto general",
       fileName: file.filename,

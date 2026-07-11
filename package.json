@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:local": "node scripts/dev-local.js",
-    "scraper": "node server/index.js",
+    "dev:local": "vite",
+    "scraper": "node --env-file=.env server/index.js",
+    "daily:fetch": "node --env-file=.env scripts/daily-fetch.mjs",
+    "daily:push": "node --env-file=.env scripts/daily-push.mjs",
+    "radar:fetch": "node --env-file=.env scripts/radar-fetch.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

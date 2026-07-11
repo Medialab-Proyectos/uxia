@@ -3,7 +3,7 @@ import cors from "cors";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { scrapeJobs, scrapeOpportunities } from "./scraper.js";
-import { analyzeOperationsText, companies, ensureOperationsFolder, getOperationsFolderStatus, openOperationsFolder, processOperationsInbox, processUploadedTaskSource, readContextDocuments, readOperationsInbox, readOperationsState, saveCompanyLogo, saveContextDocument, saveTaskAttachment, writeOperationsState } from "./operations.js";
+import { analyzeOperationsText, companies, deleteInsumoPendiente, ensureOperationsFolder, getOperationsFolderStatus, listInsumosPendientes, openOperationsFolder, processOperationsInbox, processUploadedTaskSource, readContextDocuments, readOperationsInbox, readOperationsState, saveCompanyLogo, saveContextDocument, saveTaskAttachment, writeOperationsState } from "./operations.js";
 
 loadEnvFile();
 
@@ -96,14 +96,32 @@ app.post("/api/operations", (req, res) => {
   res.json({ tasks, count: tasks.length });
 });
 
-app.post("/api/operations/inbox/process", (_req, res) => {
+app.post("/api/operations/inbox/process", async (_req, res) => {
   try {
-    res.json(processOperationsInbox());
+    res.json(await processOperationsInbox());
   } catch (error) {
     res.status(500).json({
       error: "No se pudo procesar el inbox",
       detail: error.code === "EACCES" ? "Sin permisos para procesar o eliminar fuentes" : error.message,
     });
+  }
+});
+
+app.get("/api/operations/insumos", async (req, res) => {
+  try {
+    res.json({ ok: true, insumos: await listInsumosPendientes({ companyId: req.query.companyId }) });
+  } catch (error) {
+    res.status(500).json({ error: "No se pudieron leer los insumos pendientes", detail: error.message });
+  }
+});
+
+app.delete("/api/operations/insumos", async (req, res) => {
+  try {
+    const id = req.query.id || req.body?.id;
+    const keepFile = req.query.keepFile === "1" || req.body?.keepFile === true;
+    res.json(await deleteInsumoPendiente(id, { keepFile }));
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo borrar el insumo", detail: error.message });
   }
 });
 
@@ -158,7 +176,7 @@ app.post("/api/operations/task-attachment", async (req, res) => {
       return;
     }
 
-    const attachment = saveTaskAttachment({
+    const attachment = await saveTaskAttachment({
       companyId: parsed.fields.companyId || "sin-empresa",
       client: parsed.fields.client || "Proyecto general",
       fileName: file.filename,
@@ -183,10 +201,11 @@ app.post("/api/operations/source-document", async (req, res) => {
       return;
     }
 
-    const result = processUploadedTaskSource({
+    const result = await processUploadedTaskSource({
       companyId: parsed.fields.companyId || "sin-empresa",
       client: parsed.fields.client || "Proyecto general",
       fileName: file.filename,
+      contentType: file.contentType,
       buffer: file.buffer,
     });
     res.json({ ok: true, ...result });
@@ -206,9 +225,10 @@ app.post("/api/operations/company-logo", async (req, res) => {
       res.status(400).json({ error: "Falta archivo" });
       return;
     }
-    const logo = saveCompanyLogo({
+    const logo = await saveCompanyLogo({
       companyId: parsed.fields.companyId || "sin-empresa",
       fileName: file.filename,
+      contentType: file.contentType,
       buffer: file.buffer,
     });
     res.json({ ok: true, logo });
@@ -228,10 +248,11 @@ app.post("/api/operations/context-document", async (req, res) => {
       res.status(400).json({ error: "Falta archivo" });
       return;
     }
-    const document = saveContextDocument({
+    const document = await saveContextDocument({
       companyId: parsed.fields.companyId || "sin-empresa",
       client: parsed.fields.client || "",
       fileName: file.filename,
+      contentType: file.contentType,
       buffer: file.buffer,
     });
     res.json({ ok: true, document });

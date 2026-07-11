@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
+import logoMediaLab from "./logos/logo-medialab.png";
 
 const AUTH_STORE_KEY = "uxia.supabaseSession";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
@@ -26,7 +27,7 @@ async function authRequest(path, { method = "GET", token = "", body } = {}) {
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = data?.msg || data?.message || data?.error_description || "No se pudo autenticar";
+    const message = data?.msg || data?.message || data?.error_description || "No se pudo autenticar.";
     if (/invalid api key|invalid apikey/i.test(message)) {
       throw new Error("Supabase rechazo la API key. En Vercel usa la Publishable key en VITE_SUPABASE_ANON_KEY y vuelve a desplegar.");
     }
@@ -127,20 +128,20 @@ function AppShell() {
   }
 
   async function handleChangePassword(password) {
-    if (!session?.access_token) throw new Error("La sesion no esta activa.");
+    if (!session?.access_token) throw new Error("La sesión no está activa.");
     await authRequest("user", {
       method: "PUT",
       token: session.access_token,
       body: { password },
     });
-    setAuthNotice("Contrasena actualizada.");
+    setAuthNotice("Contraseña actualizada.");
     setTimeout(() => setAuthNotice(""), 3000);
   }
 
   if (!authReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0E1116] text-sm font-semibold text-[#E8EDF3]">
-        Cargando acceso...
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F4EF] text-sm font-semibold text-[#344054]">
+        Cargando acceso…
       </div>
     );
   }
@@ -151,21 +152,24 @@ function AppShell() {
 
   return (
     <div>
-      <nav className="sticky top-0 z-50 border-b border-[#28313E] bg-[#0E1116] px-3 py-2 sm:px-5">
+      <nav className="sticky top-0 z-50 border-b border-[#E7E0D5] bg-[#FFFCF7] px-3 py-2 sm:px-5">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B97A6]">MediaLab Ingenieria</span>
-            {authNotice && <p className="mt-1 text-xs font-semibold text-[#4FD1C5]">{authNotice}</p>}
+          <div className="flex min-w-0 items-center gap-2">
+            <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0" />
+            <div className="min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">MediaLab Ingeniería</span>
+              {authNotice && <p className="mt-1 text-xs font-semibold text-[#17727A]">{authNotice}</p>}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <button
               type="button"
               onClick={() => selectModule("operations")}
-              className="rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
+              className="flex min-h-[44px] items-center justify-center rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
               style={{
-                borderColor: module === "operations" ? "#4FD1C5" : "#28313E",
-                color: module === "operations" ? "#0E1116" : "#E8EDF3",
-                background: module === "operations" ? "#4FD1C5" : "transparent",
+                borderColor: module === "operations" ? "#17727A" : "#D0D5DD",
+                color: module === "operations" ? "#FFFFFF" : "#344054",
+                background: module === "operations" ? "#17727A" : "transparent",
               }}
             >
               Centro operativo
@@ -173,11 +177,11 @@ function AppShell() {
             <button
               type="button"
               onClick={() => selectModule("radar")}
-              className="rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
+              className="flex min-h-[44px] items-center justify-center rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
               style={{
-                borderColor: module === "radar" ? "#F2A93B" : "#28313E",
-                color: module === "radar" ? "#1A1205" : "#E8EDF3",
-                background: module === "radar" ? "#F2A93B" : "transparent",
+                borderColor: module === "radar" ? "#E8751A" : "#D0D5DD",
+                color: module === "radar" ? "#1A1205" : "#344054",
+                background: module === "radar" ? "#E8751A" : "transparent",
               }}
             >
               Radar oportunidades
@@ -189,14 +193,14 @@ function AppShell() {
             <button
               type="button"
               onClick={handleLogout}
-              className="col-span-2 rounded-md bg-[#F2A93B] px-3 py-1.5 text-sm font-semibold text-[#1A1205] sm:col-span-1"
+              className="col-span-2 flex min-h-[44px] items-center justify-center rounded-md bg-[#E8751A] px-3 py-1.5 text-sm font-semibold text-[#1A1205] sm:col-span-1"
             >
-              Cerrar sesion
+              Cerrar sesión
             </button>
           </div>
         </div>
       </nav>
-      {module === "radar" ? <RadarUXIA /> : <OperationsHub currentUser={session.user} />}
+      {module === "radar" ? <RadarUXIA token={session.access_token} /> : <OperationsHub currentUser={session.user} token={session.access_token} />}
     </div>
   );
 }
@@ -214,49 +218,49 @@ function LoginScreen({ notice, onLogin }) {
     try {
       await onLogin(email.trim(), password);
     } catch (authError) {
-      setError(authError.message || "No se pudo iniciar sesion.");
+      setError(authError.message || "No se pudo iniciar sesión.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0E1116] px-5 text-[#E8EDF3]">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-md border border-[#28313E] bg-[#151B23] p-5 shadow-xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8B97A6]">MediaLab Ingenieria</p>
+    <main className="flex min-h-screen items-center justify-center bg-[#F7F4EF] px-5 text-[#1D2939]">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-md border border-[#E7E0D5] bg-[#FFFCF7] p-5 shadow-lg">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">MediaLab Ingeniería</p>
         <h1 className="mt-2 text-2xl font-semibold">Centro operativo</h1>
         <div className="mt-5 space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase text-[#8B97A6]">Correo</span>
+            <span className="mb-1 block text-xs font-semibold uppercase text-[#667085]">Correo</span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
-              className="w-full rounded-md border border-[#28313E] bg-[#0E1116] px-3 py-2 text-sm outline-none focus:border-[#4FD1C5]"
+              className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
               required
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase text-[#8B97A6]">Contrasena</span>
+            <span className="mb-1 block text-xs font-semibold uppercase text-[#667085]">Contraseña</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
               autoComplete="current-password"
-              className="w-full rounded-md border border-[#28313E] bg-[#0E1116] px-3 py-2 text-sm outline-none focus:border-[#4FD1C5]"
+              className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
               required
             />
           </label>
         </div>
-        {notice && <p className="mt-3 rounded-md border border-[#F2A93B55] bg-[#F2A93B14] p-2 text-xs text-[#F2A93B]">{notice}</p>}
-        {error && <p className="mt-3 rounded-md border border-[#FF6B5755] bg-[#FF6B5714] p-2 text-xs text-[#FFB4A8]">{error}</p>}
+        {notice && <p className="mt-3 rounded-md border border-[#E8751A55] bg-[#E8751A14] p-2 text-xs font-semibold text-[#B76E00]">{notice}</p>}
+        {error && <p className="mt-3 rounded-md border border-[#B4231855] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="mt-4 w-full rounded-md bg-[#4FD1C5] px-3 py-2 text-sm font-semibold text-[#0E1116] disabled:opacity-60"
+          className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
         >
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? "Entrando…" : "Entrar"}
         </button>
       </form>
     </main>
@@ -274,7 +278,7 @@ function UserMenu({ email, onChangePassword }) {
     setMessage("");
     setError("");
     if (password.length < 6) {
-      setError("Usa minimo 6 caracteres.");
+      setError("Usa mínimo 6 caracteres.");
       return;
     }
     try {
@@ -282,7 +286,7 @@ function UserMenu({ email, onChangePassword }) {
       setPassword("");
       setMessage("Contrasena cambiada.");
     } catch (changeError) {
-      setError(changeError.message || "No se pudo cambiar la contrasena.");
+      setError(changeError.message || "No se pudo cambiar la contraseña.");
     }
   }
 
@@ -291,29 +295,30 @@ function UserMenu({ email, onChangePassword }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="w-full rounded-md border border-[#28313E] px-3 py-1.5 text-sm font-semibold text-[#E8EDF3] sm:w-auto"
+        aria-expanded={open}
+        className="flex min-h-[44px] w-full items-center justify-center rounded-md border border-[#D0D5DD] px-3 py-1.5 text-sm font-semibold text-[#344054] sm:w-auto"
       >
         {email || "Usuario"}
       </button>
       {open && (
-        <div className="fixed left-3 right-3 top-28 z-50 rounded-md border border-[#28313E] bg-[#151B23] p-3 text-[#E8EDF3] shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72">
-          <p className="text-xs text-[#8B97A6]">Sesion activa</p>
+        <div className="fixed left-3 right-3 top-28 z-50 rounded-md border border-[#E7E0D5] bg-[#FFFCF7] p-3 text-[#344054] shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72">
+          <p className="text-xs text-[#667085]">Sesión activa</p>
           <p className="mt-1 break-all text-sm font-semibold">{email}</p>
-          <form onSubmit={changePassword} className="mt-3 border-t border-[#28313E] pt-3">
+          <form onSubmit={changePassword} className="mt-3 border-t border-[#E7E0D5] pt-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase text-[#8B97A6]">Nueva contrasena</span>
+              <span className="mb-1 block text-xs font-semibold uppercase text-[#667085]">Nueva contraseña</span>
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
                 autoComplete="new-password"
-                className="w-full rounded-md border border-[#28313E] bg-[#0E1116] px-3 py-2 text-sm outline-none focus:border-[#4FD1C5]"
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
               />
             </label>
-            {message && <p className="mt-2 text-xs font-semibold text-[#4FD1C5]">{message}</p>}
-            {error && <p className="mt-2 text-xs font-semibold text-[#FFB4A8]">{error}</p>}
-            <button type="submit" className="mt-2 w-full rounded-md border border-[#4FD1C5] px-3 py-2 text-xs font-semibold text-[#4FD1C5]">
-              Cambiar contrasena
+            {message && <p className="mt-2 text-xs font-semibold text-[#17727A]">{message}</p>}
+            {error && <p className="mt-2 text-xs font-semibold text-[#B42318]">{error}</p>}
+            <button type="submit" className="mt-2 flex min-h-[44px] w-full items-center justify-center rounded-md border border-[#17727A] px-3 py-2 text-xs font-semibold text-[#17727A]">
+              Cambiar contraseña
             </button>
           </form>
         </div>

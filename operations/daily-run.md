@@ -233,3 +233,50 @@ Confirmar si falta acceso al tablero de Trello.
 
 La app debe convertir ese texto en tareas claras, no copiarlo completo como
 "solicitud original".
+
+---
+
+## Run diario CON Claude Code (el "MD" que corre el CEO aquí)
+
+El análisis de los insumos (sobre todo **imágenes**: chats, capturas, posts) NO lo
+hace la app. Lo hace **Claude Code local**, que tiene visión para leer las imágenes.
+La app solo **recolecta** los insumos en Supabase (`insumos_pendientes` + Storage).
+
+Requisitos en `.env.local`: `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`
+(más el bucket público `operations-documents` y la tabla `insumos_pendientes`
+de `supabase/schema-insumos-pendientes.sql`).
+
+**Cuando el CEO diga "corre el MD del día", Claude Code hace:**
+
+1. **Bajar insumos pendientes:**
+   ```bash
+   npm run daily:fetch
+   ```
+   Descarga las imágenes a `operations/_run/` y escribe `operations/_run/insumos.json`.
+
+2. **Analizar (Claude):** leer cada imagen (`operations/_run/*`) y cada `rawText`,
+   e identificar tareas claras por empresa/subproyecto. Escribir
+   `operations/_run/tasks.json`:
+   ```json
+   {
+     "tasks": [
+       { "title": "…", "companyId": "…", "client": "…", "description": "…",
+         "status": "ready", "dueDate": "2026-07-15", "attachments": [] }
+     ],
+     "processedInsumoIds": ["<id de cada insumo convertido>"],
+     "keepFileInsumoIds": ["<ids cuyo archivo queda como adjunto de la tarea>"]
+   }
+   ```
+   La tarea queda **clara y bien escrita** (título accionable, descripción,
+   responsable sugerido, vencimiento).
+
+3. **Subir tareas y limpiar insumos:**
+   ```bash
+   npm run daily:push
+   ```
+   Inserta las tareas en Supabase y retira los insumos procesados (borra el archivo
+   salvo los de `keepFileInsumoIds`, que quedaron como adjunto de una tarea).
+
+Así el CEO sube insumos desde el celular durante el día y, en casa/remoto, le dice a
+Claude Code que corra el MD: las tareas quedan creadas, las imágenes procesadas se
+borran, y solo queda información textual accionable.

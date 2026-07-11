@@ -56,6 +56,151 @@ async function supabaseRequest(path, { method = "GET", body, query = "", prefer 
   return data;
 }
 
+function guessContentType(name) {
+  const ext = extname(String(name || "")).toLowerCase();
+  return ({
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".pdf": "application/pdf",
+    ".md": "text/markdown; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
+    ".csv": "text/csv; charset=utf-8",
+  })[ext] || "application/octet-stream";
+}
+
+// Sube un archivo a Supabase Storage (bucket SUPABASE_BUCKET). Funciona igual en
+// local y en Vercel; el filesystem deja de ser necesario para servir archivos.
+async function uploadToBucket(objectPath, buffer, contentType) {
+  const clean = String(objectPath).replace(/^\/+/, "");
+  const url = `${supabaseBaseUrl()}/storage/v1/object/${SUPABASE_BUCKET}/${clean}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": contentType || "application/octet-stream",
+      "x-upsert": "true",
+    },
+    body: buffer,
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Supabase Storage ${response.status}: ${text || "no se pudo subir el archivo"}`);
+  }
+  return clean;
+}
+
+function bucketPublicUrl(objectPath) {
+  const clean = String(objectPath).replace(/^\/+/, "");
+  return `${supabaseBaseUrl()}/storage/v1/object/public/${SUPABASE_BUCKET}/${clean}`;
+}
+
+function localFileUrl(absoluteTarget) {
+  const path = absoluteTarget.replace(process.cwd(), "").replace(/^[/\\]/, "");
+  return {
+    path,
+    url: `/operations-files/${path.replace(/\\/g, "/").replace(/^operations\//, "")}`,
+  };
+}
+
+async function deleteFromBucket(objectPath) {
+  const clean = String(objectPath || "").replace(/^\/+/, "");
+  if (!clean) return;
+  const url = `${supabaseBaseUrl()}/storage/v1/object/${SUPABASE_BUCKET}/${clean}`;
+  await fetch(url, {
+    method: "DELETE",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  }).catch(() => {});
+}
+
+// ---- Insumos pendientes (tabla dedicada insumos_pendientes) ----
+function mapInsumoRow(row) {
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    client: row.client || "",
+    fileName: row.file_name,
+    storagePath: row.storage_path,
+    url: bucketPublicUrl(row.storage_path),
+    contentType: row.content_type || "",
+    kind: row.kind || "imagen",
+    rawText: row.raw_text || "",
+    status: row.status || "pendiente",
+    createdAt: row.created_at || "",
+  };
+}
+
+export async function saveInsumoPendiente({ companyId, client, fileName, contentType, buffer, kind = "imagen", rawText = "" }) {
+  const safeCompany = slugify(companyId || "sin-empresa");
+  const safeClient = slugify(client || "proyecto-general");
+  const safeFile = sanitizeFileName(fileName || `insumo-${Date.now()}`);
+  const type = contentType || guessContentType(safeFile);
+  const objectPath = `insumos/${safeCompany}/${safeClient}/${Date.now()}-${safeFile}`;
+  await uploadToBucket(objectPath, buffer, type);
+  const inserted = await supabaseRequest("insumos_pendientes", {
+    method: "POST",
+    body: [{
+      company_id: companyId || "sin-empresa",
+      client: client || null,
+      file_name: safeFile,
+      storage_path: objectPath,
+      content_type: type,
+      kind,
+      raw_text: rawText || null,
+      status: "pendiente",
+    }],
+    prefer: "return=representation",
+  });
+  return mapInsumoRow(inserted?.[0] || { company_id: companyId, client, file_name: safeFile, storage_path: objectPath, content_type: type, kind });
+}
+
+export async function listInsumosPendientes({ companyId } = {}) {
+  if (!hasSupabase()) return [];
+  const filter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+  const rows = await supabaseRequest("insumos_pendientes", {
+    query: `?status=eq.pendiente${filter}&select=*&order=created_at.desc`,
+  });
+  return (rows || []).map(mapInsumoRow);
+}
+
+export async function deleteInsumoPendiente(id, { keepFile = false } = {}) {
+  if (!hasSupabase() || !id) return { ok: false };
+  // keepFile: cuando el insumo se convierte en tarea, la tarea se queda con el
+  // archivo en Storage, así que se borra solo la fila pendiente (no el archivo).
+  if (!keepFile) {
+    const rows = await supabaseRequest("insumos_pendientes", {
+      query: `?id=eq.${encodeURIComponent(id)}&select=storage_path`,
+    });
+    if (rows?.[0]?.storage_path) await deleteFromBucket(rows[0].storage_path);
+  }
+  await supabaseRequest("insumos_pendientes", {
+    method: "DELETE",
+    query: `?id=eq.${encodeURIComponent(id)}`,
+    prefer: "return=minimal",
+  });
+  return { ok: true };
+}
+
+// Inserta/actualiza tareas en Supabase (usado por el run diario que corre Claude Code local).
+export async function insertTasks(tasks = []) {
+  if (!hasSupabase()) throw new Error("Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.");
+  const rows = tasks.filter((task) => task.id).map(taskToRow);
+  if (!rows.length) return { inserted: 0 };
+  await supabaseRequest("tasks?on_conflict=id", {
+    method: "POST",
+    body: rows,
+    prefer: "resolution=merge-duplicates,return=minimal",
+  });
+  return { inserted: rows.length };
+}
+
 async function deleteSupabaseRowsByIds(table, ids) {
   const cleanIds = [...new Set(ids.filter(Boolean).map(String))];
   const batchSize = 50;
@@ -387,7 +532,62 @@ export function readOperationsInbox() {
   });
 }
 
-export function processOperationsInbox() {
+async function processPendingInsumosSupabase() {
+  const pending = await listInsumosPendientes({});
+  const tasks = [];
+  const records = [];
+  const deleted = [];
+  const errors = [];
+  let pendingImages = 0;
+
+  for (const insumo of pending) {
+    if (insumo.kind === "texto" && insumo.rawText) {
+      try {
+        const source = `Insumo: ${insumo.fileName}`;
+        const fileTasks = analyzeOperationsText({
+          text: insumo.rawText,
+          companyId: insumo.companyId,
+          fallbackClient: insumo.client,
+          source,
+          attachments: [],
+        });
+        if (fileTasks.length) {
+          tasks.push(...fileTasks);
+          records.push(buildSourceRecordFromText({
+            source,
+            fileName: insumo.fileName,
+            text: insumo.rawText,
+            companyId: insumo.companyId,
+            client: insumo.client,
+            tasks: fileTasks,
+            attachments: [],
+            deletedSource: true,
+          }));
+        }
+        await deleteInsumoPendiente(insumo.id);
+        deleted.push(insumo.fileName);
+      } catch (error) {
+        errors.push({ source: insumo.fileName, error: error.message });
+      }
+    } else {
+      // Imágenes: el análisis automático necesita visión/IA; se dejan pendientes
+      // para revisión manual (o para un procesador de imagen a futuro).
+      pendingImages += 1;
+    }
+  }
+
+  return { tasks, records, deleted, errors, pendingImages, pending: pending.length };
+}
+
+export async function processOperationsInbox() {
+  if (hasSupabase()) {
+    try {
+      return await processPendingInsumosSupabase();
+    } catch (error) {
+      console.warn("Run diario Supabase fallo, usando inbox local:", error.message);
+    }
+  }
+
   if (!existsSync(INBOX_DIR)) return { tasks: [], records: [], deleted: [], errors: [] };
 
   const files = walk(INBOX_DIR).filter((file) => [".md", ".txt"].includes(extname(file).toLowerCase()));
@@ -541,20 +741,22 @@ export function openOperationsFolder({ companyId, client }) {
   return folder.replace(process.cwd(), "").replace(/^[/\\]/, "");
 }
 
-export function saveTaskAttachment({ companyId, client, fileName, buffer }) {
+export async function saveTaskAttachment({ companyId, client, fileName, buffer, contentType }) {
   const safeCompany = slugify(companyId || "sin-empresa");
   const safeClient = slugify(client || "proyecto-general");
   const safeFile = sanitizeFileName(fileName || `adjunto-${Date.now()}`);
+  const stamped = `${Date.now()}-${safeFile}`;
+  if (hasSupabase()) {
+    const objectPath = `task-docs/${safeCompany}/${safeClient}/${stamped}`;
+    await uploadToBucket(objectPath, buffer, contentType || guessContentType(safeFile));
+    return { type: "file", label: safeFile, path: objectPath, url: bucketPublicUrl(objectPath), storage: "supabase", uploadedAt: new Date().toISOString() };
+  }
   const folder = resolve(INBOX_DIR, safeCompany, safeClient, "_task-docs");
   mkdirSync(folder, { recursive: true });
-  const target = resolve(folder, `${Date.now()}-${safeFile}`);
+  const target = resolve(folder, stamped);
   writeFileSync(target, buffer);
-  return {
-    type: "file",
-    label: safeFile,
-    path: target.replace(process.cwd(), "").replace(/^[/\\]/, ""),
-    uploadedAt: new Date().toISOString(),
-  };
+  const { path, url } = localFileUrl(target);
+  return { type: "file", label: safeFile, path, url, storage: "local", uploadedAt: new Date().toISOString() };
 }
 
 export function saveInboxDocument({ companyId, client, fileName, buffer }) {
@@ -574,7 +776,7 @@ export function saveInboxDocument({ companyId, client, fileName, buffer }) {
   };
 }
 
-export function processUploadedTaskSource({ companyId, client, fileName, contentType = "", buffer }) {
+export async function processUploadedTaskSource({ companyId, client, fileName, contentType = "", buffer }) {
   const safeFile = sanitizeFileName(fileName || `tareas-${Date.now()}.md`);
   const extension = extname(safeFile).toLowerCase();
   const isTextSource = [".md", ".txt"].includes(extension);
@@ -596,18 +798,34 @@ export function processUploadedTaskSource({ companyId, client, fileName, content
   }
 
   if (isImageSource) {
+    // La imagen ya NO se descarta: se guarda como insumo pendiente en Supabase
+    // (Storage + tabla insumos_pendientes) para que el run diario / revisión la usen.
+    if (hasSupabase()) {
+      try {
+        const insumo = await saveInsumoPendiente({ companyId, client, fileName: safeFile, contentType, buffer, kind: "imagen" });
+        return {
+          document: { type: "source", label: safeFile, processable: true, pendingAnalysis: true, insumo, uploadedAt: new Date().toISOString() },
+          tasks: [],
+          records: [],
+          deleted: [],
+          errors: [],
+        };
+      } catch (error) {
+        return {
+          document: { type: "source", label: safeFile, processable: false, uploadedAt: new Date().toISOString() },
+          tasks: [],
+          records: [],
+          deleted: [],
+          errors: [{ source: safeFile, error: `No se pudo guardar el insumo de imagen: ${error.message}` }],
+        };
+      }
+    }
     return {
-      document: {
-        type: "source",
-        label: safeFile,
-        processable: true,
-        discarded: true,
-        uploadedAt: new Date().toISOString(),
-      },
+      document: { type: "source", label: safeFile, processable: true, discarded: true, uploadedAt: new Date().toISOString() },
       tasks: [],
       records: [],
       deleted: [safeFile],
-      errors: [{ source: safeFile, error: "Insumo descartado: la imagen aun no genero requerimientos utiles." }],
+      errors: [{ source: safeFile, error: "Insumo de imagen recibido; para guardarlo y analizarlo configura Supabase (Storage + insumos_pendientes)." }],
     };
   }
 
@@ -679,40 +897,40 @@ export function processUploadedTaskSource({ companyId, client, fileName, content
   };
 }
 
-export function saveCompanyLogo({ companyId, fileName, buffer }) {
+export async function saveCompanyLogo({ companyId, fileName, buffer, contentType }) {
   const safeCompany = slugify(companyId || "sin-empresa");
   const safeFile = sanitizeFileName(fileName || `logo-${Date.now()}`);
+  const stamped = `${Date.now()}-${safeFile}`;
+  if (hasSupabase()) {
+    const objectPath = `logos/${safeCompany}/${stamped}`;
+    await uploadToBucket(objectPath, buffer, contentType || guessContentType(safeFile));
+    return { label: safeFile, path: objectPath, url: bucketPublicUrl(objectPath), storage: "supabase", uploadedAt: new Date().toISOString() };
+  }
   const folder = resolve(OPERATIONS_DIR, "logos", safeCompany);
   mkdirSync(folder, { recursive: true });
-  const target = resolve(folder, `${Date.now()}-${safeFile}`);
+  const target = resolve(folder, stamped);
   writeFileSync(target, buffer);
-  const path = target.replace(process.cwd(), "").replace(/^[/\\]/, "");
-  return {
-    label: safeFile,
-    path,
-    url: `/operations-files/${path.replace(/^operations[\\/]/, "").replace(/\\/g, "/")}`,
-    uploadedAt: new Date().toISOString(),
-  };
+  const { path, url } = localFileUrl(target);
+  return { label: safeFile, path, url, storage: "local", uploadedAt: new Date().toISOString() };
 }
 
-export function saveContextDocument({ companyId, client = "", fileName, buffer }) {
+export async function saveContextDocument({ companyId, client = "", fileName, buffer, contentType }) {
   const safeCompany = slugify(companyId || "sin-empresa");
   const safeClient = client ? slugify(client) : "_empresa";
   const safeFile = sanitizeFileName(fileName || `contexto-${Date.now()}`);
+  const readable = [".md", ".txt"].includes(extname(safeFile).toLowerCase());
+  const stamped = `${Date.now()}-${safeFile}`;
+  if (hasSupabase()) {
+    const objectPath = `context/${safeCompany}/${safeClient}/${stamped}`;
+    await uploadToBucket(objectPath, buffer, contentType || guessContentType(safeFile));
+    return { type: "context", label: safeFile, companyId, client, path: objectPath, url: bucketPublicUrl(objectPath), readable, storage: "supabase", uploadedAt: new Date().toISOString() };
+  }
   const folder = resolve(OPERATIONS_DIR, "context", safeCompany, safeClient);
   mkdirSync(folder, { recursive: true });
-  const target = resolve(folder, `${Date.now()}-${safeFile}`);
+  const target = resolve(folder, stamped);
   writeFileSync(target, buffer);
-  const path = target.replace(process.cwd(), "").replace(/^[/\\]/, "");
-  return {
-    type: "context",
-    label: safeFile,
-    companyId,
-    client,
-    path,
-    readable: [".md", ".txt"].includes(extname(safeFile).toLowerCase()),
-    uploadedAt: new Date().toISOString(),
-  };
+  const { path, url } = localFileUrl(target);
+  return { type: "context", label: safeFile, companyId, client, path, url, readable, storage: "local", uploadedAt: new Date().toISOString() };
 }
 
 export function readContextDocuments({ companyId, client = "" }) {

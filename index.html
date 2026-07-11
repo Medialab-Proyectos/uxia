@@ -8,13 +8,64 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#0E1116" />
+    <meta name="theme-color" content="#F7F4EF" />
     <title>Pipeline Operativo UXIA</title>
+
+    <!-- Tipografia de marca MediaLab: Lato (texto), Poppins (titulos), Jost (metricas) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@500;600;700&family=Jost:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
     <!-- Tailwind por CDN: el componente usa clases utilitarias de Tailwind.
          Para producción conviene instalar Tailwind como dependencia en lugar del CDN. -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Tokens de marca MediaLab Ingenieria disponibles como utilidades Tailwind.
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: '#E8751A',      // naranja de marca
+              teal: '#2AABB3',       // teal de marca (acento secundario / superficies claras)
+              tealDeep: '#17727A',   // teal profundo accesible (fondos con texto blanco)
+              uxgreen: '#00BFA6',    // UXGreen (exito / hecho)
+            },
+            fontFamily: {
+              sans: ["Lato", "Segoe UI", "system-ui", "sans-serif"],
+              display: ["Poppins", "Segoe UI Semibold", "sans-serif"],
+              metrics: ["Jost", "ui-monospace", "monospace"],
+            },
+          },
+        },
+      };
+    </script>
+
     <style>
-      body { margin: 0; background: #0E1116; }
+      body {
+        margin: 0;
+        background: #F7F4EF;
+        font-family: "Lato", "Segoe UI", system-ui, sans-serif;
+      }
+      /* Titulos con la display de marca */
+      h1, h2, h3 { font-family: "Poppins", "Segoe UI Semibold", sans-serif; }
+
+      /* A-1 / WCAG 2.4.7 — foco de teclado visible en toda la app.
+         Sobrescribe los `outline-none` de los componentes solo cuando se
+         navega con teclado (:focus-visible), sin afectar el clic con mouse. */
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      summary:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid #E8751A;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
     </style>
   </head>
   <body>

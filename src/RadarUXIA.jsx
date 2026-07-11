@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import logoUrl from "./logos/logouxiaoscuro.fw.png";
+import * as opsData from "./opsData.js";
 
 // ─── Almacenamiento local (reemplaza window.storage del artefacto) ──────────
 // Persiste en el navegador con localStorage. Mismo API async que usaba el artefacto.
@@ -79,22 +80,22 @@ async function callClaude(body) {
 
 // ─── Paleta ────────────────────────────────────────────────────────────────
 const C = {
-  bg: "#0E1116",
-  panel: "#151B23",
-  panelHi: "#1B232E",
-  border: "#28313E",
-  text: "#E8EDF3",
-  dim: "#8B97A6",
-  faint: "#5B6675",
-  amber: "#F2A93B",
-  cyan: "#4FD1C5",
-  coral: "#FF6B57",
-  green: "#4ADE80",
+  bg: "#F7F4EF",
+  panel: "#FFFCF7",
+  panelHi: "#F5F0E9",
+  border: "#E7E0D5",
+  text: "#1D2939",
+  dim: "#667085",
+  faint: "#8b8272",
+  amber: "#E8751A",
+  cyan: "#2AABB3",
+  coral: "#C0362C",
+  green: "#0D8F7D",
 };
 
 const FONT = {
-  display: "'Space Grotesk', 'Inter', sans-serif",
-  body: "'Inter', system-ui, sans-serif",
+  display: "'Poppins', 'Segoe UI Semibold', sans-serif",
+  body: "'Lato', 'Segoe UI', system-ui, sans-serif",
 };
 
 // ─── Fuentes de empleo ─────────────────────────────────────────────────────
@@ -306,9 +307,9 @@ function ContactLine({ contacto }) {
   const emailMatch = contacto.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
   return (
     <div className="mt-2 px-2.5 py-1.5 rounded-md flex items-start gap-1.5" style={{ backgroundColor: "#1F2937", border: "1px solid #2D3B4E" }}>
-      <span className="text-xs" style={{ color: "#4FD1C5", flexShrink: 0 }}>✉</span>
+      <span className="text-xs" style={{ color: "#2AABB3", flexShrink: 0 }}>✉</span>
       {emailMatch ? (
-        <a href={`mailto:${emailMatch[0]}`} className="text-xs break-all" style={{ color: "#4FD1C5", textDecoration: "none" }}>
+        <a href={`mailto:${emailMatch[0]}`} className="text-xs break-all" style={{ color: "#2AABB3", textDecoration: "none" }}>
           {contacto}
         </a>
       ) : (
@@ -385,7 +386,7 @@ function OutreachBox({ item, mode, message, loading, copied, onGenerate, onCopy 
   const text = message || item.mensaje || fallbackOutreach(item, mode);
   const channel = item.canal || recommendedChannel(item);
   return (
-    <div className="mt-3 rounded-lg p-3" style={{ backgroundColor: "#111820", border: `1px solid ${C.border}` }}>
+    <div className="mt-3 rounded-md p-3" style={{ backgroundColor: "#111820", border: `1px solid ${C.border}` }}>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <div className="flex flex-wrap gap-1.5">
           <Badge color={C.cyan} bg={`${C.cyan}14`}>Canal: {channel}</Badge>
@@ -420,7 +421,7 @@ function OutreachBox({ item, mode, message, loading, copied, onGenerate, onCopy 
 }
 
 // ─── App ───────────────────────────────────────────────────────────────────
-export default function RadarUXIA() {
+export default function RadarUXIA({ token = "" } = {}) {
   const [tab, setTab] = useState("radar");
   const [showNotif, setShowNotif] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -758,68 +759,33 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     return Array.isArray(data.opportunities) ? data.opportunities : [];
   };
 
+  // El escaneo YA NO se hace en la interfaz: lo corre Claude Code por dentro
+  // (npm run radar:fetch, reutiliza el scraper) y guarda en Supabase. Aquí solo
+  // se leen las oportunidades para buscarlas y darles seguimiento.
   const scanOpportunities = async () => {
     setOppScanning(true);
     setOppError("");
-    setOppResults([]);
-
-    // 1) Scraping público (empresas y personas), sin depender de la API de Claude.
     try {
-      const scraped = await runOppScraper();
-      if (Array.isArray(scraped) && scraped.length > 0) {
-        setOppResults(
-          scraped.map((o, i) => ({ ...o, id: o.id || `opp-${Date.now()}-${i}`, score: typeof o.score === "number" ? o.score : 50 }))
-        );
-        setOppScanning(false);
+      if (!opsData.opsDataReady()) {
+        setOppError("Configura Supabase para ver las oportunidades.");
         return;
       }
-    } catch (scraperError) {
-      // Sin backend disponible: si no hay key, avisamos abajo.
-      if (!API_KEY) {
-        setOppError("El radar comercial necesita el backend. Corre npm run scraper (o despliega en Vercel) e intenta de nuevo.");
-        setOppScanning(false);
-        return;
-      }
-    }
-
-    if (!API_KEY) {
-      setOppError("No se encontraron señales claras esta vez. Prueba de nuevo o ajusta el término en la pestaña Buscar.");
-      setOppScanning(false);
-      return;
-    }
-
-    // 2) Respaldo con IA (solo si hay VITE_ANTHROPIC_API_KEY configurada).
-    try {
-      const data = await callClaude({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [
-            {
-              role: "user",
-              content: `Eres el radar comercial de MediaLab, un estudio de diseño UX/UI que ofrece consultoría, productos digitales y formación. Busca en la web SEÑALES DE DEMANDA recientes (últimos 30 días) EN ESPAÑOL: empresas, agencias, CEO, fundadores, líderes de talento/producto o personas que (a) expresen retos, dolores o necesidades de UX/UI, usabilidad, retención, conversión o rediseño de producto digital, (b) busquen activamente consultoría, una agencia, un aliado o un partner de diseño/UX, o (c) manifiesten dudas, falencias o interés por aprender UX/producto/IA y puedan encajar con cursos o comunidad. No son vacantes de empleo: son oportunidades para ofrecer servicios, alianzas o formación.
-
-Haz UNA búsqueda web amplia que incluya frases como "buscamos agencia", "necesitamos consultoría UX", "aliado de diseño", "partner de UX", "mejorar la UX", "rediseñar producto digital", "estoy aprendiendo UX", "necesito aprender producto". Luego responde SOLO con un arreglo JSON compacto (una línea, sin markdown). MÁXIMO 5 señales. Formato por objeto:
-{"empresa":"...","persona":"nombre o cargo de quien expresa la necesidad","fuente":"...","url":"enlace real","contacto":"email, DM, o forma de contacto si aparece; si no No especificado","canal":"correo|LinkedIn|plataforma|conexión","categoria":"lead comercial|partner MediaLab|curso|freelance","prioridad":"alta|media|baja","dolor":"el reto, dolor o necesidad en máx 14 palabras","tipo":"reto|dolor|busca consultoría|busca agencia|busca partner|rediseño|aprendizaje","encaje":"por qué encaja con MediaLab en máx 12 palabras","mensaje":"mensaje corto para iniciar conversación atacando el dolor","score":0-100}
-
-Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/persona LATAM o Colombia +20, relacionado a UX/producto/consultoría/formación +25, contacto directo +10. Prioridad alta si hay dolor claro y canal accionable. Solo señales reales EN ESPAÑOL con URL encontrada. Si no hay nada: []`,
-            },
-          ],
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-        });
-      if (data.error) throw new Error();
-      const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("\n");
-      const parsed = parseJobsJson(text);
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        setOppError("No se encontraron señales claras esta vez. Prueba de nuevo o ajusta el término en la pestaña Radar.");
-      } else {
-        setOppResults(parsed.map((o, i) => ({ ...o, id: `opp-${Date.now()}-${i}`, score: typeof o.score === "number" ? o.score : 50 })));
+      const list = await opsData.listOportunidades(token);
+      setOppResults(list);
+      if (!list.length) {
+        setOppError('Aún no hay oportunidades. El escaneo lo corre Claude Code por dentro ("npm run radar:fetch") y quedan aquí para tu seguimiento.');
       }
     } catch (e) {
-      setOppError("El escaneo de oportunidades falló. Intenta de nuevo en unos segundos.");
+      setOppError(`No pude leer las oportunidades. ${e.message || ""}`);
     } finally {
       setOppScanning(false);
     }
   };
+
+  useEffect(() => {
+    scanOpportunities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const saveScanned = async (job) => {
     const stamped = {
@@ -941,8 +907,8 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
 
   return (
     <div style={{ backgroundColor: C.bg, minHeight: "100vh", fontFamily: FONT.body, color: C.text }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap');
-        *:focus-visible { outline: 2px solid ${C.cyan}; outline-offset: 2px; }
+      <style>{`
+        *:focus-visible { outline: 2px solid #E8751A; outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
       `}</style>
 
@@ -971,7 +937,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
           </p>
         </header>
 
-        <nav className="flex gap-1 mb-6 p-1 rounded-xl overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+        <nav className="flex gap-1 mb-6 p-1 rounded-md overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
           {[
             ["radar", "Buscar"],
             ["oportunidades", "Oportunidades"],
@@ -982,7 +948,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
             <button
               key={key}
               onClick={() => setTab(key)}
-              className="flex-shrink-0 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+              className="flex-shrink-0 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap"
               style={{
                 backgroundColor: tab === key ? C.panelHi : "transparent",
                 color: tab === key ? C.text : C.dim,
@@ -1007,7 +973,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               <button
                 key={label}
                 onClick={() => setTab("tablero")}
-                className="rounded-xl px-2 py-2.5 text-center"
+                className="rounded-md px-2 py-2.5 text-center"
                 style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
               >
                 <div className="text-lg font-bold" style={{ color, fontFamily: FONT.display }}>{val}</div>
@@ -1018,7 +984,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
 
           {/* Notificaciones: sin acción por varios días */}
           {staleJobs.length > 0 && (
-            <div className="mt-2 rounded-xl overflow-hidden" style={{ backgroundColor: `${C.coral}12`, border: `1px solid ${C.coral}44` }}>
+            <div className="mt-2 rounded-md overflow-hidden" style={{ backgroundColor: `${C.coral}12`, border: `1px solid ${C.coral}44` }}>
               <button
                 onClick={() => setShowNotif((v) => !v)}
                 className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5"
@@ -1034,7 +1000,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               {showNotif && (
                 <div className="px-3.5 pb-3 space-y-1.5">
                   {staleJobs.slice(0, 6).map(({ job, dias }) => (
-                    <div key={job.id} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
+                    <div key={job.id} className="flex items-center justify-between gap-2 rounded-md px-3 py-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
                       <div className="min-w-0">
                         <div className="text-xs font-medium truncate" style={{ color: C.text }}>{job.titulo}</div>
                         <div className="text-[11px] truncate" style={{ color: C.faint }}>{job.empresa} · hace {dias} días</div>
@@ -1071,7 +1037,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         {/* ── RADAR EN VIVO ── */}
         {tab === "radar" && (
           <section>
-            <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.amber}33` }}>
+            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.amber}33` }}>
               <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
                 Búsqueda única categorizada
               </h2>
@@ -1085,7 +1051,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm"
+                className="w-full px-3 py-2.5 rounded-md text-sm"
                 style={{ backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.text }}
               />
               <div className="flex flex-wrap gap-2 mt-3">
@@ -1113,56 +1079,24 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                 />
                 Priorizar remoto
               </label>
-              <div className="grid gap-2 sm:grid-cols-2 mt-4">
-                <button
-                  onClick={scanWithAI}
-                  disabled={scanning}
-                  className="px-5 py-2.5 rounded-lg text-sm font-semibold w-full"
-                  style={{
-                    backgroundColor: C.amber,
-                    color: "#1A1205",
-                    opacity: scanning ? 0.6 : 1,
-                    fontFamily: FONT.display,
-                  }}
-                >
-                  {scanning ? "Buscando..." : "Buscar en todo"}
-                </button>
-                <button
-                  onClick={scanExpanded}
-                  disabled={scanning}
-                  className="px-5 py-2.5 rounded-lg text-sm font-semibold w-full"
-                  style={{
-                    backgroundColor: `${C.cyan}1A`,
-                    color: C.cyan,
-                    border: `1px solid ${C.cyan}55`,
-                    opacity: scanning ? 0.6 : 1,
-                    fontFamily: FONT.display,
-                  }}
-                >
-                  {scanning ? "Cruzando fuentes..." : "Búsqueda ampliada"}
-                </button>
+              <div className="mt-4 rounded-md p-3 text-xs leading-relaxed" style={{ backgroundColor: `${C.cyan}14`, border: `1px solid ${C.border}`, color: C.dim }}>
+                La búsqueda ya no se hace desde aquí: <b style={{ color: C.text }}>la corre Claude Code por dentro</b> y las oportunidades se guardan en Supabase (pestaña Oportunidades). Esta sección queda para abrir búsquedas manuales en las plataformas.
               </div>
-              <p className="text-xs mt-2 leading-relaxed" style={{ color: C.faint }}>
-                <span style={{ color: C.amber }}>Buscar en todo</span>: usa tu término tal cual en todas las fuentes.
-                {" "}
-                <span style={{ color: C.cyan }}>Búsqueda ampliada</span>: además cruza automáticamente varios roles
-                (UX, UI, Product, UX Research, UX Engineer, Ingeniero UX) para no dejar vacantes fuera.
-              </p>
               {scanError && <p className="text-sm mt-2" style={{ color: C.coral }}>{scanError}</p>}
             </div>
 
-            <div className="rounded-xl p-4 mb-5" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+            <div className="rounded-md p-4 mb-5" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
               <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: C.faint, fontFamily: FONT.display }}>
                 Abrir búsqueda en plataformas
               </h3>
               <p className="text-xs mb-3" style={{ color: C.dim }}>
-                Google X-ray también corre dentro de “Buscar en todo”; estos enlaces son para revisar manualmente.
+                Estos enlaces abren búsquedas en cada plataforma para revisar manualmente cuando quieras.
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {[...postSources.slice(0, 2), ...sources.slice(0, 4)].map((s) => (
                   <div
                     key={s.name}
-                    className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+                    className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
                     style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}
                   >
                     <div className="min-w-0">
@@ -1222,7 +1156,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                           .slice()
                           .sort((a, b) => (Number(Boolean(b.esColombia)) - Number(Boolean(a.esColombia))) || (b.score - a.score))
                           .map((j) => (
-                      <article key={j.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+                      <article key={j.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
                         <div className="flex gap-3">
                           <ScoreRing score={j.score} />
                           <div className="flex-1 min-w-0">
@@ -1328,7 +1262,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         {/* ── OPORTUNIDADES (prospección) ── */}
         {tab === "oportunidades" && (
           <section>
-            <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
+            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
               <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
                 Radar comercial · señales de demanda
               </h2>
@@ -1341,7 +1275,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               <button
                 onClick={scanOpportunities}
                 disabled={oppScanning}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold w-full"
+                className="px-5 py-2.5 rounded-md text-sm font-semibold w-full"
                 style={{
                   backgroundColor: C.coral,
                   color: "#1A0805",
@@ -1349,7 +1283,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                   fontFamily: FONT.display,
                 }}
               >
-                {oppScanning ? "Buscando señales de demanda…" : "Detectar oportunidades"}
+                {oppScanning ? "Actualizando…" : "Actualizar oportunidades"}
               </button>
               {oppError && <p className="text-sm mt-2" style={{ color: C.coral }}>{oppError}</p>}
             </div>
@@ -1360,7 +1294,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
             </h3>
             <div className="space-y-2 mb-6">
               {buildOpportunitySources(query).map((s) => (
-                <div key={s.name} className="flex items-center justify-between rounded-xl px-4 py-3.5 gap-3" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}22` }}>
+                <div key={s.name} className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}22` }}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm" style={{ color: C.text, fontFamily: FONT.display }}>{s.name}</span>
@@ -1388,7 +1322,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                   .slice()
                   .sort((a, b) => b.score - a.score)
                   .map((o) => (
-                    <article key={o.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+                    <article key={o.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
                       <div className="flex gap-3">
                         <ScoreRing score={o.score} />
                         <div className="flex-1 min-w-0">
@@ -1438,7 +1372,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         {/* ── ME INTERESA (lista alterna) ── */}
         {tab === "interes" && (
           <section>
-            <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.green}33` }}>
+            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.green}33` }}>
               <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
                 Me interesa · lista alterna
               </h2>
@@ -1449,7 +1383,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
             </div>
 
             {interesList.length === 0 ? (
-              <div className="rounded-xl p-8 text-center" style={{ backgroundColor: C.panel, border: `1px dashed ${C.border}` }}>
+              <div className="rounded-md p-8 text-center" style={{ backgroundColor: C.panel, border: `1px dashed ${C.border}` }}>
                 <p className="text-sm mb-1" style={{ color: C.dim }}>Aún no has marcado resultados.</p>
                 <p className="text-xs" style={{ color: C.faint }}>
                   En «Buscar», usa «Me interesa» / «No me interesa» en cada oferta.
@@ -1467,7 +1401,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                     </h3>
                     <div className="space-y-3">
                       {group.items.map((j) => (
-                        <article key={j.id} className="rounded-xl p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, opacity: j.interes === "no" ? 0.6 : 1 }}>
+                        <article key={j.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, opacity: j.interes === "no" ? 0.6 : 1 }}>
                           <div className="flex gap-3">
                             <ScoreRing score={j.score} />
                             <div className="flex-1 min-w-0">
@@ -1516,14 +1450,14 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         {/* ── BUSCAR ── */}
         {tab === "buscar" && (
           <section>
-            <div className="rounded-xl p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
               <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint }}>
                 Término de búsqueda
               </label>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm"
+                className="w-full px-3 py-2.5 rounded-md text-sm"
                 style={{ backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.text }}
                 placeholder="Ej: diseñador UX IA remoto"
               />
@@ -1565,7 +1499,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               {postSources.map((s) => (
                 <div
                   key={s.name}
-                  className="flex items-center justify-between rounded-xl px-4 py-3.5 gap-3"
+                  className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3"
                   style={{ backgroundColor: C.panel, border: `1px solid ${C.amber}33` }}
                 >
                   <div className="min-w-0">
@@ -1606,7 +1540,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               {sources.map((s) => (
                 <div
                   key={s.name}
-                  className="flex items-center justify-between rounded-xl px-4 py-3.5 gap-3"
+                  className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3"
                   style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
                 >
                   <div className="min-w-0">
@@ -1649,7 +1583,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
         {/* ── IMPORTAR ── */}
         {tab === "importar" && (
           <section>
-            <div className="rounded-xl p-5" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+            <div className="rounded-md p-5" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
               <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
                 Analizar post copiado
               </h2>
@@ -1661,7 +1595,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                 value={pasted}
                 onChange={(e) => setPasted(e.target.value)}
                 rows={10}
-                className="w-full px-3 py-2.5 rounded-lg text-sm resize-y"
+                className="w-full px-3 py-2.5 rounded-md text-sm resize-y"
                 style={{ backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.text }}
                 placeholder={"Ejemplo:\n\nhttps://www.linkedin.com/posts/...\n\nBuscamos UX/UI Designer remoto para Colombia. Enviar portafolio a talento@empresa.com..."}
               />
@@ -1671,7 +1605,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
               <button
                 onClick={parseWithAI}
                 disabled={parsing || !pasted.trim()}
-                className="mt-3 px-5 py-2.5 rounded-lg text-sm font-semibold transition-opacity"
+                className="mt-3 px-5 py-2.5 rounded-md text-sm font-semibold transition-opacity"
                 style={{
                   backgroundColor: C.amber,
                   color: "#1A1205",
@@ -1716,7 +1650,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
             {!loaded ? (
               <p className="text-sm text-center py-10" style={{ color: C.faint }}>Cargando tu radar…</p>
             ) : visible.length === 0 ? (
-              <div className="rounded-xl p-8 text-center" style={{ backgroundColor: C.panel, border: `1px dashed ${C.border}` }}>
+              <div className="rounded-md p-8 text-center" style={{ backgroundColor: C.panel, border: `1px dashed ${C.border}` }}>
                 <p className="text-sm mb-1" style={{ color: C.dim }}>Aún no hay vacantes aquí.</p>
                 <p className="text-xs" style={{ color: C.faint }}>
                   Busca en las fuentes y trae los listados a «Importar con IA».
@@ -1727,7 +1661,7 @@ Score: claridad del dolor o necesidad +30, decisor identificable +25, empresa/pe
                 {visible.map((j) => (
                   <article
                     key={j.id}
-                    className="rounded-xl p-4"
+                    className="rounded-md p-4"
                     style={{
                       backgroundColor: C.panel,
                       border: `1px solid ${C.border}`,

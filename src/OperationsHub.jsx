@@ -1,15 +1,31 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, CheckCircle2, Circle, Download, ExternalLink, LoaderCircle, MessageCircle, Paperclip, Send, Trash2, UserRound } from "lucide-react";
-import logoUrl from "./logos/logouxiaoscuro.fw.png";
+import { AlertTriangle, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Circle, Download, ExternalLink, ListChecks, LoaderCircle, MessageCircle, Paperclip, Plus, Send, Trash2, UserRound } from "lucide-react";
+import * as opsData from "./opsData.js";
+import logoUrl from "./logos/logo-medialab.png";
 
 const STATUS = {
   backlog: "Por ordenar",
-  ready: "Lista",
-  doing: "En curso",
-  review: "En revision",
+  ready: "Pendiente",
+  doing: "En proceso",
+  review: "En revisión",
   blocked: "Bloqueada",
-  done: "Hecha",
+  done: "Finalizada",
 };
+
+// Color por estado (semántico, aparte del acento de marca).
+const STATUS_TONE = {
+  backlog: { border: "#D0D5DD", bg: "#F2F4F7", text: "#475467" },
+  ready:   { border: "#F2C879", bg: "#FFF7E6", text: "#8A5700" },
+  doing:   { border: "#9CC7E4", bg: "#EAF2FB", text: "#1D5A99" },
+  review:  { border: "#B7D8D4", bg: "#EAF4F2", text: "#17727A" },
+  blocked: { border: "#F3B0A8", bg: "#FEF3F2", text: "#B42318" },
+  done:    { border: "#A6D9C4", bg: "#E5F5EE", text: "#0D7A4F" },
+};
+
+function statusTone(status) {
+  return STATUS_TONE[status] || STATUS_TONE.backlog;
+}
+
 
 const PRIORITY = {
   alta: "#B42318",
@@ -32,6 +48,12 @@ const AUDIENCE_OPTIONS = ["Interno MediaLab", "Externo cliente", "Mixto"];
 const SYNC_OPTIONS = ["Manual", "Crear en plataforma", "Actualizar plataforma", "Enviar por Google Chat"];
 const BOARD_TOOLS = ["No aplica", "Trello", "Jira", "Notion", "Asana", "ClickUp", "Monday", "Otro"];
 const PERSON_TYPES = ["Empleado MediaLab", "Externo"];
+const CONTACT_METHODS = [
+  ["auto", "Automático"],
+  ["whatsapp", "WhatsApp"],
+  ["chat", "Google Chat"],
+  ["email", "Correo"],
+];
 const STORE_KEY = "uxia.operationsHub.v1";
 const SAMPLE_CLIENTS = new Set(["Por clasificar", "FarmaNova", "RetailX", "Fintech Uno", "Proyecto interno", "Producto digital", "Operacion general", "MediaLab"]);
 const DEMO_COMPANY_IDS = new Set(["notion-client", "jira-client"]);
@@ -204,8 +226,8 @@ function cleanSourceRecords(input) {
       return {
         ...record,
         source: `Insumo de imagen: ${fileName}`,
-        summary: `Insumo de imagen pendiente de analisis: ${fileName}`,
-        rawText: `Insumo de imagen pendiente de analisis: ${fileName}`,
+        summary: `Insumo de imagen pendiente de análisis: ${fileName}`,
+        rawText: `Insumo de imagen pendiente de análisis: ${fileName}`,
         taskIds: [],
         taskCount: 0,
         deletedSource: false,
@@ -300,6 +322,10 @@ function mailtoUrl(email, subject, body) {
 }
 
 function attachmentUrl(attachment) {
+  // El servidor ya entrega la URL correcta (Supabase Storage en Vercel, o
+  // /operations-files en local). Se usa esa; el path solo es respaldo para
+  // adjuntos viejos guardados antes de este cambio.
+  if (attachment?.url) return attachment.url;
   const path = String(attachment?.path || "").replace(/\\/g, "/").replace(/^operations\//, "");
   return path ? `/operations-files/${path}` : "";
 }
@@ -430,15 +456,16 @@ const defaultCompanies = [
 
 const defaultTasks = [];
 
-export default function OperationsHub() {
+export default function OperationsHub({ token = "" } = {}) {
   const [companies, setCompanies] = useState(defaultCompanies);
   const [tasks, setTasks] = useState(defaultTasks);
   const [sourceRecords, setSourceRecords] = useState([]);
   const [people, setPeople] = useState([]);
   const [activeCompany, setActiveCompany] = useState("metrics-lab");
+  const [insumos, setInsumos] = useState([]);
   const [activeStatus, setActiveStatus] = useState("open");
   const [activeView, setActiveView] = useState("companies");
-  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [asideOpen, setAsideOpen] = useState(false);
   const [inboxText, setInboxText] = useState(starterText);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [notice, setNotice] = useState("");
@@ -447,7 +474,7 @@ export default function OperationsHub() {
   const [newClientName, setNewClientName] = useState("");
   const [newClientTool, setNewClientTool] = useState("No aplica");
   const [newClientBoardUrl, setNewClientBoardUrl] = useState("");
-  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "" });
+  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto" });
   const [contextPreview, setContextPreview] = useState({});
   const [loadedState, setLoadedState] = useState(false);
   const [saveStatus, setSaveStatus] = useState("Sin guardar");
@@ -455,9 +482,8 @@ export default function OperationsHub() {
   useEffect(() => {
     async function loadState() {
       try {
-        const response = await fetch("/api/operations/state");
-        if (!response.ok) throw new Error("state unavailable");
-        const payload = await response.json();
+        if (!opsData.opsDataReady()) throw new Error("supabase sin configurar");
+        const payload = await opsData.loadState(token);
         const normalized = normalizeApiData(payload);
         setCompanies(normalized.companies);
         setTasks(normalized.tasks);
@@ -468,7 +494,7 @@ export default function OperationsHub() {
             ? payload.activeCompany
             : normalized.companies[0]?.id || "metrics-lab"
         );
-        setSaveStatus(`Guardado central: ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString() : "listo"}`);
+        setSaveStatus(`Supabase: ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString() : "listo"}`);
       } catch {
         const local = localStorage.getItem(STORE_KEY);
         if (local) {
@@ -505,30 +531,20 @@ export default function OperationsHub() {
   useEffect(() => {
     if (!loadedState) return;
     localStorage.setItem(STORE_KEY, JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany }));
-    const controller = new AbortController();
+    if (!opsData.opsDataReady()) {
+      setSaveStatus("Guardado solo en este navegador");
+      return;
+    }
     const timer = setTimeout(async () => {
       try {
-        setSaveStatus("Guardando...");
-        const response = await fetch("/api/operations/state", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany }),
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("save failed");
-        const saved = await response.json();
-        setSaveStatus(`Guardado central: ${new Date(saved.updatedAt).toLocaleString()}`);
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          setSaveStatus("Guardado solo en este navegador");
-        }
+        setSaveStatus("Guardando…");
+        const saved = await opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany });
+        setSaveStatus(`Supabase: ${new Date(saved.updatedAt).toLocaleString()}`);
+      } catch {
+        setSaveStatus("Guardado solo en este navegador");
       }
-    }, 500);
-
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
+    }, 600);
+    return () => clearTimeout(timer);
   }, [companies, tasks, sourceRecords, people, activeCompany, loadedState]);
 
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
@@ -569,30 +585,15 @@ export default function OperationsHub() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  useEffect(() => {
+    loadInsumos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompany, loadedState]);
+
   async function analyzeInbox() {
     setIsAnalyzing(true);
     setNotice("");
     try {
-      const response = await fetch("/api/operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: inboxText, companyId: activeCompany }),
-      });
-      const data = response.ok ? await response.json() : null;
-      const extracted = data?.tasks?.length ? data.tasks : localFallbackAnalyze(inboxText, activeCompany);
-      mergeTasks(extracted);
-      if (extracted.length) {
-        mergeRecords([
-          buildPastedRecord({
-            text: inboxText,
-            companyId: activeCompany,
-            client: extracted[0]?.client || activeCompanyClients[0] || "Sin subproyecto",
-            tasks: extracted,
-          }),
-        ]);
-      }
-      setNotice(`${extracted.length} tareas detectadas y agregadas al pipeline.`);
-    } catch {
       const extracted = localFallbackAnalyze(inboxText, activeCompany);
       mergeTasks(extracted);
       if (extracted.length) {
@@ -605,7 +606,7 @@ export default function OperationsHub() {
           }),
         ]);
       }
-      setNotice(`${extracted.length} tareas detectadas localmente.`);
+      setNotice(`${extracted.length} tareas detectadas y agregadas al pipeline.`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -629,23 +630,74 @@ export default function OperationsHub() {
   async function processInbox({ silentEmpty = false } = {}) {
     setNotice("");
     try {
-      const response = await fetch("/api/operations/inbox/process", { method: "POST" });
-      const data = response.ok ? await response.json() : null;
-      const extracted = cleanTasks(data?.tasks || []);
-      mergeTasks(extracted);
-      mergeRecords(cleanSourceRecords(data?.records || []));
-      const errors = data?.errors?.length ? ` Errores: ${data.errors.map((item) => item.source).join(", ")}.` : "";
-      if (extracted.length) {
+      const pending = opsData.opsDataReady() ? await opsData.listInsumos(token, "") : [];
+      const created = [];
+      for (const insumo of pending.filter((item) => item.kind === "texto" && item.rawText)) {
+        const extracted = localFallbackAnalyze(insumo.rawText, insumo.companyId);
+        if (extracted.length) {
+          mergeTasks(extracted);
+          created.push(...extracted);
+        }
+        await opsData.deleteInsumo(token, insumo.id);
+      }
+      const pendingImages = pending.filter((item) => item.kind !== "texto").length;
+      if (created.length) {
         setActiveView("tasks");
         setActiveStatus("open");
-        setSelectedTaskId(extracted[0].id);
       }
-      if (!silentEmpty || extracted.length || data?.deleted?.length || errors) {
-        setNotice(`${extracted.length} tareas creadas. ${data?.deleted?.length || 0} documentos .md/.txt fueron analizados y eliminados para evitar duplicados.${errors}`);
+      const pendingNote = pendingImages ? ` ${pendingImages} imagen(es) quedan para revisar (o córrelas con Claude Code: npm run daily:fetch).` : "";
+      if (!silentEmpty || created.length || pendingImages) {
+        setNotice(`${created.length} tareas creadas de insumos de texto.${pendingNote}`);
       }
+      loadInsumos();
     } catch {
-      setNotice("No pude procesar la documentacion desde la API.");
+      setNotice("No pude procesar los insumos pendientes.");
     }
+  }
+
+  async function loadInsumos() {
+    if (!opsData.opsDataReady()) { setInsumos([]); return; }
+    try {
+      setInsumos(await opsData.listInsumos(token, activeCompany));
+    } catch {
+      setInsumos([]);
+    }
+  }
+
+  async function removeInsumo(id) {
+    try {
+      await opsData.deleteInsumo(token, id);
+    } catch {
+      /* se refresca igual */
+    }
+    loadInsumos();
+  }
+
+  function createTaskFromInsumo(insumo) {
+    const nextTask = {
+      id: uid(),
+      title: `Revisar insumo: ${insumo.fileName}`,
+      companyId: insumo.companyId || activeCompany,
+      client: insumo.client || activeCompanyClients[0] || "Sin subproyecto",
+      role: "Project Manager",
+      owner: "",
+      priority: "media",
+      status: "backlog",
+      dueDate: addDays(2),
+      deliveryDate: "",
+      source: `Insumo: ${insumo.fileName}`,
+      audience: "Interno MediaLab",
+      syncMode: "Manual",
+      evidence: "",
+      attachments: insumo.url ? [{ type: "file", label: insumo.fileName, url: insumo.url, path: insumo.storagePath }] : [],
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((current) => [nextTask, ...current]);
+    // keepFile: la tarea se queda con el archivo; solo se quita de "pendientes".
+    opsData.deleteInsumo(token, insumo.id, { keepFile: true }).catch(() => {}).finally(loadInsumos);
+    setActiveView("tasks");
+    setActiveStatus("open");
+    setNotice(`Tarea creada desde el insumo ${insumo.fileName}.`);
   }
 
   function updateTask(id, patch) {
@@ -659,7 +711,6 @@ export default function OperationsHub() {
       taskIds: (record.taskIds || []).filter((taskId) => taskId !== id),
       taskCount: Math.max(0, (record.taskIds || []).filter((taskId) => taskId !== id).length),
     })));
-    setSelectedTaskId((current) => (current === id ? "" : current));
     setNotice("Tarea borrada por el manager.");
   }
 
@@ -694,23 +745,32 @@ export default function OperationsHub() {
         phone,
         type: newPerson.type,
         chatUrl: newPerson.chatUrl.trim(),
+        contactMethod: newPerson.contactMethod || "auto",
         companyIds: [activeCompany],
       },
     ]);
-    setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "" });
+    setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto" });
     setNotice(`Persona agregada: ${name}.`);
   }
 
   function updatePerson(id, patch) {
     if (patch.email && !EMAIL_PATTERN.test(patch.email)) {
-      setNotice("Correo invalido. Usa un formato como nombre@empresa.com.");
+      setNotice("Correo inválido. Usa un formato como nombre@empresa.com.");
       return;
     }
     if (patch.phone && !isValidPhone(patch.phone)) {
-      setNotice("WhatsApp invalido. Incluye indicativo y numero completo.");
+      setNotice("WhatsApp inválido. Incluye indicativo y número completo.");
       return;
     }
     setPeople((current) => current.map((person) => (person.id === id ? { ...person, ...patch } : person)));
+  }
+
+  function deletePerson(id) {
+    const person = people.find((item) => item.id === id);
+    if (!window.confirm(`¿Eliminar a ${person?.name || "esta persona"}? Las tareas asignadas quedarán sin responsable.`)) return;
+    setPeople((current) => current.filter((item) => item.id !== id));
+    setTasks((current) => current.map((task) => (task.assigneeId === id ? { ...task, assigneeId: "", owner: "" } : task)));
+    setNotice("Persona eliminada.");
   }
 
   function createCompany() {
@@ -807,118 +867,72 @@ export default function OperationsHub() {
     if (!file || !company) return;
     const task = tasks.find((item) => item.id === taskId);
     if (!task) return;
-    const formData = new FormData();
-    formData.append("companyId", task.companyId);
-    formData.append("client", task.client);
-    formData.append("file", file);
-
+    if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir adjuntos."); return; }
     try {
-      const response = await fetch("/api/operations/task-attachment", {
-        method: "POST",
-        body: formData,
-      });
-      const data = response.ok ? await response.json() : await response.json().catch(() => null);
-      if (!response.ok || !data?.attachment) {
-        setNotice(data?.detail || data?.error || "No se pudo subir el adjunto");
-        return;
-      }
-      updateTask(taskId, { attachments: [...(task.attachments || []), data.attachment] });
-      setNotice(`Adjunto agregado: ${data.attachment.label}`);
-    } catch {
-      setNotice("No pude subir el adjunto. Revisa permisos o conexion con la API.");
+      const attachment = await opsData.saveTaskAttachment(token, { companyId: task.companyId, client: task.client, file });
+      updateTask(taskId, { attachments: [...(task.attachments || []), attachment] });
+      setNotice(`Adjunto agregado: ${attachment.label}`);
+    } catch (error) {
+      setNotice(`No pude subir el adjunto. ${error.message || "Revisa permisos/políticas de Storage."}`);
     }
   }
 
   async function uploadSourceDocument(client, file) {
     if (!file || !company) return;
-    const validType = /\.(md|txt)$/i.test(file.name) || isTaskImageFile(file);
-    if (!validType) {
-      setNotice("Sube tareas como .md, .txt o imagen. Maximo 1 MB.");
+    const isText = /\.(md|txt)$/i.test(file.name);
+    const isImage = isTaskImageFile(file);
+    if (!isText && !isImage) {
+      setNotice("Sube tareas como .md, .txt o imagen. Máximo 1 MB.");
       return;
     }
-    if (isTaskImageFile(file) && file.size > MAX_TASK_UPLOAD_BYTES) {
-      setNotice(`La imagen pesa ${formatFileSize(file.size)}. La estoy comprimiendo antes de subirla.`);
-    }
-    const uploadFile = await prepareTaskUploadFile(file);
-    if (uploadFile.size > MAX_TASK_UPLOAD_BYTES) {
-      setNotice(`El archivo pesa ${formatFileSize(uploadFile.size)}. Debe quedar por debajo de 1 MB.`);
-      return;
-    }
-    const formData = new FormData();
-    formData.append("companyId", company.id);
-    formData.append("client", client);
-    formData.append("file", uploadFile);
+    if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir insumos."); return; }
     try {
-      const response = await fetch("/api/operations/source-document", { method: "POST", body: formData });
-      const data = response.ok ? await response.json() : await response.json().catch(() => null);
-      if (!response.ok || !data?.document) {
-        const fallback = response.status === 500
-          ? "No se pudo subir tareas. En local abre la app con `npm run dev:local`."
-          : `No se pudo subir tareas (${response.status || "sin respuesta"}).`;
-        setNotice(data?.detail || data?.error || fallback);
+      if (isText) {
+        const text = await file.text();
+        const extracted = localFallbackAnalyze(text, activeCompany).map((task) => ({ ...task, client: task.client || client }));
+        mergeTasks(extracted);
+        if (extracted.length) {
+          mergeRecords([buildPastedRecord({ text, companyId: activeCompany, client, tasks: extracted })]);
+          setActiveView("tasks");
+          setActiveStatus("open");
+          setNotice(`${extracted.length} tareas creadas para ${client}.`);
+        } else {
+          setNotice(`El texto no generó tareas para ${client}.`);
+        }
         return;
       }
-      if (!data.document.processable) {
-        const error = data.errors?.[0]?.error || "Sube tareas como .md, .txt o imagen. Maximo 1 MB.";
-        setNotice(error);
+      // Imagen: se guarda como insumo pendiente (Claude Code la analiza en el run diario).
+      const prepared = await prepareTaskUploadFile(file);
+      if (prepared.size > MAX_TASK_UPLOAD_BYTES) {
+        setNotice(`La imagen pesa ${formatFileSize(prepared.size)}. Debe quedar por debajo de 1 MB.`);
         return;
       }
-      const extracted = cleanTasks(data.tasks || []);
-      mergeTasks(extracted);
-      mergeRecords(cleanSourceRecords(data.records || []));
-      if (extracted.length) {
-        setActiveView("tasks");
-        setActiveStatus("open");
-        setSelectedTaskId(extracted[0].id);
-      }
-      const errors = data.errors?.length ? ` Errores: ${data.errors.map((item) => item.error || item.source).join(", ")}.` : "";
-      if (extracted.length) {
-        setNotice(`${extracted.length} tareas creadas para ${client}. ${data.deleted?.length || 0} fuente(s) analizadas y limpiadas.${errors}`);
-      } else if (data.document?.discarded) {
-        const error = data.errors?.[0]?.error || "Insumo descartado: no genero requerimientos utiles.";
-        setNotice(`${error} No se guardo en la base.`);
-      } else if (data.document?.pendingAnalysis) {
-        setNotice(`Insumo cargado para ${client}. Queda pendiente de analisis; no se creo una tarea por el archivo.`);
-      } else {
-        setNotice(`Insumo analizado para ${client}. No se encontraron tareas nuevas.${errors}`);
-      }
+      const named = prepared instanceof File ? prepared : new File([prepared], file.name, { type: prepared.type || file.type });
+      await opsData.saveInsumo(token, { companyId: company.id, client, file: named, kind: "imagen" });
+      setNotice(`Insumo (imagen) guardado para ${client}. Queda en "Insumos pendientes".`);
+      loadInsumos();
     } catch (error) {
-      setNotice(`No pude subir tareas. ${error.message || "Revisa conexion con la API."}`);
+      setNotice(`No pude subir el insumo. ${error.message || "Revisa políticas de Storage."}`);
     }
   }
 
   async function uploadCompanyLogo(file) {
     if (!file || !company) return;
-    const formData = new FormData();
-    formData.append("companyId", company.id);
-    formData.append("file", file);
+    if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir el logo."); return; }
     try {
-      const response = await fetch("/api/operations/company-logo", { method: "POST", body: formData });
-      const data = response.ok ? await response.json() : await response.json().catch(() => null);
-      if (!response.ok || !data?.logo) {
-        setNotice(data?.detail || data?.error || "No se pudo subir el logo");
-        return;
-      }
-      setCompanies((current) => current.map((item) => item.id === company.id ? { ...item, logo: data.logo } : item));
-      setNotice(`Logo actualizado: ${data.logo.label}`);
-    } catch {
-      setNotice("No pude subir el logo.");
+      const logo = await opsData.saveCompanyLogo(token, { companyId: company.id, file });
+      setCompanies((current) => current.map((item) => item.id === company.id ? { ...item, logo } : item));
+      setNotice(`Logo actualizado: ${logo.label}`);
+    } catch (error) {
+      setNotice(`No pude subir el logo. ${error.message || ""}`);
     }
   }
 
   async function uploadContextDocument(client, file) {
     if (!file || !company) return;
-    const formData = new FormData();
-    formData.append("companyId", company.id);
-    formData.append("client", client || "");
-    formData.append("file", file);
+    if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir documentos."); return; }
     try {
-      const response = await fetch("/api/operations/context-document", { method: "POST", body: formData });
-      const data = response.ok ? await response.json() : await response.json().catch(() => null);
-      if (!response.ok || !data?.document) {
-        setNotice(data?.detail || data?.error || "No se pudo subir el documento de contexto");
-        return;
-      }
+      const document = await opsData.saveContextDocument(token, { companyId: company.id, client, file });
       const key = client || "_empresa";
       setCompanies((current) => current.map((item) => (
         item.id === company.id
@@ -926,33 +940,39 @@ export default function OperationsHub() {
               ...item,
               contextDocuments: {
                 ...(item.contextDocuments || {}),
-                [key]: [...(item.contextDocuments?.[key] || []), data.document],
+                [key]: [...(item.contextDocuments?.[key] || []), document],
               },
             }
           : item
       )));
-      setNotice(`Documento de contexto agregado: ${data.document.label}`);
+      setNotice(`Documento de contexto agregado: ${document.label}`);
       readContextDocuments(client);
-    } catch {
-      setNotice("No pude subir el documento de contexto.");
+    } catch (error) {
+      setNotice(`No pude subir el documento de contexto. ${error.message || ""}`);
     }
   }
 
   async function readContextDocuments(client = "") {
     if (!company) return;
     const key = `${company.id}:${client || "_empresa"}`;
+    const docs = company.contextDocuments?.[client || "_empresa"] || [];
     try {
-      const params = new URLSearchParams({ companyId: company.id, client: client || "" });
-      const response = await fetch(`/api/operations/context?${params.toString()}`);
-      const data = response.ok ? await response.json() : await response.json().catch(() => null);
-      if (!response.ok) {
-        setNotice(data?.detail || data?.error || "No pude leer el contexto");
-        return;
+      const readable = [];
+      for (const doc of docs) {
+        if (doc.readable && doc.url) {
+          try {
+            const res = await fetch(doc.url);
+            const text = res.ok ? await res.text() : "";
+            readable.push({ label: doc.label, path: doc.path, text: text.slice(0, 4000) });
+          } catch {
+            /* ignora un documento que no se pudo leer */
+          }
+        }
       }
-      setContextPreview((current) => ({ ...current, [key]: data.documents || [] }));
-      setNotice(`Contexto leido: ${(data.documents || []).length} documento(s).`);
+      setContextPreview((current) => ({ ...current, [key]: readable }));
+      setNotice(`Contexto leído: ${readable.length} documento(s).`);
     } catch {
-      setNotice("No pude leer el contexto. Revisa permisos o conexion con la API.");
+      setNotice("No pude leer el contexto.");
     }
   }
 
@@ -980,7 +1000,6 @@ export default function OperationsHub() {
     ]);
     setActiveView("tasks");
     setActiveStatus("open");
-    setSelectedTaskId(nextTask.id);
     setNotice("Tarea manual creada. Puedes completar responsable, proyecto y detalle.");
   }
 
@@ -1011,11 +1030,11 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F4EF] text-[#202124]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-[#F7F4EF] text-[#202124]" style={{ fontFamily: "'Lato', 'Segoe UI', system-ui, sans-serif" }}>
       <header className="border-b border-[#D9D2C7] bg-[#FFFCF7]">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
-            <img src={logoUrl} alt="UXIA" className="h-8 w-auto shrink-0 sm:h-9" />
+            <img src={logoUrl} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0 sm:h-9" />
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
               <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
@@ -1029,17 +1048,29 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-5 sm:px-5 sm:py-6">
-        {notice && (
-          <div className="mb-4 rounded-md border border-[#B7D8D4] bg-[#EAF4F2] px-4 py-3 text-sm font-semibold text-[#1B5E5A] shadow-sm">
-            {notice}
+        {/* A-3 / WCAG 4.1.3 — region viva: anuncia a lectores de pantalla el
+            resultado de procesar insumos sin que el usuario tenga que buscarlo. */}
+        <div role="status" aria-live="polite">
+          {notice && (
+            <div className="mb-4 rounded-md border border-[#B7D8D4] bg-[#EAF4F2] px-4 py-3 text-sm font-semibold text-[#17727A] shadow-sm">
+              {notice}
+            </div>
+          )}
+        </div>
+
+        {(metrics.dueToday > 0 || metrics.blocked > 0) && (
+          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 text-sm">
+            <span className="font-semibold uppercase tracking-[0.08em] text-[#B76E00]">Requiere tu atención hoy</span>
+            {metrics.dueToday > 0 && <span className="font-semibold text-[#8A5700]">{metrics.dueToday} vence(n) hoy</span>}
+            {metrics.blocked > 0 && <span className="font-semibold text-[#B42318]">{metrics.blocked} con bloqueo</span>}
           </div>
         )}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric label="Tareas abiertas" value={metrics.open} tone="#1B5E5A" />
-          <Metric label="Vencen hoy" value={metrics.dueToday} tone="#B76E00" />
-          <Metric label="Bloqueos" value={metrics.blocked} tone="#B42318" />
-          <Metric label="Empresas" value={metrics.companies} tone="#344054" />
+          <Metric label="Tareas abiertas" value={metrics.open} tone="#17727A" icon={ListChecks} />
+          <Metric label="Vencen hoy" value={metrics.dueToday} tone="#B76E00" icon={CalendarDays} />
+          <Metric label="Bloqueos" value={metrics.blocked} tone="#B42318" icon={AlertTriangle} />
+          <Metric label="Empresas" value={metrics.companies} tone="#344054" icon={Building2} />
         </section>
 
         <div className="mt-5 flex gap-2 overflow-x-auto border-b border-[#D9D2C7]">
@@ -1053,8 +1084,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               onClick={() => setActiveView(key)}
               className="shrink-0 border-b-2 px-3 py-2 text-sm font-semibold"
               style={{
-                borderColor: activeView === key ? "#1B5E5A" : "transparent",
-                color: activeView === key ? "#1B5E5A" : "#667085",
+                borderColor: activeView === key ? "#17727A" : "transparent",
+                color: activeView === key ? "#17727A" : "#667085",
               }}
             >
               {label}
@@ -1062,50 +1093,51 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           ))}
         </div>
 
-        {activeView === "companies" && (
-          <section className="mt-6 grid gap-5 lg:grid-cols-[300px_1fr]">
-            <aside className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#667085]">Empresas</h2>
-              <div className="rounded-md border border-[#E4DED6] bg-white p-3 shadow-sm">
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Nueva empresa</span>
-                  <input
-                    value={newCompanyName}
-                    onChange={(event) => setNewCompanyName(event.target.value)}
-                    onKeyDown={(event) => event.key === "Enter" && createCompany()}
-                    placeholder="Ej: Metrics Lab"
-                    className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#1B5E5A]"
-                  />
-                </label>
-                <button onClick={createCompany} className="mt-2 w-full rounded-md bg-[#1B5E5A] px-3 py-2 text-sm font-semibold text-white">
-                  Crear empresa
-                </button>
-              </div>
-              {companies.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveCompany(item.id)}
-                  className="w-full rounded-md border bg-white p-4 text-left shadow-sm"
-                  style={{ borderColor: item.id === activeCompany ? "#1B5E5A" : "#E4DED6" }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-[#1D2939]">{item.name}</p>
-                      <p className="mt-1 text-xs text-[#667085]">{item.workspaces.join(" + ")}</p>
-                    </div>
-                    <span className="rounded-full bg-[#EAF4F2] px-2 py-1 text-xs font-semibold text-[#1B5E5A]">{item.status}</span>
+        {activeView === "companies" && insumos.length > 0 && (
+          <section className="mt-6 rounded-md border border-[#F2C879] bg-[#FFF7E6] p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-[#8A5700]">Insumos pendientes de revisar ({insumos.length})</h2>
+            <p className="mt-1 text-xs text-[#8b8272]">Imágenes y archivos que subiste durante el día. Conviértelos en tarea, descárgalos o bórralos.</p>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {insumos.map((insumo) => (
+                <li key={insumo.id} className="flex items-center gap-3 rounded-md border border-[#E4DED6] bg-white p-2">
+                  {insumo.url && /imagen|image/i.test(`${insumo.kind} ${insumo.contentType}`) ? (
+                    <img src={insumo.url} alt={insumo.fileName} className="h-12 w-12 shrink-0 rounded object-cover" />
+                  ) : (
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-[#F2F4F7] text-[#667085]"><Paperclip size={16} /></span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-[#344054]">{insumo.fileName}</p>
+                    <p className="truncate text-xs text-[#8b8272]">{insumo.client || "Sin subproyecto"}</p>
                   </div>
-                </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" onClick={() => createTaskFromInsumo(insumo)} title="Crear tarea desde este insumo" className="inline-flex min-h-[36px] items-center rounded-md bg-[#17727A] px-2 text-xs font-semibold text-white">Crear tarea</button>
+                    {insumo.url && (
+                      <a href={insumo.url} download target="_blank" rel="noopener noreferrer" title="Descargar" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"><Download size={14} /></a>
+                    )}
+                    <button type="button" onClick={() => removeInsumo(insumo.id)} title="Borrar insumo" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] text-[#B42318]"><Trash2 size={14} /></button>
+                  </div>
+                </li>
               ))}
+            </ul>
+          </section>
+        )}
 
-              <PeoplePanel
-                people={people}
-                newPerson={newPerson}
-                onNewPerson={setNewPerson}
-                onAddPerson={addPerson}
-                onUpdatePerson={updatePerson}
-              />
-            </aside>
+        {activeView === "companies" && (
+          <section className="mt-6">
+            <div className={asideOpen ? "grid gap-5 lg:grid-cols-[1fr_320px]" : ""}>
+            <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-[#667085]">Empresa activa: <b className="text-[#1D2939]">{company?.name || "—"}</b></span>
+              {!asideOpen && (
+                <button
+                  type="button"
+                  onClick={() => setAsideOpen(true)}
+                  className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]"
+                >
+                  Empresas y personas <ChevronRight size={16} />
+                </button>
+              )}
+            </div>
 
             <CompanyPanel
               company={company}
@@ -1140,19 +1172,80 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 )));
               }}
             />
+            </div>
+
+            {asideOpen && (
+              <aside className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#667085]">Empresas y personas</h2>
+                  <button
+                    type="button"
+                    onClick={() => setAsideOpen(false)}
+                    title="Ocultar"
+                    className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-[#D0D5DD] bg-white px-2 text-xs font-semibold text-[#344054]"
+                  >
+                    Ocultar <ChevronRight size={14} />
+                  </button>
+                </div>
+                <div className="rounded-md border border-[#E4DED6] bg-white p-3 shadow-sm">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Nueva empresa</span>
+                    <input
+                      value={newCompanyName}
+                      onChange={(event) => setNewCompanyName(event.target.value)}
+                      onKeyDown={(event) => event.key === "Enter" && createCompany()}
+                      placeholder="Ej: Metrics Lab"
+                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+                    />
+                  </label>
+                  <button onClick={createCompany} className="mt-2 w-full rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
+                    Crear empresa
+                  </button>
+                </div>
+                {companies.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveCompany(item.id)}
+                    className="w-full rounded-md border bg-white p-4 text-left shadow-sm"
+                    style={{ borderColor: item.id === activeCompany ? "#17727A" : "#E4DED6" }}
+                  >
+                    <div className="flex items-start gap-3">
+                      {item.logo?.url ? (
+                        <img src={item.logo.url} alt={item.name} className="h-9 w-9 shrink-0 rounded-md border border-[#E4DED6] object-contain" />
+                      ) : (
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-[#C8BFB3] text-xs font-semibold text-[#8b8272]">
+                          {item.name?.[0]?.toUpperCase() || "?"}
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-[#1D2939]">{item.name}</p>
+                        <p className="mt-1 truncate text-xs text-[#667085]">{item.workspaces.join(" + ")}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-[#EAF4F2] px-2 py-1 text-xs font-semibold text-[#17727A]">{item.status}</span>
+                    </div>
+                  </button>
+                ))}
+                <PeoplePanel
+                  people={people}
+                  newPerson={newPerson}
+                  onNewPerson={setNewPerson}
+                  onAddPerson={addPerson}
+                  onUpdatePerson={updatePerson}
+                  onDeletePerson={deletePerson}
+                />
+              </aside>
+            )}
+            </div>
           </section>
         )}
 
         {activeView === "tasks" && (
           <TasksTable
             tasks={visibleTasks}
-            allTasks={tasks}
             companies={companies}
             people={people}
             activeStatus={activeStatus}
-            selectedTaskId={selectedTaskId}
             onStatus={setActiveStatus}
-            onSelectTask={setSelectedTaskId}
             onAddTask={addManualTask}
             onChangeTask={updateTask}
             onDeleteTask={deleteTask}
@@ -1165,43 +1258,43 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
   );
 }
 
-function Metric({ label, value, tone }) {
+function Metric({ label, value, tone, icon: Icon }) {
   return (
     <div className="rounded-md border border-[#E4DED6] bg-white p-4 shadow-sm">
-      <p className="text-sm text-[#667085]">{label}</p>
-      <p className="mt-2 text-3xl font-semibold" style={{ color: tone }}>{value}</p>
+      <p className="flex items-center gap-1.5 text-sm text-[#667085]">
+        {Icon && (
+          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md" style={{ background: `${tone}1A`, color: tone }}>
+            <Icon size={14} />
+          </span>
+        )}
+        {label}
+      </p>
+      <p className="mt-2 font-metrics text-3xl font-semibold tabular-nums" style={{ color: tone }}>{value}</p>
     </div>
   );
 }
 
 function TasksTable({
   tasks,
-  allTasks,
   companies,
   people,
   activeStatus,
-  selectedTaskId,
   onStatus,
-  onSelectTask,
   onAddTask,
   onChangeTask,
   onDeleteTask,
   onUploadAttachment,
+  onDeleteAttachment,
 }) {
-  const selectedTask = allTasks.find((task) => task.id === selectedTaskId) || tasks[0] || null;
-  const selectedCompany = selectedTask
-    ? companies.find((company) => company.id === selectedTask.companyId) || companies[0]
-    : companies[0];
-
   return (
     <section className="mt-6 space-y-4">
       <div className="rounded-md border border-[#D9D2C7] bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-[#1D2939]">Todas las tareas</h2>
-            <p className="text-sm text-[#667085]">Tabla consolidada por estado, fecha, empresa, proyecto y responsable.</p>
+            <p className="text-sm text-[#667085]">Toca una tarea para desplegar y editar lo que se requiere.</p>
           </div>
-          <button onClick={onAddTask} className="rounded-md bg-[#1B5E5A] px-3 py-2 text-sm font-semibold text-white">
+          <button onClick={onAddTask} className="min-h-[44px] rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
             Crear tarea manual
           </button>
         </div>
@@ -1210,7 +1303,7 @@ function TasksTable({
             ["open", "Abiertas"],
             ["today", "Por vencer"],
             ["blocked", "Bloqueadas"],
-            ["review", "En revision"],
+            ["review", "En revisión"],
             ["done", "Cerradas"],
           ].map(([key, label]) => (
             <button
@@ -1218,9 +1311,9 @@ function TasksTable({
               onClick={() => onStatus(key)}
               className="rounded-md border px-3 py-1.5 text-sm font-semibold"
               style={{
-                borderColor: activeStatus === key ? "#1B5E5A" : "#D0D5DD",
+                borderColor: activeStatus === key ? "#17727A" : "#D0D5DD",
                 background: activeStatus === key ? "#EAF4F2" : "#FFFFFF",
-                color: activeStatus === key ? "#1B5E5A" : "#475467",
+                color: activeStatus === key ? "#17727A" : "#475467",
               }}
             >
               {label}
@@ -1229,98 +1322,29 @@ function TasksTable({
         </div>
       </div>
 
-      <div className="space-y-2 md:hidden">
-        {tasks.length ? tasks.map((task) => {
-          const company = companies.find((item) => item.id === task.companyId);
-          const assigned = personById(people, task.assigneeId);
-          return (
-            <button
-              key={task.id}
-              type="button"
-              onClick={() => onSelectTask(task.id)}
-              className="w-full rounded-md border border-[#D9D2C7] bg-white p-3 text-left shadow-sm"
-              style={{ borderColor: selectedTask?.id === task.id ? "#1B5E5A" : "#D9D2C7" }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="min-w-0 flex-1 text-sm font-semibold leading-snug text-[#1D2939]">{task.title}</p>
-              </div>
-              <p className="mt-2 text-xs text-[#475467]">{company?.name || task.companyId} / {task.client || "Sin proyecto"}</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-[#667085]">
-                <span>{assigned?.name || task.owner || "Sin asignar"}</span>
-                <span className="text-right">Pub. {displayDate(task.createdAt)}</span>
-                <span>{STATUS[task.status] || task.status}</span>
-                <span className="text-right">Vence {displayDate(task.dueDate)}</span>
-              </div>
-            </button>
-          );
-        }) : (
+      <div className="space-y-2">
+        {tasks.length ? tasks.map((task) => (
+          <ProjectTaskAccordion
+            key={task.id}
+            task={task}
+            company={companies.find((item) => item.id === task.companyId) || companies[0]}
+            people={people}
+            onChangeTask={onChangeTask}
+            onDeleteTask={onDeleteTask}
+            onUploadAttachment={onUploadAttachment}
+            onDeleteAttachment={onDeleteAttachment}
+          />
+        )) : (
           <div className="rounded-md border border-dashed border-[#C8BFB3] bg-white p-6 text-center text-sm text-[#667085]">
             No hay tareas en este filtro.
           </div>
         )}
       </div>
-
-      <div className="hidden overflow-hidden rounded-md border border-[#D9D2C7] bg-white shadow-sm md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] border-collapse text-sm">
-            <thead className="bg-[#F7F4EF] text-left text-xs uppercase text-[#667085]">
-              <tr>
-                <th className="px-3 py-2">Tarea</th>
-                <th className="px-3 py-2">Empresa</th>
-                <th className="px-3 py-2">Proyecto</th>
-                <th className="px-3 py-2">Responsable</th>
-                <th className="px-3 py-2">Publicada</th>
-                <th className="px-3 py-2">Vence</th>
-                <th className="px-3 py-2">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.length ? tasks.map((task) => {
-                const company = companies.find((item) => item.id === task.companyId);
-                const assigned = personById(people, task.assigneeId);
-                return (
-                  <tr
-                    key={task.id}
-                    onClick={() => onSelectTask(task.id)}
-                    className="cursor-pointer border-t border-[#E4DED6] hover:bg-[#FFFCF7]"
-                    style={{ background: selectedTask?.id === task.id ? "#EAF4F2" : undefined }}
-                  >
-                    <td className="max-w-[320px] px-3 py-2 font-semibold text-[#1D2939]">{task.title}</td>
-                    <td className="px-3 py-2 text-[#475467]">{company?.name || task.companyId}</td>
-                    <td className="px-3 py-2 text-[#475467]">{task.client || "Sin proyecto"}</td>
-                    <td className="px-3 py-2 text-[#475467]">{assigned?.name || task.owner || "Sin asignar"}</td>
-                    <td className="px-3 py-2 text-[#475467]">{displayDate(task.createdAt)}</td>
-                    <td className="px-3 py-2 text-[#475467]">{displayDate(task.dueDate)}</td>
-                    <td className="px-3 py-2 text-[#475467]">{STATUS[task.status] || task.status}</td>
-                  </tr>
-                );
-              }) : (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-[#667085]">
-                    No hay tareas en este filtro.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {selectedTask && selectedCompany && (
-        <TaskCard
-          task={selectedTask}
-          company={selectedCompany}
-          people={people}
-          onChange={onChangeTask}
-          onDelete={onDeleteTask}
-          onUploadAttachment={onUploadAttachment}
-        />
-      )}
     </section>
   );
 }
 
-function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePerson }) {
+function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePerson, onDeletePerson }) {
   return (
     <div className="rounded-md border border-[#E4DED6] bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-[#1D2939]">Personas e integrantes</h3>
@@ -1331,36 +1355,52 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
           placeholder="Nombre"
           className="w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm"
         />
-        <input
-          value={newPerson.email}
-          onChange={(event) => onNewPerson({ ...newPerson, email: event.target.value })}
-          placeholder="Correo"
-          type="email"
-          className="w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm"
-        />
-        <input
-          value={newPerson.phone}
-          onChange={(event) => onNewPerson({ ...newPerson, phone: event.target.value })}
-          placeholder="WhatsApp con indicativo"
-          inputMode="tel"
-          className="w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm"
-        />
-        <select
-          value={newPerson.type}
-          onChange={(event) => onNewPerson({ ...newPerson, type: event.target.value })}
-          className="w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm"
-        >
-          {PERSON_TYPES.map((type) => <option key={type}>{type}</option>)}
-        </select>
-        {newPerson.type === "Empleado MediaLab" && (
+        <label className="block text-xs font-semibold text-[#667085]">Correo
+          <input
+            value={newPerson.email}
+            onChange={(event) => onNewPerson({ ...newPerson, email: event.target.value })}
+            placeholder="nombre@empresa.com"
+            type="email"
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
+          />
+        </label>
+        <label className="block text-xs font-semibold text-[#667085]">WhatsApp
+          <input
+            value={newPerson.phone}
+            onChange={(event) => onNewPerson({ ...newPerson, phone: event.target.value })}
+            placeholder="+57 300 000 0000"
+            inputMode="tel"
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
+          />
+        </label>
+        <label className="block text-xs font-semibold text-[#667085]">Link de Google Chat
           <input
             value={newPerson.chatUrl}
             onChange={(event) => onNewPerson({ ...newPerson, chatUrl: event.target.value })}
-            placeholder="Link de Google Chat opcional"
-            className="w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm"
+            placeholder="https://chat.google.com/…"
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
           />
-        )}
-        <button onClick={onAddPerson} className="w-full rounded-md bg-[#1B5E5A] px-3 py-2 text-sm font-semibold text-white">
+        </label>
+        <label className="block text-xs font-semibold text-[#667085]">Tipo
+          <select
+            value={newPerson.type}
+            onChange={(event) => onNewPerson({ ...newPerson, type: event.target.value })}
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
+          >
+            {PERSON_TYPES.map((type) => <option key={type}>{type}</option>)}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-[#667085]">Método de conexión
+          <select
+            value={newPerson.contactMethod || "auto"}
+            onChange={(event) => onNewPerson({ ...newPerson, contactMethod: event.target.value })}
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
+          >
+            {CONTACT_METHODS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <p className="text-xs text-[#8b8272]">Así se envía la tarea a esta persona. "Automático" usa WhatsApp para externos, Google Chat para internos y el correo como respaldo.</p>
+        <button onClick={onAddPerson} className="w-full rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
           Agregar persona
         </button>
       </div>
@@ -1373,7 +1413,7 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
               {person.name || "Persona sin nombre"} <span className="font-normal text-[#667085]">({person.type || "Empleado MediaLab"})</span>
             </summary>
             <div className="mt-2 space-y-1">
-              <input value={person.name} onChange={(event) => onUpdatePerson(person.id, { name: event.target.value })} className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]" />
+              <input value={person.name} aria-label="Nombre de la persona" placeholder="Nombre" onChange={(event) => onUpdatePerson(person.id, { name: event.target.value })} className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]" />
               <input
                 value={person.email || ""}
                 onChange={(event) => onUpdatePerson(person.id, { email: event.target.value })}
@@ -1395,19 +1435,34 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
               >
                 {PERSON_TYPES.map((type) => <option key={type}>{type}</option>)}
               </select>
-              {(person.type || "Empleado MediaLab") === "Empleado MediaLab" && (
-                <input
-                  value={person.chatUrl || ""}
-                  onChange={(event) => onUpdatePerson(person.id, { chatUrl: event.target.value })}
-                  placeholder="Link Google Chat"
-                  className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
-                />
-              )}
+              <select
+                value={person.contactMethod || "auto"}
+                aria-label="Método de conexión"
+                onChange={(event) => onUpdatePerson(person.id, { contactMethod: event.target.value })}
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
+              >
+                {CONTACT_METHODS.map(([value, label]) => <option key={value} value={value}>{label === "Automático" ? "Conexión: automática" : `Conexión: ${label}`}</option>)}
+              </select>
+              <input
+                value={person.chatUrl || ""}
+                aria-label="Link de Google Chat"
+                onChange={(event) => onUpdatePerson(person.id, { chatUrl: event.target.value })}
+                placeholder="Link de Google Chat"
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
+              />
             </div>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {person.email && <a href={`mailto:${person.email}`} className="text-xs font-semibold text-[#1B5E5A]">Correo</a>}
-              {person.phone && <a href={whatsappUrl(person.phone)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#1B5E5A]">WhatsApp</a>}
-              {person.chatUrl && <a href={person.chatUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#1B5E5A]">Chat</a>}
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {person.email && <a href={`mailto:${person.email}`} className="text-xs font-semibold text-[#17727A]">Correo</a>}
+              {person.phone && <a href={whatsappUrl(person.phone)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#17727A]">WhatsApp</a>}
+              {person.chatUrl && <a href={person.chatUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[#17727A]">Chat</a>}
+              <button
+                type="button"
+                onClick={() => onDeletePerson(person.id)}
+                className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-[#B42318]"
+                title="Eliminar persona"
+              >
+                <Trash2 size={12} /> Eliminar
+              </button>
             </div>
           </details>
         ))}
@@ -1416,33 +1471,34 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
   );
 }
 
+// Resuelve por qué medio contactar a la persona. Respeta el "método de conexión"
+// elegido al crear la persona; si es "Automático", decide por tipo/datos disponibles.
+function contactFor(person, message, subject) {
+  const hasPhone = Boolean(person?.phone);
+  const hasChat = Boolean(person?.chatUrl);
+  const hasEmail = Boolean(person?.email);
+  const chosen = person?.contactMethod && person.contactMethod !== "auto"
+    ? person.contactMethod
+    : person?.type === "Externo" && hasPhone ? "whatsapp"
+      : person?.type === "Empleado MediaLab" && hasChat ? "chat"
+        : hasEmail ? "email" : "none";
+  if (chosen === "whatsapp" && hasPhone) return { href: whatsappUrl(person.phone, message), medium: "WhatsApp" };
+  if (chosen === "chat" && hasChat) return { href: person.chatUrl, medium: "Google Chat" };
+  if (chosen === "email" && hasEmail) return { href: mailtoUrl(person.email, subject, message), medium: "Correo" };
+  return { href: "", medium: "Sin medio" };
+}
+
 function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
   const assignedPerson = personById(people, task.assigneeId);
   const board = getProjectBoardConfig(company, task.client);
   const contactMessage = buildContactMessage(task, company);
   const delayMessage = buildDelayMessage(task, company);
   const overdue = taskIsOverdue(task);
-  const reportHref = assignedPerson?.type === "Externo" && assignedPerson?.phone
-    ? whatsappUrl(assignedPerson.phone, contactMessage)
-    : assignedPerson?.type === "Empleado MediaLab" && assignedPerson?.chatUrl
-      ? assignedPerson.chatUrl
-      : assignedPerson?.email
-        ? mailtoUrl(assignedPerson.email, `Tarea: ${task.title}`, contactMessage)
-        : "";
-  const delayHref = assignedPerson?.type === "Externo" && assignedPerson?.phone
-    ? whatsappUrl(assignedPerson.phone, delayMessage)
-    : assignedPerson?.type === "Empleado MediaLab" && assignedPerson?.chatUrl
-      ? assignedPerson.chatUrl
-      : assignedPerson?.email
-        ? mailtoUrl(assignedPerson.email, `Retraso: ${task.title}`, delayMessage)
-        : "";
-  const reportMedium = assignedPerson?.type === "Externo" && assignedPerson?.phone
-    ? "WhatsApp"
-    : assignedPerson?.type === "Empleado MediaLab" && assignedPerson?.chatUrl
-      ? "Google Chat"
-      : assignedPerson?.email
-        ? "Correo"
-        : "Sin medio";
+  const report = contactFor(assignedPerson, contactMessage, `Tarea: ${task.title}`);
+  const delay = contactFor(assignedPerson, delayMessage, `Retraso: ${task.title}`);
+  const reportHref = report.href;
+  const delayHref = delay.href;
+  const reportMedium = report.medium;
   const stateOptions = [
     ["ready", "Pendiente", Circle],
     ["doing", "En proceso", LoaderCircle],
@@ -1453,7 +1509,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
       <summary className="flex cursor-pointer list-none items-start justify-between gap-2 text-xs font-semibold text-[#1D2939]">
         <span className="min-w-0 flex-1 space-y-1">
           <span className="block break-words">{task.title}</span>
-          <span className="flex flex-wrap gap-1 text-[11px] font-medium text-[#667085]">
+          <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
             <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
               <CalendarDays size={11} />
               Pub. {displayDate(task.createdAt)}
@@ -1462,9 +1518,14 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               <CalendarDays size={11} />
               Vence {displayDate(task.dueDate)}
             </span>
-            <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 ${overdue ? "border-[#B42318] bg-[#FEF3F2] text-[#B42318]" : "border-[#E4DED6] bg-white"}`}>
+            <span
+              className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
+              style={overdue
+                ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
+                : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
+            >
               {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
-              {STATUS[task.status] || task.status}
+              {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
             </span>
             <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
               <UserRound size={11} />
@@ -1483,7 +1544,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]"
               title={`Abrir/actualizar ${board.tool}`}
             >
               <ExternalLink size={14} />
@@ -1495,7 +1556,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]"
               title={`Reportar por ${reportMedium}`}
             >
               {reportMedium === "WhatsApp" ? <MessageCircle size={14} /> : <Send size={14} />}
@@ -1507,13 +1568,13 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#B42318] bg-[#FEF3F2] text-[#B42318]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#B42318] bg-[#FEF3F2] text-[#B42318]"
               title="Reportar retraso y pedir ampliar fecha"
             >
               <AlertTriangle size={14} />
             </a>
           )}
-          <label className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]" title="Subir adjunto">
+          <label className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]" title="Subir adjunto">
             <Paperclip size={14} />
             <input
               type="file"
@@ -1533,7 +1594,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               event.stopPropagation();
               if (window.confirm("Borrar esta tarea?")) onDeleteTask(task.id);
             }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#B42318] bg-white text-[#B42318]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#B42318] bg-white text-[#B42318]"
             title="Eliminar tarea"
           >
             <Trash2 size={14} />
@@ -1544,15 +1605,15 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
         <input
           value={task.title}
           onChange={(event) => onChangeTask(task.id, { title: event.target.value })}
-          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold leading-snug text-[#1D2939] outline-none focus:border-[#1B5E5A]"
-          placeholder="Titulo de la tarea"
+          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold leading-snug text-[#1D2939] outline-none focus:border-[#17727A]"
+          placeholder="Título de la tarea"
         />
         <textarea
           value={task.description || ""}
           onChange={(event) => onChangeTask(task.id, { description: event.target.value })}
           rows={2}
-          className="w-full resize-none rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs leading-snug text-[#344054] outline-none focus:border-[#1B5E5A]"
-          placeholder="Descripcion de la tarea"
+          className="w-full resize-none rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs leading-snug text-[#344054] outline-none focus:border-[#17727A]"
+          placeholder="Descripción de la tarea"
         />
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:grid-cols-[minmax(110px,1fr)_auto] sm:items-center">
           <div className="relative min-w-0">
@@ -1568,7 +1629,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
                   audience: person?.type === "Externo" ? "Externo cliente" : "Interno MediaLab",
                 });
               }}
-              className="w-full rounded-md border border-[#D0D5DD] bg-white py-1 pl-7 pr-2 text-xs text-[#344054] outline-none focus:border-[#1B5E5A]"
+              className="w-full rounded-md border border-[#D0D5DD] bg-white py-1 pl-7 pr-2 text-xs text-[#344054] outline-none focus:border-[#17727A]"
               title="Asignar"
             >
               <option value="">Asignar</option>
@@ -1581,7 +1642,10 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
                 key={key}
                 type="button"
                 onClick={() => onChangeTask(task.id, { status: key })}
-                className={`inline-flex h-7 w-7 items-center justify-center rounded ${task.status === key ? "bg-[#1B5E5A] text-white" : "text-[#344054]"}`}
+                className="inline-flex h-9 w-9 items-center justify-center rounded"
+                style={task.status === key
+                  ? { background: statusTone(key).text, color: "#fff" }
+                  : { color: "#344054" }}
                 title={label}
               >
                 <Icon size={14} />
@@ -1590,12 +1654,12 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
           </div>
         </div>
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#E4DED6] bg-white px-2 py-1 text-[11px] text-[#475467]">
+          <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#E4DED6] bg-white px-2 py-1 text-xs text-[#475467]">
             <CalendarDays size={13} className="shrink-0 text-[#667085]" />
             <span className="shrink-0 font-semibold text-[#344054]">Pub.</span>
             <span className="min-w-0 truncate">{displayDate(task.createdAt)}</span>
           </div>
-          <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-[11px] text-[#475467]">
+          <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#475467]">
             <CalendarDays size={13} className="shrink-0 text-[#667085]" />
             <span className="shrink-0 font-semibold text-[#344054]">Vence</span>
             <input
@@ -1607,6 +1671,28 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
             />
           </label>
         </div>
+        {assignedPerson ? (
+          reportHref ? (
+            <a
+              href={reportHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className="flex min-h-[44px] items-center justify-center gap-2 rounded-md bg-[#17727A] px-3 text-sm font-semibold text-white"
+            >
+              {reportMedium === "WhatsApp" ? <MessageCircle size={16} /> : <Send size={16} />}
+              Enviar a {assignedPerson.name} por {reportMedium}
+            </a>
+          ) : (
+            <p className="rounded-md border border-dashed border-[#D0D5DD] px-3 py-2 text-xs text-[#8b8272]">
+              {assignedPerson.name} no tiene {assignedPerson.type === "Externo" ? "WhatsApp" : "Google Chat"} ni correo. Agrégalo en Personas para poder enviarle.
+            </p>
+          )
+        ) : (
+          <p className="rounded-md border border-dashed border-[#D0D5DD] px-3 py-2 text-xs text-[#8b8272]">
+            Asigna un responsable arriba para enviarle la tarea.
+          </p>
+        )}
         {(task.attachments || []).length > 0 && (
           <ul className="space-y-1 rounded-md border border-[#E4DED6] bg-white p-2">
             {task.attachments.map((attachment, index) => (
@@ -1619,7 +1705,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
                     download
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
                     title="Descargar adjunto"
                   >
                     <Download size={12} />
@@ -1628,7 +1714,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
                 <button
                   type="button"
                   onClick={() => onDeleteAttachment(task.id, index)}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#B42318]"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#B42318]"
                   title="Eliminar adjunto"
                 >
                   <Trash2 size={12} />
@@ -1669,6 +1755,8 @@ function CompanyPanel({
   onRestoreClient,
   onToggleStatus,
 }) {
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [sideOpen, setSideOpen] = useState(true);
   if (!company) return null;
   const active = activeClients(company);
   const archived = archivedClients(company);
@@ -1714,42 +1802,70 @@ function CompanyPanel({
           </button>
         </div>
       </div>
-      <div className="mt-4 grid gap-4 xl:grid-cols-[300px_1fr]">
+      <div className={sideOpen ? "mt-4 grid gap-4 xl:grid-cols-[300px_1fr]" : "mt-4"}>
+        {sideOpen && (
         <div className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Nuevo subproyecto</span>
-            <input
-              value={newClientName}
-              onChange={(event) => onNewClientName(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && onAddClient()}
-              placeholder="Nombre real del subproyecto"
-              className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#1B5E5A]"
-            />
-          </label>
-          <div className="mt-2 grid gap-2 sm:grid-cols-[120px_1fr]">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[#667085]">Subproyecto y contexto</span>
+            <button
+              type="button"
+              onClick={() => setSideOpen(false)}
+              title="Ocultar"
+              className="inline-flex min-h-[32px] items-center gap-1 rounded-md border border-[#D0D5DD] bg-white px-2 text-xs font-semibold text-[#344054]"
+            >
+              Ocultar <ChevronRight size={14} />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNewProjectOpen((value) => !value)}
+            aria-expanded={newProjectOpen}
+            className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-md bg-[#C7532C] px-3 text-sm font-semibold text-white"
+          >
+            <span className="inline-flex items-center gap-2"><Plus size={16} /> Nuevo subproyecto</span>
+            <ChevronRight size={16} style={{ transform: newProjectOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+          </button>
+          {newProjectOpen && (
+          <div className="mt-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Herramienta</span>
-              <select
-                value={newClientTool}
-                onChange={(event) => onNewClientTool(event.target.value)}
-                className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#1B5E5A]"
-              >
-                {BOARD_TOOLS.map((tool) => <option key={tool}>{tool}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Link</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Nombre del subproyecto</span>
               <input
-                value={newClientBoardUrl}
-                onChange={(event) => onNewClientBoardUrl(event.target.value)}
-                placeholder="https://..."
-                className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#1B5E5A]"
+                value={newClientName}
+                onChange={(event) => onNewClientName(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && (onAddClient(), setNewProjectOpen(false))}
+                placeholder="Nombre real del subproyecto"
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
               />
             </label>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[120px_1fr]">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Herramienta</span>
+                <select
+                  value={newClientTool}
+                  onChange={(event) => onNewClientTool(event.target.value)}
+                  className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+                >
+                  {BOARD_TOOLS.map((tool) => <option key={tool}>{tool}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Link</span>
+                <input
+                  value={newClientBoardUrl}
+                  onChange={(event) => onNewClientBoardUrl(event.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+                />
+              </label>
+            </div>
+            <button
+              onClick={() => { onAddClient(); setNewProjectOpen(false); }}
+              className="mt-3 min-h-[44px] w-full rounded-md bg-[#C7532C] px-3 py-2 text-sm font-semibold text-white"
+            >
+              Agregar subproyecto
+            </button>
           </div>
-          <button onClick={onAddClient} className="mt-2 w-full rounded-md bg-[#C7532C] px-3 py-2 text-sm font-semibold text-white">
-            Agregar subproyecto
-          </button>
+          )}
           <div className="mt-4 rounded-md border border-[#E4DED6] bg-white p-3">
             <h3 className="text-sm font-semibold text-[#1D2939]">Contexto de empresa</h3>
             <p className="mt-1 text-xs text-[#667085]">Convenio, alcance general, responsables y acuerdos marco.</p>
@@ -1766,7 +1882,7 @@ function CompanyPanel({
                   }}
                 />
               </label>
-              <button type="button" onClick={() => onReadContextDocuments("")} className="rounded-md border border-[#1B5E5A] px-2.5 py-1.5 text-xs font-semibold text-[#1B5E5A]">
+              <button type="button" onClick={() => onReadContextDocuments("")} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
                 Leer contexto
               </button>
             </div>
@@ -1779,7 +1895,7 @@ function CompanyPanel({
             )}
             {companyReadableDocs.length > 0 && (
               <details className="mt-2 rounded-md bg-[#FFFCF7] p-2">
-                <summary className="cursor-pointer text-xs font-semibold text-[#1B5E5A]">Texto leido ({companyReadableDocs.length})</summary>
+                <summary className="cursor-pointer text-xs font-semibold text-[#17727A]">Texto leido ({companyReadableDocs.length})</summary>
                 <div className="mt-2 space-y-2">
                   {companyReadableDocs.map((doc) => (
                     <article key={doc.path}>
@@ -1792,7 +1908,17 @@ function CompanyPanel({
             )}
           </div>
         </div>
+        )}
         <div className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
+          {!sideOpen && (
+            <button
+              type="button"
+              onClick={() => setSideOpen(true)}
+              className="mb-3 inline-flex min-h-[36px] items-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]"
+            >
+              <ChevronLeft size={16} /> Subproyecto y contexto
+            </button>
+          )}
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <h3 className="text-sm font-semibold text-[#1D2939]">Proyectos y documentacion</h3>
           </div>
@@ -1820,9 +1946,9 @@ function CompanyPanel({
                   <div className="min-w-0 flex-1">
                     <p className="break-words text-sm font-semibold text-[#344054]">{client}</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className="inline-flex rounded-full bg-[#EAF4F2] px-2 py-0.5 text-[11px] font-semibold text-[#1B5E5A]">{projectTasks.length} tareas</span>
-                      <span className="inline-flex rounded-full bg-[#FFF7E6] px-2 py-0.5 text-[11px] font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
+                      <span className="inline-flex rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
+                      <span className="inline-flex rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -1836,7 +1962,7 @@ function CompanyPanel({
                   </div>
                 </div>
                 <div>
-                  <label className="mt-2 inline-flex cursor-pointer items-center rounded-md bg-[#1B5E5A] px-3 py-2 text-sm font-semibold text-white">
+                  <label className="mt-2 inline-flex cursor-pointer items-center rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
                     Subir insumo
                     <input
                       type="file"
@@ -1856,14 +1982,14 @@ function CompanyPanel({
                       onChange={(event) => onUpdateProjectDescription(client, event.target.value)}
                       rows={3}
                       placeholder="Objetivo, alcance, contexto del cliente, responsables y notas generales del subproyecto"
-                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#1B5E5A]"
+                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
                     />
                   </label>
                   <div className="mt-2 grid gap-2 md:grid-cols-[140px_1fr]">
                     <select
                       value={getProjectBoardConfig(company, client).tool}
                       onChange={(event) => onUpdateProjectBoard(client, { tool: event.target.value })}
-                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#1B5E5A]"
+                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
                     >
                       {BOARD_TOOLS.map((tool) => <option key={tool}>{tool}</option>)}
                     </select>
@@ -1871,11 +1997,11 @@ function CompanyPanel({
                       value={getProjectBoardConfig(company, client).url}
                       onChange={(event) => onUpdateProjectBoard(client, { url: event.target.value })}
                       placeholder="Link del tablero o herramienta"
-                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#1B5E5A]"
+                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
                     />
                   </div>
                   {getProjectBoardConfig(company, client).url && (
-                    <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-semibold text-[#1B5E5A]">
+                    <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-semibold text-[#17727A]">
                       Abrir link
                     </a>
                   )}
@@ -1883,7 +2009,7 @@ function CompanyPanel({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-xs font-semibold text-[#344054]">Contexto del subproyecto</p>
-                        <p className="text-[11px] text-[#667085]">Documentos para entender convenio, alcance y criterios.</p>
+                        <p className="text-xs text-[#667085]">Documentos para entender convenio, alcance y criterios.</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <label className="cursor-pointer rounded-md border border-[#D0D5DD] px-2.5 py-1.5 text-xs font-semibold text-[#344054]">
@@ -1898,7 +2024,7 @@ function CompanyPanel({
                             }}
                           />
                         </label>
-                        <button type="button" onClick={() => onReadContextDocuments(client)} className="rounded-md border border-[#1B5E5A] px-2.5 py-1.5 text-xs font-semibold text-[#1B5E5A]">
+                        <button type="button" onClick={() => onReadContextDocuments(client)} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
                           Leer
                         </button>
                       </div>
@@ -1912,7 +2038,7 @@ function CompanyPanel({
                     )}
                     {readableDocs.length > 0 && (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-xs font-semibold text-[#1B5E5A]">Ver documentos leidos ({readableDocs.length})</summary>
+                        <summary className="cursor-pointer text-xs font-semibold text-[#17727A]">Ver documentos leidos ({readableDocs.length})</summary>
                         <div className="mt-2 space-y-2">
                           {readableDocs.map((doc) => (
                             <article key={doc.path} className="rounded-md border border-[#E4DED6] bg-white p-2">
@@ -1928,12 +2054,12 @@ function CompanyPanel({
                     <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-xs font-semibold text-[#344054]">Tareas del subproyecto</p>
-                        <p className="text-[11px] text-[#667085]">Abrir para ver todas las tareas.</p>
+                        <p className="text-xs text-[#667085]">Abrir para ver todas las tareas.</p>
                       </div>
                       <span className="flex flex-wrap gap-1">
-                        <span className="rounded-full bg-[#EAF4F2] px-2 py-0.5 text-[11px] font-semibold text-[#1B5E5A]">{projectTasks.length} tareas</span>
-                        <span className="rounded-full bg-[#FFF7E6] px-2 py-0.5 text-[11px] font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
+                        <span className="rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
+                        <span className="rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
                       </span>
                     </summary>
                     <div className="mt-2 space-y-2">
@@ -1950,7 +2076,7 @@ function CompanyPanel({
                         />
                       )) : (
                         <p className="rounded-md border border-dashed border-[#C8BFB3] bg-[#FFFCF7] p-3 text-xs text-[#667085]">
-                          Aun no hay tareas creadas por el analisis de este subproyecto.
+                          Aún no hay tareas creadas por el análisis de este subproyecto.
                         </p>
                       )}
                     </div>
@@ -1969,7 +2095,7 @@ function CompanyPanel({
                       <p className="text-sm font-semibold text-[#667085]">{client}</p>
                       <span className="text-xs text-[#98A2B3]">Historial conservado</span>
                     </div>
-                    <button onClick={() => onRestoreClient(client)} className="rounded-md border border-[#1B5E5A] px-2.5 py-1.5 text-xs font-semibold text-[#1B5E5A]">
+                    <button onClick={() => onRestoreClient(client)} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
                       Reactivar
                     </button>
                   </div>
@@ -1980,233 +2106,5 @@ function CompanyPanel({
         </div>
       </div>
     </section>
-  );
-}
-
-function TaskCard({ task, company, people = [], onChange, onDelete, onUploadAttachment }) {
-  const assignedPerson = personById(people, task.assigneeId);
-  const contactMessage = buildContactMessage(task, company);
-  return (
-    <article className="rounded-md border border-[#E4DED6] bg-white p-3 shadow-sm sm:p-4">
-      <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
-        <input
-          value={task.title}
-          onChange={(event) => onChange(task.id, { title: event.target.value })}
-          className="w-full min-w-0 flex-1 border-0 bg-transparent text-base font-semibold text-[#1D2939] outline-none"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm("Borrar esta tarea?")) onDelete(task.id);
-          }}
-          className="shrink-0 rounded-md border border-[#B42318] px-2.5 py-1 text-xs font-semibold text-[#B42318]"
-        >
-          Borrar
-        </button>
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <Field label="Cliente">
-          <select value={task.client} onChange={(event) => onChange(task.id, { client: event.target.value })} className="field">
-            {[...new Set([...activeClients(company), task.client].filter(Boolean))].map((client) => <option key={client}>{client}</option>)}
-          </select>
-        </Field>
-        <Field label="Rol">
-          <select value={task.role} onChange={(event) => onChange(task.id, { role: event.target.value })} className="field">
-            {ROLE_OPTIONS.map((role) => <option key={role}>{role}</option>)}
-          </select>
-        </Field>
-        <Field label="Responsable">
-          <input value={task.owner} onChange={(event) => onChange(task.id, { owner: event.target.value })} placeholder="Asignar" className="field" />
-        </Field>
-        <Field label="Vence">
-          <input type="date" value={task.dueDate} onChange={(event) => onChange(task.id, { dueDate: event.target.value })} className="field" />
-        </Field>
-        <Field label="Estado">
-          <select value={task.status} onChange={(event) => onChange(task.id, { status: event.target.value })} className="field">
-            {Object.entries(STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-        </Field>
-      </div>
-      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_minmax(160px,220px)_auto_auto_auto]">
-        <Field label="Persona asignada">
-          <select
-            value={task.assigneeId || ""}
-            onChange={(event) => {
-              const person = personById(people, event.target.value);
-              onChange(task.id, {
-                assigneeId: event.target.value,
-                owner: person?.name || task.owner,
-                emailTo: person?.email || task.emailTo || "",
-                audience: person?.type === "Externo" ? "Externo cliente" : task.audience || "Interno MediaLab",
-              });
-            }}
-            className="field"
-          >
-            <option value="">Sin asignar</option>
-            {people.map((person) => (
-              <option key={person.id} value={person.id}>{person.name} - {person.type}</option>
-            ))}
-          </select>
-        </Field>
-        <div className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] px-3 py-2 text-xs text-[#475467]">
-          <p className="font-semibold text-[#344054]">{assignedPerson?.name || "Sin persona"}</p>
-          <p>{assignedPerson?.type || "Selecciona alguien del equipo"}</p>
-        </div>
-        {assignedPerson?.email && (
-          <a
-            href={`mailto:${encodeURIComponent(assignedPerson.email)}?subject=${encodeURIComponent(task.emailSubject || `Revision tarea: ${task.title}`)}&body=${encodeURIComponent(buildTaskEmail(task, company))}`}
-            className="flex items-center justify-center rounded-md border border-[#1B5E5A] px-3 py-2 text-xs font-semibold text-[#1B5E5A]"
-          >
-            Correo
-          </a>
-        )}
-        {assignedPerson?.type === "Empleado MediaLab" && assignedPerson?.chatUrl && (
-          <a
-            href={assignedPerson.chatUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center rounded-md bg-[#1B5E5A] px-3 py-2 text-xs font-semibold text-white"
-          >
-            Chat
-          </a>
-        )}
-        {assignedPerson?.type === "Externo" && assignedPerson?.phone && (
-          <a
-            href={whatsappUrl(assignedPerson.phone, contactMessage)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center rounded-md bg-[#1B5E5A] px-3 py-2 text-xs font-semibold text-white"
-          >
-            WhatsApp
-          </a>
-        )}
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[180px_200px_1fr]">
-        <Field label="Destino">
-          <select value={task.audience || "Interno MediaLab"} onChange={(event) => onChange(task.id, { audience: event.target.value })} className="field">
-            {AUDIENCE_OPTIONS.map((audience) => <option key={audience}>{audience}</option>)}
-          </select>
-        </Field>
-        <Field label="Criterio plataforma">
-          <select value={task.syncMode || "Manual"} onChange={(event) => onChange(task.id, { syncMode: event.target.value })} className="field">
-            {SYNC_OPTIONS.map((option) => <option key={option}>{option}</option>)}
-          </select>
-        </Field>
-        <Field label={`Fuente: ${task.source}`}>
-          <input value={task.evidence || ""} onChange={(event) => onChange(task.id, { evidence: event.target.value })} placeholder="Evidencia o contexto" className="field" />
-        </Field>
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-[220px_1fr]">
-        <Field label="Entrega opcional">
-          <input
-            type="date"
-            value={task.deliveryDate || ""}
-            onChange={(event) => onChange(task.id, { deliveryDate: event.target.value })}
-            className="field"
-          />
-        </Field>
-        <Field label="Subir documento a la tarea">
-          <input
-            type="file"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) onUploadAttachment(task.id, file);
-              event.target.value = "";
-            }}
-            className="field"
-          />
-        </Field>
-      </div>
-      <details className="mt-3 rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3" open>
-        <summary className="cursor-pointer text-sm font-semibold text-[#1D2939]">HU y criterios</summary>
-        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
-          <Field label="Historia de usuario">
-            <textarea
-              value={task.userStory || ""}
-              onChange={(event) => onChange(task.id, { userStory: event.target.value })}
-              rows={4}
-              className="field resize-y"
-              placeholder="Como..., necesito..., para..."
-            />
-          </Field>
-          <Field label="Descripcion detallada">
-            <textarea
-              value={task.description || task.evidence || ""}
-              onChange={(event) => onChange(task.id, { description: event.target.value })}
-              rows={4}
-              className="field resize-y"
-              placeholder="Contexto, alcance, documentos adjuntos y detalle de lo requerido"
-            />
-          </Field>
-        </div>
-        <Field label="Criterios de aceptacion">
-          <textarea
-            value={(task.acceptanceCriteria || []).join("\n")}
-            onChange={(event) => onChange(task.id, { acceptanceCriteria: event.target.value.split(/\r?\n/).filter(Boolean) })}
-            rows={4}
-            className="field resize-y"
-            placeholder={"- Criterio 1\n- Criterio 2"}
-          />
-        </Field>
-        {(task.attachments || []).length > 0 && (
-          <div className="mt-3 rounded-md border border-[#E4DED6] bg-white p-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Adjuntos</p>
-            <ul className="mt-1 space-y-1">
-              {task.attachments.map((attachment, index) => (
-                <li key={`${attachment.path}-${index}`} className="text-xs text-[#475467]">
-                  {attachment.label}: {attachment.path}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-          <input
-            value={task.emailTo || ""}
-            onChange={(event) => onChange(task.id, { emailTo: event.target.value })}
-            placeholder="correo@medialab.co o correo externo"
-            className="field"
-          />
-          <a
-            href={`mailto:${encodeURIComponent(task.emailTo || "")}?subject=${encodeURIComponent(task.emailSubject || `Revision tarea: ${task.title}`)}&body=${encodeURIComponent(buildTaskEmail(task, company))}`}
-            className="rounded-md bg-[#1B5E5A] px-3 py-2 text-center text-sm font-semibold text-white"
-          >
-            Enviar por correo
-          </a>
-        </div>
-      </details>
-      {getProjectBoardConfig(company, task.client).url && (
-        <a
-          href={getProjectBoardConfig(company, task.client).url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 inline-block text-xs font-semibold text-[#1B5E5A]"
-        >
-          Abrir link de {task.client}
-        </a>
-      )}
-      <style>{`
-        .field {
-          width: 100%;
-          border: 1px solid #D0D5DD;
-          border-radius: 6px;
-          background: #FFFFFF;
-          padding: 8px 10px;
-          font-size: 13px;
-          color: #344054;
-          outline: none;
-        }
-        .field:focus { border-color: #1B5E5A; }
-      `}</style>
-    </article>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">{label}</span>
-      {children}
-    </label>
   );
 }
