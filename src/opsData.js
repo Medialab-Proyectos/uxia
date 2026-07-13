@@ -336,3 +336,10 @@ export async function updateVacante(token, id, patch) {
     prefer: "return=minimal",
   });
 }
+
+export async function deleteVacante(token, id) {
+  await rest(token, `vacantes?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+}
+export async function deleteOportunidad(token, id) {
+  await rest(token, `oportunidades?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+}

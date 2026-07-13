@@ -98,6 +98,31 @@ const FONT = {
   body: "'Lato', 'Segoe UI', system-ui, sans-serif",
 };
 
+// Prioridad de empleos: Colombia + remoto + español PRIMERO, luego LATAM,
+// y EE.UU./inglés al final (pero se muestran). Menor rank = más arriba.
+function jobRank(j) {
+  const loc = `${j.ubicacion || ""}`.toLowerCase();
+  const remote = j.remoto === "remoto";
+  const co = Boolean(j.esColombia) || /colombia|bogot|medell|cali|barranquilla|bucaramanga/.test(loc);
+  const es = j.idioma === "español";
+  const latam = es || /latam|latino|latin|m[eé]xico|argentin|chile|per[uú]|brasil|brazil|uruguay|ecuador|panam/.test(loc);
+  if (co && remote) return 0;
+  if (co) return 1;
+  if (latam && remote) return 2;
+  if (latam) return 3;
+  return 4;
+}
+
+// Filtro por periodicidad (cuándo se capturó, según created_at de Supabase).
+function withinPeriod(createdAt, periodo) {
+  if (periodo === "todas" || !createdAt) return true;
+  const days = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+  if (periodo === "hoy") return days <= 1;
+  if (periodo === "semana") return days <= 7;
+  if (periodo === "quincena") return days <= 15;
+  return true;
+}
+
 // ─── Fuentes de empleo ─────────────────────────────────────────────────────
 function buildSources(q, remoteOnly) {
   const enc = encodeURIComponent(q);
@@ -422,7 +447,7 @@ function OutreachBox({ item, mode, message, loading, copied, onGenerate, onCopy 
 
 // ─── App ───────────────────────────────────────────────────────────────────
 export default function RadarUXIA({ token = "" } = {}) {
-  const [tab, setTab] = useState("radar");
+  const [tab, setTab] = useState("oportunidades");
   const [showNotif, setShowNotif] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [expandedSearch, setExpandedSearch] = useState(false);
@@ -432,6 +457,11 @@ export default function RadarUXIA({ token = "" } = {}) {
   const [oppScanning, setOppScanning] = useState(false);
   const [oppError, setOppError] = useState("");
   const [oppResults, setOppResults] = useState([]);
+  const [oppQuery, setOppQuery] = useState("");
+  const [jobQuery, setJobQuery] = useState("");
+  const [periodo, setPeriodo] = useState("todas");
+  const [radarInsumos, setRadarInsumos] = useState([]);
+  const [uploadingInsumo, setUploadingInsumo] = useState(false);
   const [query, setQuery] = useState("UX UI product designer remoto");
   const [remoteOnly, setRemoteOnly] = useState(true);
   const [pasted, setPasted] = useState("");
@@ -822,10 +852,50 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     setSavedIds(scanResults.map((j) => j.id));
   };
 
-  const updateEstado = (id, estado) =>
+  const updateEstado = (id, estado) => {
     persist(jobs.map((j) => (j.id === id ? { ...j, estado } : j)));
+    if (opsData.opsDataReady()) opsData.updateVacante(token, id, { estado }).catch(() => {});
+  };
 
-  const removeJob = (id) => persist(jobs.filter((j) => j.id !== id));
+  const removeJob = (id) => {
+    persist(jobs.filter((j) => j.id !== id));
+    if (opsData.opsDataReady()) opsData.deleteVacante(token, id).catch(() => {});
+  };
+
+  // Seguimiento de oportunidades (persistido en Supabase, compartido entre equipos).
+  const updateOppEstado = (id, estado) => {
+    setOppResults((current) => current.map((o) => (o.id === id ? { ...o, estado } : o)));
+    if (opsData.opsDataReady()) opsData.updateOportunidad(token, id, { estado }).catch(() => {});
+  };
+  const removeOpp = (id) => {
+    setOppResults((current) => current.filter((o) => o.id !== id));
+    if (opsData.opsDataReady()) opsData.deleteOportunidad(token, id).catch(() => {});
+  };
+
+  // Subir propuesta desde imagen (reusa insumos_pendientes con companyId='radar').
+  const loadRadarInsumos = async () => {
+    if (!opsData.opsDataReady()) { setRadarInsumos([]); return; }
+    try { setRadarInsumos(await opsData.listInsumos(token, "radar")); } catch { setRadarInsumos([]); }
+  };
+  const uploadRadarInsumo = async (file) => {
+    if (!file || !opsData.opsDataReady()) { setParseError("Configura Supabase para subir imágenes."); return; }
+    setUploadingInsumo(true);
+    setParseError("");
+    try {
+      await opsData.saveInsumo(token, { companyId: "radar", client: "propuesta", file, kind: "imagen" });
+      await loadRadarInsumos();
+    } catch (e) {
+      setParseError(`No pude subir la imagen. ${e.message || ""}`);
+    } finally {
+      setUploadingInsumo(false);
+    }
+  };
+  const removeRadarInsumo = async (id) => {
+    try { await opsData.deleteInsumo(token, id); } catch { /* se refresca igual */ }
+    loadRadarInsumos();
+  };
+
+  useEffect(() => { loadRadarInsumos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const visible = jobs
     .filter((j) => {
@@ -834,7 +904,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
       if (filter === "español") return j.idioma === "español" && j.estado !== "descartada";
       return j.estado === filter;
     })
-    .sort((a, b) => (Number(Boolean(b.esColombia)) - Number(Boolean(a.esColombia))) || (b.score - a.score));
+    .filter((j) => withinPeriod(j.createdAt, periodo))
+    .filter((j) => {
+      const t = jobQuery.trim().toLowerCase();
+      return !t || `${j.titulo || ""} ${j.empresa || ""} ${j.ubicacion || ""} ${j.fuente || ""} ${j.resumen || ""}`.toLowerCase().includes(t);
+    })
+    .sort((a, b) => (jobRank(a) - jobRank(b)) || (b.score - a.score));
 
   const stats = {
     total: jobs.length,
@@ -948,11 +1023,10 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
 
         <nav className="flex gap-1 mb-6 p-1 rounded-md overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
           {[
-            ["radar", "Buscar"],
-            ["oportunidades", "Oportunidades"],
-            ["interes", `Me interesa${interesSi.length ? ` · ${interesSi.length}` : ""}`],
-            ["tablero", `Tablero${jobs.length ? ` · ${jobs.length}` : ""}`],
-            ["importar", "Analizar post"],
+            ["oportunidades", "Propuestas · MediaLab"],
+            ["tablero", `Empleos${jobs.length ? ` · ${jobs.length}` : ""}`],
+            ["interes", `Me gusta${interesSi.length ? ` · ${interesSi.length}` : ""}`],
+            ["importar", "Subir propuesta"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1163,7 +1237,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                       <div className="space-y-3">
                         {group.items
                           .slice()
-                          .sort((a, b) => (Number(Boolean(b.esColombia)) - Number(Boolean(a.esColombia))) || (b.score - a.score))
+                          .sort((a, b) => (jobRank(a) - jobRank(b)) || (b.score - a.score))
                           .map((j) => (
                       <article key={j.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
                         <div className="flex gap-3">
@@ -1324,14 +1398,35 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             {/* Resultados de oportunidades */}
             {oppResults.length > 0 && (
               <div className="space-y-3">
-                <span className="text-sm font-semibold" style={{ fontFamily: FONT.display }}>
-                  {oppResults.length} oportunidades detectadas
-                </span>
-                {oppResults
-                  .slice()
-                  .sort((a, b) => b.score - a.score)
-                  .map((o) => (
-                    <details key={o.id} className="rounded-md" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={oppQuery}
+                    onChange={(e) => setOppQuery(e.target.value)}
+                    placeholder="Filtrar propuestas por texto…"
+                    className="flex-1 min-w-[160px] rounded-md px-3 py-2 text-sm outline-none"
+                    style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}
+                  />
+                  <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} className="rounded-md px-2 py-2 text-sm outline-none" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}>
+                    <option value="todas">Todas las fechas</option>
+                    <option value="hoy">Capturadas hoy</option>
+                    <option value="semana">Última semana</option>
+                    <option value="quincena">Últimos 15 días</option>
+                  </select>
+                </div>
+                {(() => {
+                  const t = oppQuery.trim().toLowerCase();
+                  const filtered = oppResults
+                    .filter((o) => withinPeriod(o.createdAt, periodo))
+                    .filter((o) => !t || `${o.empresa || ""} ${o.dolor || ""} ${o.encaje || ""} ${o.ubicacion || ""} ${o.tipo || ""}`.toLowerCase().includes(t))
+                    .slice()
+                    .sort((a, b) => b.score - a.score);
+                  return (
+                    <>
+                      <span className="text-sm font-semibold" style={{ fontFamily: FONT.display }}>
+                        {filtered.length} de {oppResults.length} propuestas
+                      </span>
+                      {filtered.map((o) => (
+                    <details key={o.id} className="rounded-md" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, opacity: o.estado === "descartada" ? 0.55 : 1 }}>
                       <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
                         <ScoreRing score={o.score} />
                         <div className="flex-1 min-w-0">
@@ -1365,14 +1460,40 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           onGenerate={() => generateOutreach(o, "lead")}
                           onCopy={(text) => copyLink(text, `msg-${o.id}`)}
                         />
-                        {o.url && (
-                          <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-xs inline-block mt-2 px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}44`, textDecoration: "none" }}>
-                            Ver publicación →
-                          </a>
-                        )}
+                        <div className="flex gap-2 mt-3 flex-wrap items-center">
+                          {o.url && (
+                            <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}44`, textDecoration: "none" }}>
+                              Ver publicación →
+                            </a>
+                          )}
+                          <button
+                            onClick={() => updateOppEstado(o.id, o.estado === "me_interesa" ? "nueva" : "me_interesa")}
+                            className="text-xs px-3 py-1 rounded-md font-medium"
+                            style={{ backgroundColor: o.estado === "me_interesa" ? C.green : `${C.green}14`, color: o.estado === "me_interesa" ? "#ffffff" : C.green, border: `1px solid ${C.green}55` }}
+                          >
+                            {o.estado === "me_interesa" ? "★ Me interesa" : "Me interesa"}
+                          </button>
+                          <button
+                            onClick={() => updateOppEstado(o.id, "descartada")}
+                            className="text-xs px-3 py-1 rounded-md font-medium"
+                            style={{ color: C.dim, border: `1px solid ${C.border}` }}
+                          >
+                            Descartar
+                          </button>
+                          <button
+                            onClick={() => removeOpp(o.id)}
+                            className="text-xs px-3 py-1 rounded-md font-medium"
+                            style={{ color: C.coral, border: `1px solid ${C.coral}33` }}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
                       </div>
                     </details>
-                  ))}
+                      ))}
+                    </>
+                  );
+                })()}
               </div>
             )}
           </section>
@@ -1594,36 +1715,46 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
           <section>
             <div className="rounded-md p-5" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
               <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
-                Analizar post copiado
+                Subir propuesta desde imagen
               </h2>
               <p className="text-sm mb-3" style={{ color: C.dim }}>
-                Pega aquí el texto completo de un post de LinkedIn, una convocatoria o incluso solo la URL.
-                Si no hay key de Claude, la app hará una lectura local básica y lo guardará en el tablero.
+                ¿Te encontraste una oferta o un post? Captúralo desde el celular y súbelo aquí.
+                El MD (Claude Code) lee las imágenes y agrega las nuevas a Propuestas / Empleos.
               </p>
-              <textarea
-                value={pasted}
-                onChange={(e) => setPasted(e.target.value)}
-                rows={10}
-                className="w-full px-3 py-2.5 rounded-md text-sm resize-y"
-                style={{ backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.text }}
-                placeholder={"Ejemplo:\n\nhttps://www.linkedin.com/posts/...\n\nBuscamos UX/UI Designer remoto para Colombia. Enviar portafolio a talento@empresa.com..."}
-              />
-              {parseError && (
-                <p className="text-sm mt-2" style={{ color: C.coral }}>{parseError}</p>
-              )}
-              <button
-                onClick={parseWithAI}
-                disabled={parsing || !pasted.trim()}
-                className="mt-3 px-5 py-2.5 rounded-md text-sm font-semibold transition-opacity"
-                style={{
-                  backgroundColor: C.amber,
-                  color: "#1A1205",
-                  opacity: parsing || !pasted.trim() ? 0.5 : 1,
-                  fontFamily: FONT.display,
-                }}
+              <label
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold cursor-pointer"
+                style={{ backgroundColor: C.amber, color: "#1A1205", opacity: uploadingInsumo ? 0.6 : 1, fontFamily: FONT.display }}
               >
-                {parsing ? "Analizando…" : "Analizar post"}
-              </button>
+                {uploadingInsumo ? "Subiendo…" : "Subir imagen"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadRadarInsumo(f); e.target.value = ""; }}
+                />
+              </label>
+              {parseError && <p className="text-sm mt-2" style={{ color: C.coral }}>{parseError}</p>}
+
+              {radarInsumos.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint, fontFamily: FONT.display }}>
+                    Pendientes de procesar ({radarInsumos.length})
+                  </p>
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {radarInsumos.map((ins) => (
+                      <li key={ins.id} className="flex items-center gap-3 rounded-md p-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
+                        {ins.url && <img src={ins.url} alt={ins.fileName} className="h-12 w-12 rounded object-cover shrink-0" />}
+                        <span className="min-w-0 flex-1 text-xs truncate" style={{ color: C.dim }}>{ins.fileName}</span>
+                        {ins.url && <a href={ins.url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{ color: C.cyan, textDecoration: "none" }}>Ver</a>}
+                        <button onClick={() => removeRadarInsumo(ins.id)} className="text-xs" style={{ color: C.coral }}>Borrar</button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs mt-2" style={{ color: C.faint }}>
+                    Se procesan cuando corro el MD (Claude Code lee las imágenes y llena Propuestas/Empleos).
+                  </p>
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -1631,6 +1762,22 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {/* ── TABLERO ── */}
         {tab === "tablero" && (
           <section>
+            {/* Buscador + periodicidad */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <input
+                value={jobQuery}
+                onChange={(e) => setJobQuery(e.target.value)}
+                placeholder="Buscar empleo por texto…"
+                className="flex-1 min-w-[160px] rounded-md px-3 py-2 text-sm outline-none"
+                style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}
+              />
+              <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} className="rounded-md px-2 py-2 text-sm outline-none" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}>
+                <option value="todas">Todas las fechas</option>
+                <option value="hoy">Capturadas hoy</option>
+                <option value="semana">Última semana</option>
+                <option value="quincena">Últimos 15 días</option>
+              </select>
+            </div>
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 mb-4">
               {[

@@ -10,7 +10,7 @@
     "esColombia": true,
     "categoria": "empleo",
     "salario": "$3.000.000 COP",
-    "resumen": "UX/UI con Figma/Adobe XD. 100% remoto, contrato directo, L-V. 2+ años de experiencia.",
+    "resumen": "UX/UI con Figma/Adobe XD. 100% remoto, contrato directo, L-V. 2+ años.",
     "score": 78
   },
   {
@@ -35,7 +35,7 @@
     "remoto": "remoto",
     "idioma": "español",
     "categoria": "empleo",
-    "resumen": "UX/UI Designer remoto en Codeable (marketplace de desarrolladores). Nivel senior.",
+    "resumen": "UX/UI Designer remoto en Codeable (marketplace de desarrolladores). Senior.",
     "score": 74
   },
   {
@@ -47,8 +47,97 @@
     "remoto": "remoto",
     "idioma": "español",
     "categoria": "empleo",
-    "resumen": "Consultora de software (Azumo) contrata UX/UI para equipos de producto, remoto LATAM.",
+    "resumen": "Consultora de software (Azumo) contrata UX/UI para producto, remoto LATAM.",
     "score": 76
+  },
+  {
+    "titulo": "Lead UI/UX Product Designer — Remoto",
+    "empresa": "Search Atlas",
+    "url": "https://co.trabajo.org/oferta-3388-c3e6c7231a624905fda237779ab88df5",
+    "fuente": "trabajo.org",
+    "ubicacion": "Medellín, Colombia (remoto)",
+    "remoto": "remoto",
+    "idioma": "español",
+    "esColombia": true,
+    "categoria": "empleo",
+    "resumen": "Liderar diseño de producto de un SaaS de analítica SEO: design system, data viz, research y mentoría. Zona horaria EST/CST.",
+    "score": 82
+  },
+  {
+    "titulo": "Senior Product Designer — Remote LATAM",
+    "empresa": "Jeeves",
+    "url": "https://www.remoterocketship.com/country/latin-america/jobs/senior-product-designer",
+    "fuente": "Remote Rocketship",
+    "ubicacion": "LATAM (remoto)",
+    "remoto": "remoto",
+    "idioma": "español",
+    "categoria": "empleo",
+    "resumen": "Plataforma fintech global (Jeeves): diseño de producto con research, PMs e ingeniería. Inglés B2+.",
+    "score": 80
+  },
+  {
+    "titulo": "UX Designer en Colombia — Ofertas (LinkedIn)",
+    "empresa": "LinkedIn (listado, 83 ofertas)",
+    "url": "https://co.linkedin.com/jobs/ux-designer-empleos",
+    "fuente": "LinkedIn",
+    "ubicacion": "Colombia",
+    "remoto": "remoto",
+    "idioma": "español",
+    "esColombia": true,
+    "categoria": "empleo",
+    "resumen": "83 ofertas de UX Designer en Colombia (Bogotá, Medellín, Cali…). Revisar y postular.",
+    "score": 66
+  },
+  {
+    "titulo": "UX/UI Designer — Ofertas (Indeed Colombia)",
+    "empresa": "Indeed (listado)",
+    "url": "https://co.indeed.com/q-ux-ui-designer-empleos.html",
+    "fuente": "Indeed",
+    "ubicacion": "Colombia",
+    "remoto": "híbrido",
+    "idioma": "español",
+    "esColombia": true,
+    "categoria": "empleo",
+    "resumen": "Listado de ofertas UX/UI Designer en Indeed Colombia. Revisar y postular.",
+    "score": 62
+  },
+  {
+    "titulo": "UX Designer — Ofertas en Colombia (Glassdoor)",
+    "empresa": "Glassdoor (listado, 73 ofertas)",
+    "url": "https://www.glassdoor.com/Job/colombia-ux-designer-jobs-SRCH_IL.0,8_IN54_KO9,20.htm",
+    "fuente": "Glassdoor",
+    "ubicacion": "Colombia",
+    "remoto": "híbrido",
+    "idioma": "español",
+    "esColombia": true,
+    "categoria": "empleo",
+    "resumen": "73 ofertas de UX Designer en Colombia. Salarios senior hasta $13.000.000 COP.",
+    "score": 60
+  },
+  {
+    "titulo": "Design Jobs (UX, Product, Research) — Colombia",
+    "empresa": "UI/UX Jobs Board (listado)",
+    "url": "https://uiuxjobsboard.com/design-jobs/colombia",
+    "fuente": "UI/UX Jobs Board",
+    "ubicacion": "Colombia + remoto",
+    "remoto": "remoto",
+    "idioma": "español",
+    "esColombia": true,
+    "categoria": "empleo",
+    "resumen": "Tablero de empleos de diseño (UX/Product/Research) en Colombia.",
+    "score": 60
+  },
+  {
+    "titulo": "Remote Product Designer — Latin America",
+    "empresa": "Remote Rocketship (listado)",
+    "url": "https://www.remoterocketship.com/country/latin-america/jobs/product-designer/",
+    "fuente": "Remote Rocketship",
+    "ubicacion": "LATAM (remoto)",
+    "remoto": "remoto",
+    "idioma": "español",
+    "categoria": "empleo",
+    "resumen": "116 empleos de Product Designer remoto en LATAM. Revisar y postular.",
+    "score": 61
   },
   {
     "titulo": "Diseño / UX en Colombia — Listado de ofertas",
@@ -64,7 +153,7 @@
     "score": 62
   },
   {
-    "titulo": "Diseñador UX — Ofertas en Colombia",
+    "titulo": "Diseñador UX — Ofertas en Colombia (elempleo)",
     "empresa": "elempleo (listado)",
     "url": "https://www.elempleo.com/co/ofertas-empleo/trabajo-disenador-ux",
     "fuente": "elempleo",
