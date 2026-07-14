@@ -1512,6 +1512,7 @@ function contactFor(person, message, subject) {
 
 function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [open, setOpen] = useState(false);
   const assignedPerson = personById(people, task.assigneeId);
   const board = getProjectBoardConfig(company, task.client);
   const contactMessage = buildContactMessage(task, company);
@@ -1528,10 +1529,24 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
     ["done", "Finalizada", CheckCircle2],
   ];
   return (
-    <details className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-2 text-xs font-semibold text-[#1D2939]">
+    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-2 rounded text-xs font-semibold text-[#1D2939] hover:bg-[#17727A14]">
+        <span
+          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
+          style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", color: "#17727A" }}
+          aria-hidden="true"
+        >
+          <ChevronRight size={16} />
+        </span>
         <span className="min-w-0 flex-1 space-y-1">
-          <span className="block break-words">{task.title}</span>
+          {open ? (
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#17727A]">Editando tarea</span>
+          ) : (
+            <span className="flex items-center gap-1 break-words">
+              {task.title}
+              <span className="ml-1 shrink-0 rounded-full bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-semibold text-[#17727A]">Ver detalle</span>
+            </span>
+          )}
           <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
             <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
               <CalendarDays size={11} />

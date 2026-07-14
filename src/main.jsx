@@ -182,7 +182,7 @@ function AppShell() {
 
   if (!authReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F7F4EF] text-sm font-semibold text-[#344054]">
+      <div className="flex min-h-screen items-center justify-center text-sm font-semibold" style={{ background: "#0E1116", color: "#8B97A6" }}>
         Cargando acceso…
       </div>
     );
@@ -307,36 +307,41 @@ function LoginScreen({ notice, onLogin }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#F7F4EF] px-5 text-[#1D2939]">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-md border border-[#E7E0D5] bg-[#FFFCF7] p-5 shadow-lg">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">MediaLab Ingeniería</p>
-        <h1 className="mt-2 text-2xl font-semibold">Centro operativo</h1>
-        <div className="mt-5 space-y-3">
+    <main className="flex min-h-screen items-center justify-center px-5 text-[#E8EDF3]" style={{ background: "#0E1116" }}>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-md border p-6 shadow-lg" style={{ background: "#151B23", borderColor: "#28313E" }}>
+        <div className="mb-5 flex flex-col items-center text-center">
+          <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-16 w-auto" />
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "#8B97A6" }}>MediaLab Ingeniería</p>
+          <h1 className="mt-1 text-2xl font-semibold">Centro operativo</h1>
+        </div>
+        <div className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase text-[#667085]">Correo</span>
+            <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: "#8B97A6" }}>Correo</span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
-              className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[#2AABB3]"
+              style={{ background: "#1B232E", borderColor: "#28313E", color: "#E8EDF3" }}
               required
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase text-[#667085]">Contraseña</span>
+            <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: "#8B97A6" }}>Contraseña</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
               autoComplete="current-password"
-              className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[#2AABB3]"
+              style={{ background: "#1B232E", borderColor: "#28313E", color: "#E8EDF3" }}
               required
             />
           </label>
         </div>
-        {notice && <p className="mt-3 rounded-md border border-[#E8751A55] bg-[#E8751A14] p-2 text-xs font-semibold text-[#B76E00]">{notice}</p>}
-        {error && <p className="mt-3 rounded-md border border-[#B4231855] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
+        {notice && <p className="mt-3 rounded-md border border-[#E8751A55] bg-[#E8751A22] p-2 text-xs font-semibold text-[#F0A968]">{notice}</p>}
+        {error && <p className="mt-3 rounded-md border border-[#B4231855] bg-[#B4231822] p-2 text-xs font-semibold text-[#F08A80]">{error}</p>}
         <button
           type="submit"
           disabled={loading}
