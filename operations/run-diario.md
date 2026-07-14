@@ -24,13 +24,37 @@ npm run daily:fetch          # baja insumos pendientes de Supabase (imágenes Y 
 - Claude lee `operations/_run/insumos.json` (texto en `raw_text` + las imágenes
   descargadas), arma tareas claras y escribe `operations/_run/tasks.json`
   (`{tasks, processedInsumoIds, keepFileInsumoIds}`).
-- **Categorizar cada tarea según el ALCANCE del contrato de la empresa.** Cada empresa
-  tiene un `scope` (arreglo) con las categorías que aplican: `Diseño`, `UX Research`,
-  `Producto`, `Gestión de proyecto`, `Desarrollo de software`. En unas empresas MediaLab
-  solo **apoya diseño**; en otras hace **gestión total** o **desarrollo**. Al crear cada
-  tarea, ponerle `category` = una de las categorías del `scope` de esa empresa (la que
-  mejor describa la tarea). Si el insumo pide algo **fuera del scope** de la empresa,
-  anotarlo pero no inventar trabajo que no está contratado.
+- **TÍTULO CORTO ≠ DESCRIPCIÓN (regla dura, pedido de Christian 2026-07-14):** el
+  `title` es una **etiqueta accionable breve, máx ~6 palabras**, verbo + objeto
+  (ej. "Montar pop-up historia 1666", "Vectorizar logo Dumpster"). Todo el contexto,
+  matices, responsables y aclaraciones van en `description`. **NUNCA** poner la frase
+  completa del insumo como título ni repetir el mismo texto en título y descripción.
+  La **descripción debe ser DETALLADA cuando el tema lo amerite** (pasos, criterios,
+  responsables, dependencias); breve solo si la tarea es trivial.
+- **DEDUPLICAR contra tareas EXISTENTES (obligatorio, pedido de Christian 2026-07-14):**
+  antes de crear una tarea, **traer las tareas ya existentes de ese proyecto**
+  (`GET tasks?company_id=eq.<id>&client=eq.<sub>`) y comparar por similitud de intención,
+  no solo texto exacto. Si ya existe una tarea igual o muy parecida:
+  - **NO crear una nueva.** En su lugar, **enriquecer la existente** (PATCH): sumar a la
+    `description` el nuevo detalle/contexto que aporte el insumo (sin duplicar), y ajustar
+    fecha/prioridad si el insumo trae algo más urgente.
+  - Solo crear tarea nueva si es un pendiente genuinamente distinto.
+  - Reportar al final cuántas se **crearon** vs cuántas se **fusionaron/actualizaron**.
+- **Clasificar CADA tarea automáticamente por el CONTEXTO (obligatorio).** Claude infiere
+  la `category` leyendo el contenido de la tarea (qué se pide, con qué herramientas, verbos):
+  - `Desarrollo de software`: despliegue, endpoints/API, tokens/auth, integración, front/back,
+    Angular/Bubble/Cloud, QA, base de datos, Datadog, logs, Excel/automatizaciones, demo estable.
+  - `Diseño UX/UI`: interfaz, pantallas, pop-up/modal, ficha/tablero, sistema de diseño, Figma,
+    User Pilot (tooltips), formato de recordatorios, flujos.
+  - `Diseño gráfico`: logo, vectorizar, colores, manual de marca, portafolio, branding.
+  - `UX Research`: investigación, teoría del cambio, grabaciones para definir, usabilidad.
+  - `Producto`: KPIs/indicadores, estrategia, priorización, reportes ejecutivos, alcance, criterios.
+  - `Gestión de proyecto`: reuniones, coordinación, seguimiento/push, accesos, entregas, correos.
+  - `Apoyo`: cuando MediaLab solo **apoya/soporta** una tarea liderada por otro equipo
+    (ej. apoyar QA/diseño ajeno, dar soporte puntual), sin ser el responsable principal.
+  - La columna `tasks.category` **ya existe**; incluir `category` en cada tarea de `tasks.json`.
+- **Respetar el ALCANCE del contrato de la empresa** (`companies.scope`): si el insumo pide algo
+  **fuera del scope** contratado, anotarlo pero no inventar trabajo que no está contratado.
 ```bash
 npm run daily:push           # sube las tareas y retira los insumos procesados
 ```

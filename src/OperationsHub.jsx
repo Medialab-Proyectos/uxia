@@ -1,10 +1,10 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Download, ExternalLink, ListChecks, LoaderCircle, MessageCircle, Paperclip, Plus, Send, Trash2, UserRound } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Download, ExternalLink, Link2, ListChecks, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Send, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 
 const STATUS = {
-  backlog: "Por ordenar",
+  backlog: "Pendiente",
   ready: "Pendiente",
   doing: "En proceso",
   review: "En revisión",
@@ -14,7 +14,7 @@ const STATUS = {
 
 // Color por estado (semántico, aparte del acento de marca).
 const STATUS_TONE = {
-  backlog: { border: "#D0D5DD", bg: "#F2F4F7", text: "#475467" },
+  backlog: { border: "#F2C879", bg: "#FFF7E6", text: "#8A5700" },
   ready:   { border: "#F2C879", bg: "#FFF7E6", text: "#8A5700" },
   doing:   { border: "#9CC7E4", bg: "#EAF2FB", text: "#1D5A99" },
   review:  { border: "#B7D8D4", bg: "#EAF4F2", text: "#17727A" },
@@ -44,13 +44,15 @@ function projectInitials(name) {
 
 // Categorías de trabajo: alcance del contrato por empresa + tipo de cada tarea.
 // En unas empresas MediaLab solo apoya diseño; en otras hace gestión total o desarrollo.
-const TASK_CATEGORIES = ["Diseño", "UX Research", "Producto", "Gestión de proyecto", "Desarrollo de software"];
+const TASK_CATEGORIES = ["Diseño UX/UI", "Diseño gráfico", "UX Research", "Producto", "Gestión de proyecto", "Desarrollo de software", "Apoyo"];
 const CATEGORY_TONE = {
-  "Diseño": "#C11574",
+  "Diseño UX/UI": "#C11574",
+  "Diseño gráfico": "#DD2590",
   "UX Research": "#6941C6",
   "Producto": "#B54708",
   "Gestión de proyecto": "#17727A",
   "Desarrollo de software": "#1570EF",
+  "Apoyo": "#0D7A4F",
 };
 function categoryColor(category) {
   return CATEGORY_TONE[category] || "#667085";
@@ -284,7 +286,8 @@ function normalizeApiData(payload) {
   const people = Array.isArray(payload?.people)
     ? payload.people.map((person) => ({
       ...person,
-      companyIds: Array.isArray(person.companyIds) && person.companyIds.length ? person.companyIds : ["metrics-lab"],
+      // Sin empresa asignada = disponible en TODAS (companyIds no se persiste; el equipo es global).
+      companyIds: Array.isArray(person.companyIds) ? person.companyIds : [],
     }))
     : [];
   return { companies, tasks, sourceRecords, people };
@@ -563,6 +566,10 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
   const [activeCompany, setActiveCompany] = useState("metrics-lab");
   const [insumos, setInsumos] = useState([]);
   const [activeStatus, setActiveStatus] = useState("open");
+  const [assignFilter, setAssignFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [taskQuery, setTaskQuery] = useState("");
+  const [highlightTaskId, setHighlightTaskId] = useState(null);
   const [activeView, setActiveView] = useState("companies");
   const [asideOpen, setAsideOpen] = useState(false);
   const [globalOpen, setGlobalOpen] = useState(false);
@@ -659,7 +666,21 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
   const activeCompanyClients = activeClients(company);
   const companyTasks = tasks.filter((task) => task.companyId === company?.id);
+  const taskQ = taskQuery.trim().toLowerCase();
   const visibleTasks = tasks.filter((task) => {
+    if (companyFilter !== "all" && task.companyId !== companyFilter) return false;
+    // "Sin proyecto" = tareas en la bandeja "Por asignar" (companyId "por-asignar")
+    // o sin subproyecto; "Con proyecto" = ya están en una empresa/subproyecto real.
+    const sinProyecto = task.companyId === "por-asignar" || !task.client;
+    if (assignFilter === "unassigned" && !sinProyecto) return false;
+    if (assignFilter === "assigned" && sinProyecto) return false;
+    if (taskQ) {
+      // Al buscar por palabras se ignora el filtro de estado, para encontrar también
+      // las tareas FINALIZADAS (archivadas) en cualquier consulta.
+      const c = companies.find((item) => item.id === task.companyId);
+      const hay = `${task.title} ${task.description || ""} ${task.client || ""} ${c?.name || ""} ${task.category || ""} ${task.owner || ""}`.toLowerCase();
+      return hay.includes(taskQ);
+    }
     if (activeStatus === "open") return task.status !== "done";
     if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done";
     return task.status === activeStatus;
@@ -819,7 +840,8 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
       taskIds: (record.taskIds || []).filter((taskId) => taskId !== id),
       taskCount: Math.max(0, (record.taskIds || []).filter((taskId) => taskId !== id).length),
     })));
-    setNotice("Tarea borrada por el manager.");
+    if (opsData.opsDataReady()) opsData.deleteTask(token, id).catch(() => {});
+    setNotice("Tarea borrada.");
   }
 
   function deleteTaskAttachment(taskId, attachmentIndex) {
@@ -854,7 +876,7 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
         type: newPerson.type,
         chatUrl: newPerson.chatUrl.trim(),
         contactMethod: newPerson.contactMethod || "auto",
-        companyIds: [activeCompany],
+        companyIds: [], // persona global: disponible para asignar en todas las empresas
       },
     ]);
     setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto" });
@@ -878,6 +900,7 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
     if (!window.confirm(`¿Eliminar a ${person?.name || "esta persona"}? Las tareas asignadas quedarán sin responsable.`)) return;
     setPeople((current) => current.filter((item) => item.id !== id));
     setTasks((current) => current.map((task) => (task.assigneeId === id ? { ...task, assigneeId: "", owner: "" } : task)));
+    if (opsData.opsDataReady()) opsData.deletePersonRow(token, id).catch(() => {});
     setNotice("Persona eliminada.");
   }
 
@@ -969,6 +992,41 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
         ? { ...item, projectDescriptions: { ...(item.projectDescriptions || {}), [client]: description } }
         : item
     )));
+  }
+
+  // Corregir el nombre de la empresa (el id no cambia; solo el nombre visible).
+  function renameCompany(newName) {
+    const clean = (newName || "").trim();
+    if (!clean || !company || clean === company.name) return;
+    setCompanies((current) => current.map((item) => (item.id === company.id ? { ...item, name: clean } : item)));
+    setNotice(`Empresa renombrada a "${clean}".`);
+  }
+
+  // Corregir el nombre de un subproyecto y propagarlo a tareas y datos asociados.
+  function renameClient(oldName, newName) {
+    const clean = (newName || "").trim();
+    if (!clean || !company || clean === oldName) return;
+    if ((company.clients || []).includes(clean)) { setNotice("Ya existe un subproyecto con ese nombre."); return; }
+    const swap = (obj) => {
+      if (!obj || typeof obj !== "object" || !(oldName in obj)) return obj;
+      const { [oldName]: val, ...rest } = obj;
+      return { ...rest, [clean]: val };
+    };
+    setCompanies((current) => current.map((item) => {
+      if (item.id !== company.id) return item;
+      return {
+        ...item,
+        clients: (item.clients || []).map((c) => (c === oldName ? clean : c)),
+        archivedClients: swap(item.archivedClients),
+        projectLinks: swap(item.projectLinks),
+        projectDescriptions: swap(item.projectDescriptions),
+        projectImages: swap(item.projectImages),
+        contextDocuments: swap(item.contextDocuments),
+      };
+    }));
+    setTasks((current) => current.map((t) => (t.companyId === company.id && t.client === oldName ? { ...t, client: clean } : t)));
+    if (opsData.opsDataReady()) opsData.deleteProject(token, company.id, oldName).catch(() => {});
+    setNotice(`Subproyecto renombrado a "${clean}".`);
   }
 
   // Alcance del contrato por empresa: alterna una categoría de trabajo.
@@ -1143,13 +1201,13 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
   function addManualTask() {
     const nextTask = {
       id: uid(),
-      title: "Tarea manual sin clasificar",
+      title: "Nueva tarea",
       companyId: activeCompany,
       client: activeCompanyClients[0] || "Sin subproyecto",
       role: "Project Manager",
       owner: "",
       priority: "media",
-      status: "backlog",
+      status: "ready",
       dueDate: addDays(2),
       deliveryDate: "",
       source: "Manual",
@@ -1164,7 +1222,9 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
     ]);
     setActiveView("tasks");
     setActiveStatus("open");
-    setNotice("Tarea manual creada. Puedes completar responsable, proyecto y detalle.");
+    setAssignFilter("all");
+    setHighlightTaskId(nextTask.id);
+    setNotice("Tarea creada. Aparece arriba y abierta para que la completes.");
   }
 
   // Crea una tarea ya asignada a un subproyecto concreto (botón dentro de cada subproyecto).
@@ -1178,7 +1238,7 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
       role: "Project Manager",
       owner: "",
       priority: "media",
-      status: "backlog",
+      status: "ready",
       dueDate: addDays(2),
       deliveryDate: "",
       source: "Manual",
@@ -1188,7 +1248,8 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
       createdAt: new Date().toISOString(),
     };
     setTasks((current) => [nextTask, ...current]);
-    setNotice(`Tarea creada en ${target}. Ábrela para completar responsable, fecha y detalle.`);
+    setHighlightTaskId(nextTask.id);
+    setNotice(`Tarea creada en ${target}. Aparece arriba y abierta para completarla.`);
   }
 
   function dailyBrief() {
@@ -1380,6 +1441,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             <CompanyPanel
               company={company}
               companies={companies}
+              highlightId={highlightTaskId}
               tasks={tasks}
               people={people}
               newClientName={newClientName}
@@ -1396,6 +1458,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onDeleteTask={deleteTask}
             onUploadLogo={uploadCompanyLogo}
             onUploadProjectImage={uploadProjectImage}
+            onRenameCompany={renameCompany}
+            onRenameClient={renameClient}
             onToggleScope={toggleCompanyScope}
             onAddTaskToClient={addTaskForClient}
             onUploadSourceDocument={uploadSourceDocument}
@@ -1488,6 +1552,13 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             people={people}
             activeStatus={activeStatus}
             onStatus={setActiveStatus}
+            assignFilter={assignFilter}
+            onAssignFilter={setAssignFilter}
+            companyFilter={companyFilter}
+            onCompanyFilter={setCompanyFilter}
+            taskQuery={taskQuery}
+            onTaskQuery={setTaskQuery}
+            highlightId={highlightTaskId}
             onAddTask={addManualTask}
             onChangeTask={updateTask}
             onDeleteTask={deleteTask}
@@ -1522,12 +1593,54 @@ function TasksTable({
   people,
   activeStatus,
   onStatus,
+  assignFilter,
+  onAssignFilter,
+  companyFilter,
+  onCompanyFilter,
+  taskQuery,
+  onTaskQuery,
+  highlightId,
   onAddTask,
   onChangeTask,
   onDeleteTask,
   onUploadAttachment,
   onDeleteAttachment,
 }) {
+  const [openTaskId, setOpenTaskId] = useState(null);
+  // Al crear una tarea nueva, se abre automáticamente para completarla.
+  useEffect(() => { if (highlightId) setOpenTaskId(highlightId); }, [highlightId]);
+  // Agrupa por proyecto (empresa · subproyecto); lo que no tiene proyecto real va a "Bandeja".
+  const groups = [];
+  const byKey = new Map();
+  for (const task of tasks) {
+    const bandeja = task.companyId === "por-asignar" || !task.client;
+    const key = bandeja ? `__bandeja__|${task.client || ""}` : `${task.companyId}|${task.client}`;
+    if (!byKey.has(key)) {
+      const c = companies.find((item) => item.id === task.companyId);
+      const label = bandeja
+        ? `Bandeja · ${task.client || "sin subproyecto"}`
+        : `${c?.name || task.companyId} · ${task.client}`;
+      const g = { key, label, bandeja, tasks: [] };
+      byKey.set(key, g);
+      groups.push(g);
+    }
+    byKey.get(key).tasks.push(task);
+  }
+  // Dentro de cada grupo: la recién creada (highlight) primero, luego lo más nuevo arriba.
+  for (const g of groups) {
+    g.hasHighlight = g.tasks.some((t) => t.id === highlightId);
+    g.tasks.sort((a, b) => {
+      if (a.id === highlightId) return -1;
+      if (b.id === highlightId) return 1;
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+    });
+  }
+  // El grupo con la tarea recién creada va de primero; luego proyectos; bandejas al final.
+  groups.sort((a, b) => {
+    if (a.hasHighlight !== b.hasHighlight) return a.hasHighlight ? -1 : 1;
+    if (a.bandeja !== b.bandeja) return a.bandeja ? 1 : -1;
+    return a.label.localeCompare(b.label);
+  });
   return (
     <section className="mt-6 space-y-4">
       <div className="rounded-md border border-[#D9D2C7] bg-white p-4 shadow-sm">
@@ -1540,13 +1653,19 @@ function TasksTable({
             Crear tarea manual
           </button>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <input
+          value={taskQuery}
+          onChange={(event) => onTaskQuery(event.target.value)}
+          placeholder="Buscar en todas las tareas por palabras (incluye finalizadas)…"
+          className="mt-4 w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+        />
+        <div className={`mt-3 flex flex-wrap gap-2 ${taskQuery.trim() ? "opacity-40 pointer-events-none" : ""}`}>
           {[
             ["open", "Abiertas"],
             ["today", "Por vencer"],
             ["blocked", "Bloqueadas"],
             ["review", "En revisión"],
-            ["done", "Cerradas"],
+            ["done", "Finalizadas (archivo)"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1562,21 +1681,62 @@ function TasksTable({
             </button>
           ))}
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Empresa:</span>
+          <select
+            value={companyFilter}
+            onChange={(event) => onCompanyFilter(event.target.value)}
+            className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]"
+          >
+            <option value="all">Todas las empresas</option>
+            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Proyecto:</span>
+          {[
+            ["all", "Todas"],
+            ["unassigned", "Sin asignar a proyecto"],
+            ["assigned", "Con proyecto"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => onAssignFilter(key)}
+              className="rounded-full border px-3 py-1 text-xs font-semibold"
+              style={{
+                borderColor: assignFilter === key ? "#B76E00" : "#D0D5DD",
+                background: assignFilter === key ? "#FFF7E6" : "#FFFFFF",
+                color: assignFilter === key ? "#B76E00" : "#667085",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="space-y-2">
-        {tasks.length ? tasks.map((task) => (
-          <ProjectTaskAccordion
-            key={task.id}
-            task={task}
-            company={companies.find((item) => item.id === task.companyId) || companies[0]}
-            companies={companies}
-            people={people}
-            onChangeTask={onChangeTask}
-            onDeleteTask={onDeleteTask}
-            onUploadAttachment={onUploadAttachment}
-            onDeleteAttachment={onDeleteAttachment}
-          />
+      <div className="space-y-5">
+        {groups.length ? groups.map((group) => (
+          <div key={group.key} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: group.bandeja ? "#B76E00" : "#17727A" }}>{group.label}</h3>
+              <span className="rounded-full bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-semibold text-[#475467]">{group.tasks.length}</span>
+              <div className="h-px flex-1 bg-[#E4DED6]" />
+            </div>
+            {group.tasks.map((task) => (
+              <ProjectTaskAccordion
+                key={task.id}
+                task={task}
+                company={companies.find((item) => item.id === task.companyId) || companies[0]}
+                companies={companies}
+                people={people}
+                open={openTaskId === task.id}
+                onOpenChange={(isOpen) => setOpenTaskId((prev) => (isOpen ? task.id : prev === task.id ? null : prev))}
+                onChangeTask={onChangeTask}
+                onDeleteTask={onDeleteTask}
+                onUploadAttachment={onUploadAttachment}
+                onDeleteAttachment={onDeleteAttachment}
+              />
+            ))}
+          </div>
         )) : (
           <div className="rounded-md border border-dashed border-[#C8BFB3] bg-white p-6 text-center text-sm text-[#667085]">
             No hay tareas en este filtro.
@@ -1731,9 +1891,19 @@ function contactFor(person, message, subject) {
   return { href: "", medium: "Sin medio" };
 }
 
-function ProjectTaskAccordion({ task, company, companies = [], people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
+function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [linkInput, setLinkInput] = useState("");
+  const [openInternal, setOpenInternal] = useState(false);
+  // Acordeón controlado por la lista (solo una tarea abierta a la vez) o autónomo si no.
+  const controlled = typeof onOpenChange === "function";
+  const open = controlled ? Boolean(openProp) : openInternal;
+  const handleToggle = (event) => {
+    const isOpen = event.currentTarget.open;
+    if (isOpen === open) return;
+    if (controlled) onOpenChange(isOpen);
+    else setOpenInternal(isOpen);
+  };
   const scopeOptions = company?.scope?.length ? company.scope : TASK_CATEGORIES;
   // Opciones para MOVER la tarea: cada empresa + sus subproyectos activos.
   const allCompanies = companies.length ? companies : (company ? [company] : []);
@@ -1755,10 +1925,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], onCh
   const stateOptions = [
     ["ready", "Pendiente", Circle],
     ["doing", "En proceso", LoaderCircle],
+    ["blocked", "Bloqueada", AlertTriangle],
     ["done", "Finalizada", CheckCircle2],
   ];
   return (
-    <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
+    <details open={open} onToggle={handleToggle} className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
       <summary className="flex cursor-pointer list-none items-start justify-between gap-2 rounded text-xs font-semibold text-[#1D2939] hover:bg-[#17727A14]">
         <span
           className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
@@ -1894,30 +2065,47 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], onCh
         </span>
       </summary>
       <div className="mt-2 space-y-2">
-        <input
-          value={task.title}
-          onChange={(event) => onChangeTask(task.id, { title: event.target.value })}
-          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold leading-snug text-[#1D2939] outline-none focus:border-[#17727A]"
-          placeholder="Título de la tarea"
-        />
-        <textarea
-          value={task.description || ""}
-          onChange={(event) => onChangeTask(task.id, { description: event.target.value })}
-          rows={2}
-          className="w-full resize-none rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs leading-snug text-[#344054] outline-none focus:border-[#17727A]"
-          placeholder="Descripción de la tarea"
-        />
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: task.category ? categoryColor(task.category) : "#D0D5DD" }} />
-          <select
-            value={task.category || ""}
-            onChange={(event) => onChangeTask(task.id, { category: event.target.value })}
-            className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]"
-            title="Tipo de tarea según el alcance del contrato de la empresa"
-          >
-            <option value="">Tipo de tarea…</option>
-            {scopeOptions.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Título</span>
+          <input
+            value={task.title}
+            onChange={(event) => onChangeTask(task.id, { title: event.target.value })}
+            className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold leading-snug text-[#1D2939] outline-none focus:border-[#17727A]"
+            placeholder="Título de la tarea"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Descripción</span>
+          <textarea
+            value={task.description || ""}
+            onChange={(event) => onChangeTask(task.id, { description: event.target.value })}
+            rows={4}
+            className="min-h-[88px] w-full resize-y rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm leading-relaxed text-[#344054] outline-none focus:border-[#17727A]"
+            placeholder="Descripción de la tarea"
+          />
+        </label>
+        <div>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Tipo de tarea</span>
+          <div className="flex flex-wrap gap-1.5">
+            {scopeOptions.map((cat) => {
+              const on = task.category === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => onChangeTask(task.id, { category: on ? "" : cat })}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold"
+                  style={on
+                    ? { borderColor: categoryColor(cat), background: `${categoryColor(cat)}1A`, color: categoryColor(cat) }
+                    : { borderColor: "#D0D5DD", background: "#fff", color: "#667085" }}
+                  aria-pressed={on}
+                >
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: on ? categoryColor(cat) : "#D0D5DD" }} />
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
@@ -2011,22 +2199,52 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], onCh
             Asigna un responsable arriba para enviarle la tarea.
           </p>
         )}
+        <div className="flex items-center gap-1.5">
+          <Link2 size={13} className="shrink-0 text-[#667085]" />
+          <input
+            value={linkInput}
+            onChange={(event) => setLinkInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && linkInput.trim()) {
+                event.preventDefault();
+                onChangeTask(task.id, { attachments: [...(task.attachments || []), { type: "link", label: linkInput.trim(), url: linkInput.trim() }] });
+                setLinkInput("");
+              }
+            }}
+            placeholder="Link a repositorio (GitHub, GitLab, Figma…)"
+            className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const url = linkInput.trim();
+              if (!url) return;
+              onChangeTask(task.id, { attachments: [...(task.attachments || []), { type: "link", label: url, url }] });
+              setLinkInput("");
+            }}
+            className="shrink-0 rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]"
+          >
+            Agregar link
+          </button>
+        </div>
         {(task.attachments || []).length > 0 && (
           <ul className="space-y-1 rounded-md border border-[#E4DED6] bg-white p-2">
-            {task.attachments.map((attachment, index) => (
-              <li key={`${attachment.path || attachment.label}-${index}`} className="flex items-center gap-1.5 text-xs text-[#475467]">
-                <Paperclip size={12} className="shrink-0" />
+            {task.attachments.map((attachment, index) => {
+              const isLink = attachment.type === "link" || (!attachment.path && attachment.url);
+              return (
+              <li key={`${attachment.path || attachment.url || attachment.label}-${index}`} className="flex items-center gap-1.5 text-xs text-[#475467]">
+                {isLink ? <ExternalLink size={12} className="shrink-0 text-[#17727A]" /> : <Paperclip size={12} className="shrink-0" />}
                 <span className="min-w-0 flex-1 break-all">{attachment.label || attachment.path || "Adjunto"}</span>
                 {attachmentUrl(attachment) && (
                   <a
                     href={attachmentUrl(attachment)}
-                    download
+                    {...(isLink ? {} : { download: true })}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
-                    title="Descargar adjunto"
+                    title={isLink ? "Abrir repositorio/link" : "Descargar adjunto"}
                   >
-                    <Download size={12} />
+                    {isLink ? <ExternalLink size={12} /> : <Download size={12} />}
                   </a>
                 )}
                 <button
@@ -2038,7 +2256,8 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], onCh
                   <Trash2 size={12} />
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
@@ -2049,6 +2268,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], onCh
 function CompanyPanel({
   company,
   companies = [],
+  highlightId,
   tasks = [],
   people = [],
   newClientName,
@@ -2065,6 +2285,8 @@ function CompanyPanel({
   onDeleteTask,
   onUploadLogo,
   onUploadProjectImage,
+  onRenameCompany,
+  onRenameClient,
   onToggleScope,
   onAddTaskToClient,
   onUploadSourceDocument,
@@ -2078,7 +2300,13 @@ function CompanyPanel({
   onToggleStatus,
 }) {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [sideOpen, setSideOpen] = useState(true);
+  const [sideOpen, setSideOpen] = useState(false);
+  const [openTaskId, setOpenTaskId] = useState(null);
+  useEffect(() => { if (highlightId) setOpenTaskId(highlightId); }, [highlightId]);
+  const [editCompanyName, setEditCompanyName] = useState(null); // string en edición o null
+  const [editClient, setEditClient] = useState(null); // { old, value } o null
+  // "Subproyecto y contexto" siempre oculto al abrir/cambiar de empresa.
+  useEffect(() => { setSideOpen(false); }, [company?.id]);
   if (!company) return null;
   const active = activeClients(company);
   const archived = archivedClients(company);
@@ -2098,7 +2326,27 @@ function CompanyPanel({
             </div>
           )}
           <div className="min-w-0">
-          <h2 className="text-lg font-semibold text-[#1D2939]">{company.name}</h2>
+          {editCompanyName !== null ? (
+            <div className="flex items-center gap-1">
+              <input
+                autoFocus
+                value={editCompanyName}
+                onChange={(event) => setEditCompanyName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") { onRenameCompany(editCompanyName); setEditCompanyName(null); }
+                  if (event.key === "Escape") setEditCompanyName(null);
+                }}
+                className="w-full rounded-md border border-[#17727A] bg-white px-2 py-1 text-lg font-semibold text-[#1D2939] outline-none"
+              />
+              <button type="button" onClick={() => { onRenameCompany(editCompanyName); setEditCompanyName(null); }} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#17727A] text-white" title="Guardar"><Check size={16} /></button>
+              <button type="button" onClick={() => setEditCompanyName(null)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]" title="Cancelar"><X size={16} /></button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-lg font-semibold text-[#1D2939]">{company.name}</h2>
+              <button type="button" onClick={() => setEditCompanyName(company.name)} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]" title="Editar nombre de la empresa"><Pencil size={13} /></button>
+            </div>
+          )}
           <p className="mt-1 text-sm text-[#667085]">
             {active.length ? `Subproyectos activos: ${active.join(", ")}` : "Sin subproyectos activos"}
           </p>
@@ -2283,7 +2531,10 @@ function CompanyPanel({
               </div>
             )}
             {active.map((client) => {
-              const projectTasks = (tasks || []).filter((task) => task.companyId === company.id && task.client === client);
+              const allProjectTasks = (tasks || []).filter((task) => task.companyId === company.id && task.client === client);
+              // Las finalizadas se archivan: no van en la lista principal, pero se pueden consultar.
+              const projectTasks = allProjectTasks.filter((task) => task.status !== "done");
+              const doneTasks = allProjectTasks.filter((task) => task.status === "done");
               const pendingAssignment = projectTasks.filter((task) => !task.assigneeId && !task.owner).length;
               const overdueTasks = projectTasks.filter(taskIsOverdue).length;
               const contextKey = `${company.id}:${client || "_empresa"}`;
@@ -2301,7 +2552,7 @@ function CompanyPanel({
                     title="Subir o cambiar la imagen del subproyecto"
                   >
                     {projectImage?.url ? (
-                      <img src={projectImage.url} alt={client} className="h-full w-full object-cover" />
+                      <img src={projectImage.url} alt={client} className="h-full w-full bg-white object-contain p-0.5" />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-base font-bold" style={{ color: accent }}>{projectInitials(client)}</span>
                     )}
@@ -2317,7 +2568,28 @@ function CompanyPanel({
                     />
                   </label>
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-semibold" style={{ color: accent }}>{client}</p>
+                    {editClient && editClient.old === client ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          autoFocus
+                          value={editClient.value}
+                          onChange={(event) => setEditClient({ old: client, value: event.target.value })}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") { onRenameClient(client, editClient.value); setEditClient(null); }
+                            if (event.key === "Escape") setEditClient(null);
+                          }}
+                          className="w-full rounded-md border px-2 py-1 text-sm font-semibold outline-none"
+                          style={{ borderColor: accent, color: accent }}
+                        />
+                        <button type="button" onClick={() => { onRenameClient(client, editClient.value); setEditClient(null); }} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white" style={{ background: accent }} title="Guardar"><Check size={14} /></button>
+                        <button type="button" onClick={() => setEditClient(null)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]" title="Cancelar"><X size={14} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <p className="break-words text-sm font-semibold" style={{ color: accent }}>{client}</p>
+                        <button type="button" onClick={() => setEditClient({ old: client, value: client })} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-white/40" style={{ color: accent }} title="Editar nombre del subproyecto"><Pencil size={12} /></button>
+                      </div>
+                    )}
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <span className="inline-flex rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
                       <span className="inline-flex rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
@@ -2456,6 +2728,8 @@ function CompanyPanel({
                           company={company}
                           companies={companies}
                           people={companyPeople}
+                          open={openTaskId === task.id}
+                          onOpenChange={(isOpen) => setOpenTaskId((prev) => (isOpen ? task.id : prev === task.id ? null : prev))}
                           onChangeTask={onChangeTask}
                           onDeleteTask={onDeleteTask}
                           onUploadAttachment={onUploadTaskAttachment}
@@ -2463,8 +2737,11 @@ function CompanyPanel({
                         />
                       )) : (
                         <p className="rounded-md border border-dashed border-[#C8BFB3] bg-[#FFFCF7] p-3 text-xs text-[#667085]">
-                          Aún no hay tareas creadas por el análisis de este subproyecto.
+                          No hay tareas activas en este subproyecto.
                         </p>
+                      )}
+                      {doneTasks.length > 0 && (
+                        <p className="text-xs text-[#8b8272]">{doneTasks.length} finalizada(s) — consúltalas en «Todas las tareas» → Finalizadas.</p>
                       )}
                     </div>
                   </details>

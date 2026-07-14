@@ -202,14 +202,16 @@ export async function saveState(token, state) {
   if (peopleRows.length) {
     await rest(token, "people?on_conflict=id", { method: "POST", body: peopleRows, prefer: "resolution=merge-duplicates,return=minimal" });
   }
-  await deleteMissing(token, "people", new Set(peopleRows.map((r) => String(r.id))));
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
     const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours"]);
     if (w) warnings.push(w);
   }
-  await deleteMissing(token, "tasks", new Set(taskRows.map((r) => String(r.id))));
+  // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba
+  // deleteMissing, pero eso ELIMINABA tareas insertadas por fuera (p. ej. el run diario del
+  // MD) cuando una pestaña con estado viejo autoguardaba. Los borrados son explícitos
+  // (opsData.deleteTask / deletePerson).
 
   const sourceRows = sourceRecords.map(sourceRecordToRow);
   const withId = sourceRows.filter((r) => r.id);
@@ -229,6 +231,21 @@ export async function saveState(token, state) {
   });
 
   return { updatedAt, warning: warnings.length ? [...new Set(warnings)].join(" ") : "" };
+}
+
+// Borrado EXPLÍCITO (una tarea/persona a la vez) — sustituye al deleteMissing masivo.
+export async function deleteTask(token, id) {
+  if (!id) return;
+  await rest(token, `tasks?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+}
+export async function deletePersonRow(token, id) {
+  if (!id) return;
+  await rest(token, `people?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+}
+// Borra la fila vieja de un subproyecto (al renombrarlo), para que loadState no lo reviva.
+export async function deleteProject(token, companyId, name) {
+  if (!companyId || !name) return;
+  await rest(token, `projects?company_id=eq.${encodeURIComponent(companyId)}&name=eq.${encodeURIComponent(name)}`, { method: "DELETE", prefer: "return=minimal" });
 }
 
 async function deleteMissing(token, table, keepIds) {

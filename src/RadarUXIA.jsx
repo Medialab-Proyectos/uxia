@@ -1195,16 +1195,15 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
               [MapPin, "Colombia", stats.colombia, C.amber],
               [Heart, "Me gusta", stats.megusta, stats.megusta ? C.coral : C.faint],
             ].map(([Icon, label, val, color]) => (
-              <button
+              <div
                 key={label}
-                onClick={() => setTab("tablero")}
                 className="rounded-md px-2 py-2.5 text-center"
                 style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
               >
                 <Icon size={15} style={{ color, margin: "0 auto 3px" }} />
                 <div className="text-lg font-bold" style={{ color, fontFamily: FONT.display }}>{val}</div>
                 <div className="text-[10px] leading-tight" style={{ color: C.faint }}>{label}</div>
-              </button>
+              </div>
             ))}
           </div>
 
@@ -1489,14 +1488,9 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {/* ── OPORTUNIDADES (prospección) ── */}
         {tab === "oportunidades" && (
           <section>
-            <div className="rounded-md p-4 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
-              <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
-                Propuestas de negocio para MediaLab
-              </h2>
-              <p className="text-sm leading-relaxed" style={{ color: C.dim }}>
-                Empresas y personas que expresan retos de UX/producto o buscan agencia/aliado.
-                El MD las llena por dentro; aquí las revisas, buscas y les das seguimiento.
-              </p>
+            <div className="mb-4">
+              <h2 className="text-base font-semibold" style={{ fontFamily: FONT.display, color: C.text }}>Propuestas de negocio</h2>
+              <p className="text-xs mt-0.5" style={{ color: C.dim }}>Empresas o personas que buscan agencia/aliado o expresan retos de UX. Revisa, filtra y da seguimiento.</p>
               {oppError && <p className="text-sm mt-2" style={{ color: C.coral }}>{oppError}</p>}
             </div>
 
@@ -1613,12 +1607,9 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {/* ── ME INTERESA (lista alterna) ── */}
         {tab === "interes" && (
           <section>
-            <div className="rounded-md p-4 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
-              <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>Me gusta</h2>
-              <p className="text-sm leading-relaxed" style={{ color: C.dim }}>
-                Propuestas y empleos que marcaste con ♥. Se guardan en Supabase (compartido entre equipos).
-                Toca ♥ de nuevo para quitarlo, o 🗑 para eliminarlo.
-              </p>
+            <div className="mb-4">
+              <h2 className="text-base font-semibold" style={{ fontFamily: FONT.display, color: C.text }}>Me gusta</h2>
+              <p className="text-xs mt-0.5" style={{ color: C.dim }}>Propuestas y empleos marcados con ♥ (guardado en Supabase, compartido). ♥ para quitar · 🗑 para eliminar.</p>
             </div>
 
             {likedCount === 0 ? (
@@ -1649,139 +1640,6 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 ))}
               </div>
             )}
-          </section>
-        )}
-
-        {/* ── BUSCAR ── */}
-        {tab === "buscar" && (
-          <section>
-            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
-              <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint }}>
-                Término de búsqueda
-              </label>
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-md text-sm"
-                style={{ backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.text }}
-                placeholder="Ej: diseñador UX IA remoto"
-              />
-              <div className="flex flex-wrap gap-2 mt-3">
-                {QUICK_QUERIES.map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => setQuery(q)}
-                    className="text-xs px-2.5 py-1 rounded-full transition-colors"
-                    style={{
-                      border: `1px solid ${query === q ? C.cyan : C.border}`,
-                      color: query === q ? C.cyan : C.dim,
-                      backgroundColor: "transparent",
-                    }}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-2 mt-4 text-sm cursor-pointer" style={{ color: C.dim }}>
-                <input
-                  type="checkbox"
-                  checked={remoteOnly}
-                  onChange={(e) => setRemoteOnly(e.target.checked)}
-                  style={{ accentColor: C.green }}
-                />
-                Solo remoto (donde el portal lo permite)
-              </label>
-            </div>
-
-            <h2 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint, fontFamily: FONT.display }}>
-              Publicaciones y posts del feed
-            </h2>
-            <p className="text-xs mb-3 leading-relaxed" style={{ color: C.dim }}>
-              Muchas vacantes UX nunca llegan a las bolsas de empleo: se publican como posts de reclutadores
-              y agencias. Estas búsquedas rastrean directamente las publicaciones.
-            </p>
-            <div className="space-y-2 mb-6">
-              {postSources.map((s) => (
-                <div
-                  key={s.name}
-                  className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3"
-                  style={{ backgroundColor: C.panel, border: `1px solid ${C.amber}33` }}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm" style={{ color: C.text, fontFamily: FONT.display }}>
-                        {s.name}
-                      </span>
-                      <Badge color={C.amber} bg={`${C.amber}14`}>{s.tag}</Badge>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: C.dim }}>{s.desc}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => copyLink(s.url, s.name)}
-                      className="text-xs px-2.5 py-1.5 rounded-md font-medium"
-                      style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}
-                    >
-                      {copied === s.name ? "Copiado ✓" : "Copiar"}
-                    </button>
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm"
-                      style={{ color: C.amber, textDecoration: "none" }}
-                    >
-                      Abrir →
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <h2 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint, fontFamily: FONT.display }}>
-              Bolsas de empleo
-            </h2>
-            <div className="space-y-2">
-              {sources.map((s) => (
-                <div
-                  key={s.name}
-                  className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3"
-                  style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm" style={{ color: C.text, fontFamily: FONT.display }}>
-                        {s.name}
-                      </span>
-                      <Badge color={C.cyan} bg={`${C.cyan}14`}>{s.tag}</Badge>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: C.dim }}>{s.desc}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => copyLink(s.url, s.name)}
-                      className="text-xs px-2.5 py-1.5 rounded-md font-medium"
-                      style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}
-                    >
-                      {copied === s.name ? "Copiado ✓" : "Copiar"}
-                    </button>
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm"
-                      style={{ color: C.amber, textDecoration: "none" }}
-                    >
-                      Abrir →
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs mt-4 leading-relaxed" style={{ color: C.faint }}>
-              Cuando encuentres vacantes interesantes, copia el texto de los listados y tráelo a la pestaña
-              «Importar con IA» para estructurarlas y priorizarlas automáticamente.
-            </p>
           </section>
         )}
 
