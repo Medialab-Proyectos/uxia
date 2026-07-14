@@ -11,6 +11,7 @@ create table if not exists companies (
   project_descriptions jsonb not null default '{}'::jsonb,
   context_documents jsonb not null default '{}'::jsonb,
   project_images jsonb not null default '{}'::jsonb,
+  scope jsonb not null default '[]'::jsonb,
   logo jsonb,
   connectors jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
@@ -63,6 +64,9 @@ create table if not exists tasks (
   attachments jsonb not null default '[]'::jsonb,
   email_to text,
   email_subject text,
+  completed_at timestamptz,
+  worked_hours numeric,
+  category text,
   created_at timestamptz not null default now()
 );
 

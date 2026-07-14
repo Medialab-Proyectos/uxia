@@ -1076,15 +1076,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Encabezado */}
         <header className="mb-8 flex items-start justify-between gap-3">
-          <div>
-            <img
-              src={theme === "dark" ? logoDark : logoLight}
-              alt="Radar UX·IA"
-              className="mb-3"
-              style={{ height: 44, width: "auto", display: "block" }}
-            />
-            <p className="text-sm" style={{ color: C.dim }}>
-              Empleos UX/UI · prioridad: Colombia + remoto + español
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold leading-tight sm:text-3xl" style={{ color: C.text, fontFamily: FONT.display }}>
+              Radar de oportunidades
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: C.dim }}>
+              Propuestas y empleos UX/UI · prioridad: Colombia + remoto + español
             </p>
           </div>
           {/* Subir propuesta: acción propia, junto al logo (fuera de las pestañas). */}

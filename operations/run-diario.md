@@ -24,6 +24,13 @@ npm run daily:fetch          # baja insumos pendientes de Supabase (imágenes Y 
 - Claude lee `operations/_run/insumos.json` (texto en `raw_text` + las imágenes
   descargadas), arma tareas claras y escribe `operations/_run/tasks.json`
   (`{tasks, processedInsumoIds, keepFileInsumoIds}`).
+- **Categorizar cada tarea según el ALCANCE del contrato de la empresa.** Cada empresa
+  tiene un `scope` (arreglo) con las categorías que aplican: `Diseño`, `UX Research`,
+  `Producto`, `Gestión de proyecto`, `Desarrollo de software`. En unas empresas MediaLab
+  solo **apoya diseño**; en otras hace **gestión total** o **desarrollo**. Al crear cada
+  tarea, ponerle `category` = una de las categorías del `scope` de esa empresa (la que
+  mejor describa la tarea). Si el insumo pide algo **fuera del scope** de la empresa,
+  anotarlo pero no inventar trabajo que no está contratado.
 ```bash
 npm run daily:push           # sube las tareas y retira los insumos procesados
 ```
@@ -36,10 +43,17 @@ npm run daily:push           # sube las tareas y retira los insumos procesados
     responsables ni fechas. Confirmar que no había tareas.
   - En ambos casos, **NO inventar tareas** y **preguntar** si descartar el insumo
     (con o sin conservar el archivo) o dejarlo pendiente. Solo retirarlo tras su OK.
-- **Ruteo de imágenes:** los insumos con `companyId` normal → tareas del Centro
-  Operativo. Los insumos con **`companyId: "radar"`** (subidos en Radar → "Subir
-  propuesta") → Claude los lee y los agrega a **Propuestas/Empleos** (bloques 2 y 3),
-  y luego los retira con `opsData.deleteInsumo`.
+- **Ruteo de insumos por `companyId`:**
+  - `companyId` normal (una empresa) → tareas de ese proyecto en el Centro Operativo.
+  - **`companyId: "global"`** (botón "Subir insumo global"): el CEO escribió todo de
+    corrido sin elegir proyecto. Claude **lee el texto/imagen, lo divide y reparte**
+    entre los proyectos que menciona (por nombre de empresa/subproyecto), creando
+    tareas en cada uno. **Si menciona un proyecto que NO existe todavía, ESA parte NO
+    se convierte en tarea: se deja el insumo pendiente** (o se registra la porción
+    pendiente) hasta que el proyecto exista; en la próxima corrida se reintenta.
+    Solo se retira el insumo global cuando **todo** su contenido quedó repartido.
+  - **`companyId: "radar"`** (Radar → "Subir propuesta") → Claude los lee y los agrega
+    a **Propuestas/Empleos** (bloques 2 y 3), y luego los retira con `opsData.deleteInsumo`.
 
 ### 2) Radar — PROPUESTAS de negocio para MediaLab (oportunidades)
 Señales reales de demanda de UX/producto/consultoría: empresas que **escalan producto,

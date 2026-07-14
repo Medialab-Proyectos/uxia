@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Circle, Download, ExternalLink, ListChecks, LoaderCircle, MessageCircle, Paperclip, Plus, Send, Trash2, UserRound } from "lucide-react";
+import { AlertTriangle, Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Download, ExternalLink, ListChecks, LoaderCircle, MessageCircle, Paperclip, Plus, Send, Trash2, UserRound } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 
@@ -40,6 +40,89 @@ function projectAccent(name) {
 function projectInitials(name) {
   const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
   return (parts.slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "?").slice(0, 2);
+}
+
+// Categorías de trabajo: alcance del contrato por empresa + tipo de cada tarea.
+// En unas empresas MediaLab solo apoya diseño; en otras hace gestión total o desarrollo.
+const TASK_CATEGORIES = ["Diseño", "UX Research", "Producto", "Gestión de proyecto", "Desarrollo de software"];
+const CATEGORY_TONE = {
+  "Diseño": "#C11574",
+  "UX Research": "#6941C6",
+  "Producto": "#B54708",
+  "Gestión de proyecto": "#17727A",
+  "Desarrollo de software": "#1570EF",
+};
+function categoryColor(category) {
+  return CATEGORY_TONE[category] || "#667085";
+}
+
+// --- Horas laborales Colombia -------------------------------------------------
+// Jornada 8:00–12:00 y 13:00–17:00 (8h, 1h de almuerzo), lunes a viernes,
+// excluyendo festivos colombianos. Se usa para "horas cumplidas" al terminar una tarea.
+// Los tiempos se interpretan en hora local del equipo (se asume zona Colombia, UTC-5).
+function easterSunday(year) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+function isoDay(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function nextMonday(d) {
+  const x = new Date(d);
+  const wd = x.getDay();
+  if (wd !== 1) x.setDate(x.getDate() + ((8 - wd) % 7));
+  return x;
+}
+const _holidayCache = {};
+function colombianHolidays(year) {
+  if (_holidayCache[year]) return _holidayCache[year];
+  const set = new Set();
+  const add = (dt) => set.add(isoDay(dt));
+  // Fijos
+  [[0, 1], [4, 1], [6, 20], [7, 7], [11, 8], [11, 25]].forEach(([m, dd]) => add(new Date(year, m, dd)));
+  // Ley Emiliani: se trasladan al lunes siguiente
+  [[0, 6], [2, 19], [5, 29], [7, 15], [9, 12], [10, 1], [10, 11]].forEach(([m, dd]) => add(nextMonday(new Date(year, m, dd))));
+  // Basados en Pascua
+  const easter = easterSunday(year);
+  const rel = (days) => { const dt = new Date(easter); dt.setDate(dt.getDate() + days); return dt; };
+  add(rel(-3)); // Jueves Santo
+  add(rel(-2)); // Viernes Santo
+  add(nextMonday(rel(39))); // Ascensión
+  add(nextMonday(rel(60))); // Corpus Christi
+  add(nextMonday(rel(68))); // Sagrado Corazón
+  _holidayCache[year] = set;
+  return set;
+}
+function isBusinessDay(d) {
+  const wd = d.getDay();
+  if (wd === 0 || wd === 6) return false;
+  return !colombianHolidays(d.getFullYear()).has(isoDay(d));
+}
+function businessHoursBetween(startIso, endIso) {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (!(start < end)) return 0;
+  let total = 0;
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  while (cursor <= end) {
+    if (isBusinessDay(cursor)) {
+      for (const [h0, h1] of [[8, 12], [13, 17]]) {
+        const wStart = new Date(cursor); wStart.setHours(h0, 0, 0, 0);
+        const wEnd = new Date(cursor); wEnd.setHours(h1, 0, 0, 0);
+        const s = Math.max(start.getTime(), wStart.getTime());
+        const e = Math.min(end.getTime(), wEnd.getTime());
+        if (e > s) total += (e - s) / 3600000;
+      }
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return Math.round(total * 10) / 10;
 }
 
 
@@ -482,6 +565,8 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
   const [activeStatus, setActiveStatus] = useState("open");
   const [activeView, setActiveView] = useState("companies");
   const [asideOpen, setAsideOpen] = useState(false);
+  const [globalOpen, setGlobalOpen] = useState(false);
+  const [globalText, setGlobalText] = useState("");
   const [inboxText, setInboxText] = useState(starterText);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [notice, setNotice] = useState("");
@@ -693,7 +778,22 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
   // (daily:fetch → Claude → daily:push) los interpreta. Aquí solo se descargan o borran.
 
   function updateTask(id, patch) {
-    setTasks((current) => current.map((task) => (task.id === id ? { ...task, ...patch } : task)));
+    setTasks((current) => current.map((task) => {
+      if (task.id !== id) return task;
+      const next = { ...task, ...patch };
+      // Al TERMINAR (pasar a "done") se registra el momento y se calculan las horas
+      // laborales cumplidas (8-17, 1h almuerzo, días hábiles, festivos CO) desde su creación.
+      if (patch.status === "done" && task.status !== "done") {
+        next.completedAt = new Date().toISOString();
+        next.workedHours = businessHoursBetween(task.createdAt || next.completedAt, next.completedAt);
+      }
+      // Si se reabre, se limpian esos valores.
+      if (patch.status && patch.status !== "done" && task.status === "done") {
+        next.completedAt = "";
+        next.workedHours = null;
+      }
+      return next;
+    }));
   }
 
   function deleteTask(id) {
@@ -855,6 +955,17 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
     )));
   }
 
+  // Alcance del contrato por empresa: alterna una categoría de trabajo.
+  function toggleCompanyScope(category) {
+    if (!company) return;
+    setCompanies((current) => current.map((item) => {
+      if (item.id !== company.id) return item;
+      const set = new Set(item.scope || []);
+      if (set.has(category)) set.delete(category); else set.add(category);
+      return { ...item, scope: [...set] };
+    }));
+  }
+
   async function uploadTaskAttachment(taskId, file) {
     if (!file || !company) return;
     const task = tasks.find((item) => item.id === taskId);
@@ -900,6 +1011,31 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
       loadInsumos();
     } catch (error) {
       setNotice(`No pude subir el insumo. ${error.message || "Revisa políticas de Storage."}`);
+    }
+  }
+
+  // Insumo GLOBAL: el CEO escribe todo de corrido (o sube una imagen) sin elegir proyecto.
+  // Se guarda con companyId:"global"; el MD diario lo reparte entre los proyectos y, si no
+  // existe el proyecto mencionado, lo deja pendiente hasta que exista.
+  async function uploadGlobalInsumo({ text, file }) {
+    if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir insumos."); return; }
+    try {
+      if (file) {
+        if (!isTaskImageFile(file)) { setNotice("El insumo global debe ser texto o imagen."); return; }
+        const prepared = await prepareTaskUploadFile(file);
+        if (prepared.size > MAX_TASK_UPLOAD_BYTES) { setNotice(`La imagen pesa ${formatFileSize(prepared.size)}. Debe ser menor a 1 MB.`); return; }
+        const named = prepared instanceof File ? prepared : new File([prepared], file.name, { type: prepared.type || file.type });
+        await opsData.saveInsumo(token, { companyId: "global", client: "", file: named, kind: "imagen" });
+      } else {
+        const clean = (text || "").trim();
+        if (!clean) { setNotice("Escribe algo antes de subir el insumo global."); return; }
+        const named = new File([clean], `global-${Date.now()}.txt`, { type: "text/plain" });
+        await opsData.saveInsumo(token, { companyId: "global", client: "", file: named, kind: "texto", rawText: clean });
+      }
+      setNotice("Insumo global guardado. El MD diario lo repartirá entre los proyectos.");
+      loadInsumos();
+    } catch (error) {
+      setNotice(`No pude subir el insumo global. ${error.message || "Revisa políticas de Storage."}`);
     }
   }
 
@@ -1067,8 +1203,62 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
             <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
           </div>
-          <p className="shrink-0 text-xs text-[#667085]">{saveStatus}</p>
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setGlobalOpen((v) => !v)}
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md bg-[#E8751A] px-3 py-1.5 text-sm font-semibold text-white"
+              title="Escribe todo de corrido; el MD lo reparte entre los proyectos"
+            >
+              <Plus size={16} /> Subir insumo global
+            </button>
+            <p className="text-xs text-[#667085]">{saveStatus}</p>
+          </div>
         </div>
+
+        {/* Insumo global: capturar rápido sin elegir proyecto. */}
+        {globalOpen && (
+          <div className="mb-4 rounded-md border border-[#F2C879] bg-[#FFF7E6] p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-[#8A5700]">Subir insumo global</h2>
+                <p className="mt-0.5 text-xs text-[#8b8272]">Escribe todo de corrido (menciona el proyecto si puedes). El MD diario lo reparte entre los proyectos; lo que no tenga proyecto queda pendiente hasta que exista.</p>
+              </div>
+              <button type="button" onClick={() => setGlobalOpen(false)} className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs font-semibold text-[#344054]">Cerrar</button>
+            </div>
+            <textarea
+              value={globalText}
+              onChange={(event) => setGlobalText(event.target.value)}
+              rows={5}
+              placeholder="Ej.: Para Corvus hay que ajustar el onboarding y entregar el viernes. En Phoenix falta el tablero de métricas. Nuevo proyecto Delta: definir alcance…"
+              className="mt-3 w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => { await uploadGlobalInsumo({ text: globalText }); setGlobalText(""); }}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md bg-[#17727A] px-3 py-1.5 text-sm font-semibold text-white"
+              >
+                <Send size={15} /> Guardar texto
+              </button>
+              <label className="inline-flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]">
+                <Paperclip size={15} /> Adjuntar imagen
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) uploadGlobalInsumo({ file });
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+              <span className="text-xs text-[#8b8272]">Queda en “Insumos pendientes” hasta la corrida del MD.</span>
+            </div>
+          </div>
+        )}
+
         {/* A-3 / WCAG 4.1.3 — region viva: anuncia a lectores de pantalla el
             resultado de procesar insumos sin que el usuario tenga que buscarlo. */}
         <div role="status" aria-live="polite">
@@ -1177,6 +1367,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onDeleteTask={deleteTask}
             onUploadLogo={uploadCompanyLogo}
             onUploadProjectImage={uploadProjectImage}
+            onToggleScope={toggleCompanyScope}
             onAddTaskToClient={addTaskForClient}
             onUploadSourceDocument={uploadSourceDocument}
             onUploadTaskAttachment={uploadTaskAttachment}
@@ -1513,6 +1704,7 @@ function contactFor(person, message, subject) {
 function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [open, setOpen] = useState(false);
+  const scopeOptions = company?.scope?.length ? company.scope : TASK_CATEGORIES;
   const assignedPerson = personById(people, task.assigneeId);
   const board = getProjectBoardConfig(company, task.client);
   const contactMessage = buildContactMessage(task, company);
@@ -1548,6 +1740,12 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
             </span>
           )}
           <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
+            {task.category && (
+              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
+                {task.category}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
               <CalendarDays size={11} />
               Pub. {displayDate(task.createdAt)}
@@ -1565,6 +1763,12 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
               {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
             </span>
+            {task.status === "done" && task.workedHours != null && (
+              <span className="inline-flex items-center gap-1 rounded border border-[#A6D9C4] bg-[#E5F5EE] px-1.5 py-0.5 font-semibold text-[#0D7A4F]" title={`Horas laborales cumplidas${task.completedAt ? ` · terminada ${displayDate(task.completedAt)}` : ""}`}>
+                <Clock size={11} />
+                {task.workedHours} h cumplidas
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
               <UserRound size={11} />
               {assignedPerson?.name || "Sin asignar"}
@@ -1671,6 +1875,18 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
           className="w-full resize-none rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs leading-snug text-[#344054] outline-none focus:border-[#17727A]"
           placeholder="Descripción de la tarea"
         />
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: task.category ? categoryColor(task.category) : "#D0D5DD" }} />
+          <select
+            value={task.category || ""}
+            onChange={(event) => onChangeTask(task.id, { category: event.target.value })}
+            className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]"
+            title="Tipo de tarea según el alcance del contrato de la empresa"
+          >
+            <option value="">Tipo de tarea…</option>
+            {scopeOptions.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:grid-cols-[minmax(110px,1fr)_auto] sm:items-center">
           <div className="relative min-w-0">
             <UserRound className="pointer-events-none absolute left-2 top-1.5 text-[#667085]" size={13} />
@@ -1802,6 +2018,7 @@ function CompanyPanel({
   onDeleteTask,
   onUploadLogo,
   onUploadProjectImage,
+  onToggleScope,
   onAddTaskToClient,
   onUploadSourceDocument,
   onUploadTaskAttachment,
@@ -1858,6 +2075,32 @@ function CompanyPanel({
           <button onClick={onToggleStatus} className="rounded-md border border-[#D0D5DD] px-3 py-1.5 text-sm font-semibold text-[#344054]">
             {company.status === "inactiva" ? "Activar empresa" : "Desactivar empresa"}
           </button>
+        </div>
+      </div>
+
+      {/* Alcance del contrato: qué tipo de tareas hace MediaLab para esta empresa. */}
+      <div className="mt-3 rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">Alcance del contrato</p>
+        <p className="mt-0.5 text-xs text-[#8b8272]">Marca qué tipo de trabajo hace MediaLab aquí. Guía al MD al crear tareas y las etiqueta por tipo.</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {TASK_CATEGORIES.map((cat) => {
+            const on = (company.scope || []).includes(cat);
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => onToggleScope(cat)}
+                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold"
+                style={on
+                  ? { borderColor: categoryColor(cat), background: `${categoryColor(cat)}1A`, color: categoryColor(cat) }
+                  : { borderColor: "#D0D5DD", background: "#fff", color: "#667085" }}
+                aria-pressed={on}
+              >
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: on ? categoryColor(cat) : "#D0D5DD" }} />
+                {cat}
+              </button>
+            );
+          })}
         </div>
       </div>
       <div className={sideOpen ? "mt-4 grid gap-4 xl:grid-cols-[300px_1fr]" : "mt-4"}>

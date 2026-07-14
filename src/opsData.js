@@ -54,6 +54,7 @@ const rowToTask = (row) => ({
   evidence: row.evidence || "", description: row.description || "", userStory: row.user_story || "",
   acceptanceCriteria: asArray(row.acceptance_criteria), attachments: asArray(row.attachments),
   emailTo: row.email_to || "", emailSubject: row.email_subject || "", createdAt: row.created_at || "",
+  completedAt: row.completed_at || "", workedHours: row.worked_hours ?? null, category: row.category || "",
 });
 
 const taskToRow = (task) => ({
@@ -64,6 +65,8 @@ const taskToRow = (task) => ({
   audience: task.audience || "Interno MediaLab", sync_mode: task.syncMode || "Manual", evidence: task.evidence || "",
   description: task.description || "", user_story: task.userStory || "", acceptance_criteria: asArray(task.acceptanceCriteria),
   attachments: asArray(task.attachments), email_to: task.emailTo || "", email_subject: task.emailSubject || "",
+  completed_at: task.completedAt || null, worked_hours: task.workedHours ?? null,
+  category: task.category || null,
   created_at: task.createdAt || new Date().toISOString(),
 });
 
@@ -126,6 +129,7 @@ export async function loadState(token) {
       projectDescriptions: { ...asObject(company.project_descriptions), ...projectDescriptions },
       contextDocuments: asObject(company.context_documents), logo: company.logo || null,
       projectImages: asObject(company.project_images),
+      scope: asArray(company.scope),
       connectors: asArray(company.connectors),
     };
   });
@@ -152,7 +156,7 @@ export async function saveState(token, state) {
     workspaces: asArray(c.workspaces), archived_clients: asObject(c.archivedClients),
     project_links: asObject(c.projectLinks), project_descriptions: asObject(c.projectDescriptions),
     context_documents: asObject(c.contextDocuments), logo: c.logo || null, connectors: asArray(c.connectors),
-    project_images: asObject(c.projectImages),
+    project_images: asObject(c.projectImages), scope: asArray(c.scope),
     updated_at: updatedAt,
   }));
   if (companyRows.length) {

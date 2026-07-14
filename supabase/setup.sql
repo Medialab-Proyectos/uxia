@@ -51,6 +51,14 @@ alter table people add column if not exists contact_method text default 'auto';
 -- 3b) Imagen por subproyecto (jsonb en la empresa) -------------------------------
 alter table companies add column if not exists project_images jsonb not null default '{}'::jsonb;
 
+-- 3c) Horas cumplidas al terminar una tarea (horario laboral CO) ------------------
+alter table tasks add column if not exists completed_at timestamptz;
+alter table tasks add column if not exists worked_hours numeric;
+
+-- 3d) Categorización: alcance del contrato por empresa + tipo de cada tarea --------
+alter table companies add column if not exists scope jsonb not null default '[]'::jsonb;
+alter table tasks add column if not exists category text;
+
 -- 4) Políticas RLS: usuario autenticado gestiona todo (herramienta interna) -------
 do $$
 declare t text;
