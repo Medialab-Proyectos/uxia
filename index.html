@@ -67,6 +67,10 @@
         border-radius: 4px;
       }
 
+      /* Chevron de acordeones (details): rota al abrir para indicar que se despliega. */
+      .ops-caret { transition: transform .15s ease; flex-shrink: 0; }
+      details[open] > summary .ops-caret { transform: rotate(90deg); }
+
       /* Modo oscuro del Centro de Operaciones: remapea sus colores fijos de
          Tailwind cuando el contenedor tiene data-ops-theme="dark". */
       /* Fondos — el propio contenedor raíz lleva bg-[#F7F4EF]/text-[#202124], por eso

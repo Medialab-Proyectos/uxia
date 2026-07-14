@@ -487,6 +487,8 @@ export default function RadarUXIA({ token = "", theme = "light" } = {}) {
   const [outreachMessages, setOutreachMessages] = useState({});
   const [outreachLoading, setOutreachLoading] = useState("");
   const [interesList, setInteresList] = useState([]);
+  const [confirmDelId, setConfirmDelId] = useState(null);
+  const [radarNotice, setRadarNotice] = useState("");
 
   // Cargar vacantes: primero de Supabase (las llena Claude Code); si no hay, respaldo local.
   useEffect(() => {
@@ -871,9 +873,20 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     if (opsData.opsDataReady()) opsData.updateVacante(token, id, { estado }).catch(() => {});
   };
 
-  const removeJob = (id) => {
-    persist(jobs.filter((j) => j.id !== id));
-    if (opsData.opsDataReady()) opsData.deleteVacante(token, id).catch(() => {});
+  const removeJob = async (id) => {
+    const prev = jobs;
+    persist(jobs.filter((j) => j.id !== id)); // optimista
+    if (opsData.opsDataReady()) {
+      try {
+        await opsData.deleteVacante(token, id);
+        setRadarNotice("Empleo eliminado.");
+      } catch (e) {
+        persist(prev); // revertir: la BD no lo borró
+        setRadarNotice(`No se pudo eliminar en la base: ${e.message}. Verifica que corriste supabase/setup.sql (políticas RLS de 'vacantes').`);
+      }
+    } else {
+      setRadarNotice("Empleo eliminado (solo en este navegador: falta configurar Supabase).");
+    }
   };
 
   // Seguimiento de oportunidades (persistido en Supabase, compartido entre equipos).
@@ -881,10 +894,54 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     setOppResults((current) => current.map((o) => (o.id === id ? { ...o, estado } : o)));
     if (opsData.opsDataReady()) opsData.updateOportunidad(token, id, { estado }).catch(() => {});
   };
-  const removeOpp = (id) => {
-    setOppResults((current) => current.filter((o) => o.id !== id));
-    if (opsData.opsDataReady()) opsData.deleteOportunidad(token, id).catch(() => {});
+  const removeOpp = async (id) => {
+    const prev = oppResults;
+    setOppResults((current) => current.filter((o) => o.id !== id)); // optimista
+    if (opsData.opsDataReady()) {
+      try {
+        await opsData.deleteOportunidad(token, id);
+        setRadarNotice("Propuesta eliminada.");
+      } catch (e) {
+        setOppResults(prev); // revertir: la BD no lo borró
+        setRadarNotice(`No se pudo eliminar en la base: ${e.message}. Verifica que corriste supabase/setup.sql (políticas RLS de 'oportunidades').`);
+      }
+    } else {
+      setRadarNotice("Propuesta eliminada (solo en este navegador: falta configurar Supabase).");
+    }
   };
+
+  // Control de borrar con confirmación inline (¿Borrar? Sí/No), sin popup del sistema.
+  const renderDelete = (id, onDelete) => (
+    confirmDelId === id ? (
+      <span className="inline-flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+        <button
+          onClick={(e) => { e.preventDefault(); setConfirmDelId(null); onDelete(id); }}
+          className="inline-flex items-center rounded-md px-2 text-xs font-semibold"
+          style={{ height: 34, background: C.coral, color: "#fff" }}
+          title="Confirmar borrado"
+        >
+          Sí, borrar
+        </button>
+        <button
+          onClick={(e) => { e.preventDefault(); setConfirmDelId(null); }}
+          className="inline-flex items-center rounded-md px-2 text-xs font-semibold"
+          style={{ height: 34, border: `1px solid ${C.border}`, color: C.text }}
+          title="Cancelar"
+        >
+          No
+        </button>
+      </span>
+    ) : (
+      <button
+        onClick={(e) => { e.preventDefault(); setConfirmDelId(id); }}
+        title="Eliminar"
+        className="inline-flex items-center justify-center rounded-md"
+        style={{ width: 34, height: 34, color: C.coral, border: `1px solid ${C.coral}33` }}
+      >
+        <Trash2 size={16} />
+      </button>
+    )
+  );
 
   // Subir propuesta desde imagen (reusa insumos_pendientes con companyId='radar').
   const loadRadarInsumos = async () => {
@@ -1098,6 +1155,13 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             <Upload size={15} /> Subir propuesta
           </button>
         </header>
+
+        {radarNotice && (
+          <div role="status" aria-live="polite" className="mb-4 flex items-start justify-between gap-3 rounded-md px-3 py-2 text-sm" style={{ background: `${C.cyan}14`, border: `1px solid ${C.cyan}55`, color: C.text }}>
+            <span>{radarNotice}</span>
+            <button onClick={() => setRadarNotice("")} className="shrink-0 font-semibold" style={{ color: C.dim }} title="Cerrar">✕</button>
+          </div>
+        )}
 
         <nav className="flex gap-1 mb-6 p-1 rounded-md overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
           {[
@@ -1514,14 +1578,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           >
                             <Heart size={16} fill={o.estado === "me_interesa" ? "#fff" : "none"} />
                           </button>
-                          <button
-                            onClick={(e) => { e.preventDefault(); removeOpp(o.id); }}
-                            title="Eliminar"
-                            className="inline-flex items-center justify-center rounded-md"
-                            style={{ width: 34, height: 34, color: C.coral, border: `1px solid ${C.coral}33` }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {renderDelete(o.id, removeOpp)}
                           <span className="text-xs" style={{ color: C.faint }}>▾</span>
                         </div>
                       </summary>
@@ -1585,7 +1642,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                       <div className="flex gap-2 items-center shrink-0">
                         <button onClick={item.unlike} title="Quitar me gusta" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, backgroundColor: C.coral, color: "#fff", border: `1px solid ${C.coral}` }}><Heart size={16} fill="#fff" /></button>
                         {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" title="Ver" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, color: C.cyan, border: `1px solid ${C.cyan}44` }}><ExternalLink size={16} /></a>}
-                        <button onClick={item.del} title="Eliminar" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, color: C.coral, border: `1px solid ${C.coral}33` }}><Trash2 size={16} /></button>
+                        {renderDelete(item.id, () => item.del())}
                       </div>
                     </div>
                   </article>
@@ -1910,14 +1967,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                         >
                           <Heart size={16} fill={j.estado === "me_interesa" ? "#fff" : "none"} />
                         </button>
-                        <button
-                          onClick={(e) => { e.preventDefault(); removeJob(j.id); }}
-                          title="Eliminar"
-                          className="inline-flex items-center justify-center rounded-md"
-                          style={{ width: 34, height: 34, color: C.coral, border: `1px solid ${C.coral}33` }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {renderDelete(j.id, removeJob)}
                         <span className="text-xs" style={{ color: C.faint }}>▾</span>
                       </div>
                     </summary>

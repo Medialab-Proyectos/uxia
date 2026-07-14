@@ -144,12 +144,36 @@ export async function loadState(token) {
   };
 }
 
+// Upsert que, si la base aún NO tiene una columna nueva, reintenta guardando lo esencial
+// (quita solo las columnas opcionales que fallan) en vez de romper TODO el guardado.
+// Devuelve un aviso si tuvo que degradar, para mostrarlo en la UI.
+async function upsertResilient(token, path, rows, optionalCols = []) {
+  const prefer = "resolution=merge-duplicates,return=minimal";
+  try {
+    await rest(token, path, { method: "POST", body: rows, prefer });
+    return "";
+  } catch (e) {
+    const msg = String(e?.message || "") + " " + JSON.stringify(e?.detail || "");
+    if (optionalCols.length && /column|does not exist|schema cache|PGRST204|Could not find/i.test(msg)) {
+      const stripped = rows.map((r) => {
+        const copy = { ...r };
+        for (const col of optionalCols) delete copy[col];
+        return copy;
+      });
+      await rest(token, path, { method: "POST", body: stripped, prefer });
+      return `Faltan columnas nuevas en la base (${optionalCols.join(", ")}). Corre supabase/setup.sql para que se guarden.`;
+    }
+    throw e;
+  }
+}
+
 export async function saveState(token, state) {
   const updatedAt = new Date().toISOString();
   const companies = asArray(state.companies);
   const people = asArray(state.people);
   const tasks = asArray(state.tasks);
   const sourceRecords = asArray(state.sourceRecords);
+  const warnings = [];
 
   const companyRows = companies.map((c) => ({
     id: c.id, name: c.name, status: c.status || "activa", owner: c.owner || "MediaLab",
@@ -160,7 +184,8 @@ export async function saveState(token, state) {
     updated_at: updatedAt,
   }));
   if (companyRows.length) {
-    await rest(token, "companies?on_conflict=id", { method: "POST", body: companyRows, prefer: "resolution=merge-duplicates,return=minimal" });
+    const w = await upsertResilient(token, "companies?on_conflict=id", companyRows, ["project_images", "scope"]);
+    if (w) warnings.push(w);
   }
 
   const projectRows = companies.flatMap((c) => asArray(c.clients).map((client) => ({
@@ -181,7 +206,8 @@ export async function saveState(token, state) {
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
-    await rest(token, "tasks?on_conflict=id", { method: "POST", body: taskRows, prefer: "resolution=merge-duplicates,return=minimal" });
+    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours"]);
+    if (w) warnings.push(w);
   }
   await deleteMissing(token, "tasks", new Set(taskRows.map((r) => String(r.id))));
 
@@ -202,7 +228,7 @@ export async function saveState(token, state) {
     prefer: "resolution=merge-duplicates,return=minimal",
   });
 
-  return { updatedAt };
+  return { updatedAt, warning: warnings.length ? [...new Set(warnings)].join(" ") : "" };
 }
 
 async function deleteMissing(token, table, keepIds) {

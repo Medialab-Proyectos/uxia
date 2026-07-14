@@ -45,13 +45,25 @@ npm run daily:push           # sube las tareas y retira los insumos procesados
     (con o sin conservar el archivo) o dejarlo pendiente. Solo retirarlo tras su OK.
 - **Ruteo de insumos por `companyId`:**
   - `companyId` normal (una empresa) → tareas de ese proyecto en el Centro Operativo.
-  - **`companyId: "global"`** (botón "Subir insumo global"): el CEO escribió todo de
-    corrido sin elegir proyecto. Claude **lee el texto/imagen, lo divide y reparte**
-    entre los proyectos que menciona (por nombre de empresa/subproyecto), creando
-    tareas en cada uno. **Si menciona un proyecto que NO existe todavía, ESA parte NO
-    se convierte en tarea: se deja el insumo pendiente** (o se registra la porción
-    pendiente) hasta que el proyecto exista; en la próxima corrida se reintenta.
-    Solo se retira el insumo global cuando **todo** su contenido quedó repartido.
+  - **`companyId: "global"`** (botón "Subir insumo global"): el CEO escribió/subió todo
+    de corrido sin elegir proyecto. Claude **lee el texto/imagen, lo divide por proyecto**
+    (por nombre de empresa/subproyecto mencionado) y procede así — **decisión de Christian
+    2026-07-14**:
+    1. **Proyecto que SÍ existe** (empresa+subproyecto en la base) → **anexar** sus tareas
+       a ese subproyecto (companyId+client reales). Ojo con nombres mal transcritos por voz
+       (ej. "Streams Hey collisions" = **Xtreme Collision** / metrics-lab).
+    2. **Proyecto que NO existe** → **NO crear la empresa/subproyecto real**. Las tareas van
+       a una **bandeja de espera**: empresa `por-asignar` (nombre "Por asignar (bandeja)"),
+       con **un subproyecto por cada proyecto mencionado** (BID, Arcus, Tu Barco, etc.) y
+       las tareas dentro. Quedan visibles como "lista de espera para asignar a una
+       empresa/proyecto"; cuando exista el proyecto real, se mueven/recrean.
+    3. Como **todo** el contenido quedó capturado (en proyectos reales o en la bandeja),
+       **se retira el insumo global** (borrar fila `insumos_pendientes` + archivo de Storage).
+  - **Mecánica (service role, vía REST):** upsert `companies?on_conflict=id` de `por-asignar`;
+    upsert `projects?on_conflict=company_id,name` de los subproyectos de espera; insert en
+    `tasks` (columnas que existen hoy; **`category` aún no existe** hasta correr el SQL, así
+    que omitirla). Fechas: marcar `due_date`=hoy y `priority:"alta"` solo a lo explícitamente
+    time-bound ("hoy", "para mediodía"); el resto sin fecha.
   - **`companyId: "radar"`** (Radar → "Subir propuesta") → Claude los lee y los agrega
     a **Propuestas/Empleos** (bloques 2 y 3), y luego los retira con `opsData.deleteInsumo`.
 

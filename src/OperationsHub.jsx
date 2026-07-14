@@ -640,9 +640,17 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
       try {
         setSaveStatus("Guardando…");
         const saved = await opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany });
-        setSaveStatus(`Supabase: ${new Date(saved.updatedAt).toLocaleString()}`);
-      } catch {
-        setSaveStatus("Guardado solo en este navegador");
+        setSaveStatus(saved.warning
+          ? `⚠ ${saved.warning}`
+          : `Supabase: ${new Date(saved.updatedAt).toLocaleString()}`);
+      } catch (e) {
+        // Hacer VISIBLE el error real: si falta una columna nueva (scope, project_images,
+        // category, completed_at, worked_hours) el guardado falla entero. Hay que correr
+        // supabase/setup.sql. Antes esto se tragaba en silencio y "todo desaparecía".
+        const msg = String(e?.message || "");
+        setSaveStatus(/column|does not exist|PGRST/i.test(msg)
+          ? `⚠ Falta migrar la base (corre supabase/setup.sql): ${msg}`
+          : `⚠ No se guardó en Supabase: ${msg || "error desconocido"}`);
       }
     }, 600);
     return () => clearTimeout(timer);
@@ -759,7 +767,15 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
   async function loadInsumos() {
     if (!opsData.opsDataReady()) { setInsumos([]); return; }
     try {
-      setInsumos(await opsData.listInsumos(token, activeCompany));
+      // Muestra los insumos de la empresa activa Y los GLOBALES (companyId:"global",
+      // subidos con "Subir insumo global"), para que no queden invisibles.
+      const [own, global] = await Promise.all([
+        opsData.listInsumos(token, activeCompany).catch(() => []),
+        opsData.listInsumos(token, "global").catch(() => []),
+      ]);
+      const byId = new Map();
+      [...global, ...own].forEach((i) => byId.set(i.id, i));
+      setInsumos([...byId.values()]);
     } catch {
       setInsumos([]);
     }
@@ -1021,11 +1037,19 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
     if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir insumos."); return; }
     try {
       if (file) {
-        if (!isTaskImageFile(file)) { setNotice("El insumo global debe ser texto o imagen."); return; }
-        const prepared = await prepareTaskUploadFile(file);
-        if (prepared.size > MAX_TASK_UPLOAD_BYTES) { setNotice(`La imagen pesa ${formatFileSize(prepared.size)}. Debe ser menor a 1 MB.`); return; }
-        const named = prepared instanceof File ? prepared : new File([prepared], file.name, { type: prepared.type || file.type });
-        await opsData.saveInsumo(token, { companyId: "global", client: "", file: named, kind: "imagen" });
+        const isTextFile = /\.(md|txt)$/i.test(file.name);
+        if (isTextFile) {
+          const content = await file.text();
+          await opsData.saveInsumo(token, { companyId: "global", client: "", file, kind: "texto", rawText: content });
+        } else if (isTaskImageFile(file)) {
+          const prepared = await prepareTaskUploadFile(file);
+          if (prepared.size > MAX_TASK_UPLOAD_BYTES) { setNotice(`La imagen pesa ${formatFileSize(prepared.size)}. Debe ser menor a 1 MB.`); return; }
+          const named = prepared instanceof File ? prepared : new File([prepared], file.name, { type: prepared.type || file.type });
+          await opsData.saveInsumo(token, { companyId: "global", client: "", file: named, kind: "imagen" });
+        } else {
+          setNotice("El archivo debe ser .txt, .md o una imagen (jpg, png, webp…).");
+          return;
+        }
       } else {
         const clean = (text || "").trim();
         if (!clean) { setNotice("Escribe algo antes de subir el insumo global."); return; }
@@ -1198,16 +1222,16 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-5 sm:py-8">
         {/* El header de marca (logo + nav) lo pone el shell (main.jsx); aquí solo el título de la
             vista + el estado de guardado, para no duplicar el encabezado. */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
             <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
             <button
               type="button"
               onClick={() => setGlobalOpen((v) => !v)}
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md bg-[#E8751A] px-3 py-1.5 text-sm font-semibold text-white"
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-[#E8751A] px-3 py-2 text-sm font-semibold text-white sm:w-auto"
               title="Escribe todo de corrido; el MD lo reparte entre los proyectos"
             >
               <Plus size={16} /> Subir insumo global
@@ -1242,10 +1266,10 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 <Send size={15} /> Guardar texto
               </button>
               <label className="inline-flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]">
-                <Paperclip size={15} /> Adjuntar imagen
+                <Paperclip size={15} /> Adjuntar archivo
                 <input
                   type="file"
-                  accept="image/*"
+                  accept=".md,.txt,image/*"
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
@@ -1254,7 +1278,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   }}
                 />
               </label>
-              <span className="text-xs text-[#8b8272]">Queda en “Insumos pendientes” hasta la corrida del MD.</span>
+              <span className="w-full text-xs text-[#8b8272] sm:w-auto">Escribe en el cuadro o adjunta un archivo. Queda en “Insumos pendientes” hasta la corrida del MD.</span>
             </div>
           </div>
         )}
@@ -1310,7 +1334,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             <p className="mt-1 text-xs text-[#8b8272]">Imágenes y textos que subiste durante el día. El análisis del MD diario los convierte en tareas; aquí solo puedes descargarlos o borrarlos.</p>
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {insumos.map((insumo) => (
-                <li key={insumo.id} className="flex items-center gap-3 rounded-md border border-[#E4DED6] bg-white p-2">
+                <li key={insumo.id} className="flex min-w-0 items-center gap-3 rounded-md border border-[#E4DED6] bg-white p-2">
                   {insumo.url && /imagen|image/i.test(`${insumo.kind} ${insumo.contentType}`) ? (
                     <img src={insumo.url} alt={insumo.fileName} className="h-12 w-12 shrink-0 rounded object-cover" />
                   ) : (
@@ -1318,7 +1342,11 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-semibold text-[#344054]">{insumo.fileName}</p>
-                    <p className="truncate text-xs text-[#8b8272]">{insumo.client || "Sin subproyecto"}</p>
+                    <p className="flex min-w-0 items-center gap-1 text-xs text-[#8b8272]">
+                      {insumo.companyId === "global"
+                        ? <span className="shrink-0 rounded-full bg-[#E8751A] px-1.5 py-0.5 text-[10px] font-bold text-white">GLOBAL</span>
+                        : <span className="truncate">{insumo.client || "Sin subproyecto"}</span>}
+                    </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {insumo.url && (
@@ -1351,6 +1379,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
 
             <CompanyPanel
               company={company}
+              companies={companies}
               tasks={tasks}
               people={people}
               newClientName={newClientName}
@@ -1541,6 +1570,7 @@ function TasksTable({
             key={task.id}
             task={task}
             company={companies.find((item) => item.id === task.companyId) || companies[0]}
+            companies={companies}
             people={people}
             onChangeTask={onChangeTask}
             onDeleteTask={onDeleteTask}
@@ -1701,10 +1731,17 @@ function contactFor(person, message, subject) {
   return { href: "", medium: "Sin medio" };
 }
 
-function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
+function ProjectTaskAccordion({ task, company, companies = [], people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [open, setOpen] = useState(false);
   const scopeOptions = company?.scope?.length ? company.scope : TASK_CATEGORIES;
+  // Opciones para MOVER la tarea: cada empresa + sus subproyectos activos.
+  const allCompanies = companies.length ? companies : (company ? [company] : []);
+  const locationOptions = [];
+  for (const c of allCompanies) {
+    const clients = (c.clients || []).filter((cl) => !c.archivedClients?.[cl]);
+    for (const cl of clients) locationOptions.push({ value: `${c.id}|||${cl}`, label: `${c.name} · ${cl}` });
+  }
   const assignedPerson = personById(people, task.assigneeId);
   const board = getProjectBoardConfig(company, task.client);
   const contactMessage = buildContactMessage(task, company);
@@ -1734,50 +1771,45 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
           {open ? (
             <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#17727A]">Editando tarea</span>
           ) : (
-            <span className="flex items-center gap-1 break-words">
-              {task.title}
-              <span className="ml-1 shrink-0 rounded-full bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-semibold text-[#17727A]">Ver detalle</span>
+            <span className="block break-words">{task.title}</span>
+          )}
+          {!open && (
+            <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
+              {task.category && (
+                <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
+                  {task.category}
+                </span>
+              )}
+              <span
+                className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
+                style={overdue
+                  ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
+                  : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
+              >
+                {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
+                {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
+              </span>
+              {task.dueDate && (
+                <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
+                  <CalendarDays size={11} />
+                  {displayDate(task.dueDate)}
+                </span>
+              )}
+              {assignedPerson && (
+                <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
+                  <UserRound size={11} />
+                  {assignedPerson.name}
+                </span>
+              )}
+              {task.status === "done" && task.workedHours != null && (
+                <span className="inline-flex items-center gap-1 rounded border border-[#A6D9C4] bg-[#E5F5EE] px-1.5 py-0.5 font-semibold text-[#0D7A4F]">
+                  <Clock size={11} />
+                  {task.workedHours} h
+                </span>
+              )}
             </span>
           )}
-          <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
-            {task.category && (
-              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
-                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
-                {task.category}
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
-              <CalendarDays size={11} />
-              Pub. {displayDate(task.createdAt)}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
-              <CalendarDays size={11} />
-              Vence {displayDate(task.dueDate)}
-            </span>
-            <span
-              className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
-              style={overdue
-                ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
-                : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
-            >
-              {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
-              {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
-            </span>
-            {task.status === "done" && task.workedHours != null && (
-              <span className="inline-flex items-center gap-1 rounded border border-[#A6D9C4] bg-[#E5F5EE] px-1.5 py-0.5 font-semibold text-[#0D7A4F]" title={`Horas laborales cumplidas${task.completedAt ? ` · terminada ${displayDate(task.completedAt)}` : ""}`}>
-                <Clock size={11} />
-                {task.workedHours} h cumplidas
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
-              <UserRound size={11} />
-              {assignedPerson?.name || "Sin asignar"}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
-              <Send size={11} />
-              {reportMedium}
-            </span>
-          </span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {board.url && (
@@ -1887,6 +1919,20 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
             {scopeOptions.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
           </select>
         </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
+          <select
+            value={`${task.companyId}|||${task.client}`}
+            onChange={(event) => { const [companyId, client] = event.target.value.split("|||"); onChangeTask(task.id, { companyId, client }); }}
+            className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]"
+            title="Mueve la tarea a otra empresa o subproyecto"
+          >
+            {!locationOptions.some((o) => o.value === `${task.companyId}|||${task.client}`) && (
+              <option value={`${task.companyId}|||${task.client}`}>{task.client || "Sin subproyecto"} (actual)</option>
+            )}
+            {locationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:grid-cols-[minmax(110px,1fr)_auto] sm:items-center">
           <div className="relative min-w-0">
             <UserRound className="pointer-events-none absolute left-2 top-1.5 text-[#667085]" size={13} />
@@ -2002,6 +2048,7 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
 
 function CompanyPanel({
   company,
+  companies = [],
   tasks = [],
   people = [],
   newClientName,
@@ -2210,7 +2257,7 @@ function CompanyPanel({
           </div>
         </div>
         )}
-        <div className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
+        <div className="min-w-0">
           {!sideOpen && (
             <button
               type="button"
@@ -2220,19 +2267,20 @@ function CompanyPanel({
               <ChevronLeft size={16} /> Subproyecto y contexto
             </button>
           )}
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <h3 className="text-sm font-semibold text-[#1D2939]">Proyectos y documentacion</h3>
+          <div className="mb-2 flex items-center gap-1.5">
+            <h3 className="text-sm font-semibold text-[#1D2939]">Proyectos y documentación</h3>
+            <span
+              className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-[#C8BFB3] text-[10px] font-bold leading-none text-[#8b8272]"
+              title="Sube .md, .txt o imágenes de menos de 1 MB. Si el archivo trae información útil, se crean tareas editables; si no, se descarta."
+            >
+              ?
+            </span>
           </div>
-          <div className="mt-2 space-y-2">
+          <div className="space-y-3">
             {active.length === 0 && (
               <div className="rounded-md border border-dashed border-[#C8BFB3] bg-white p-4 text-sm text-[#667085]">
-                Crea un subproyecto real para subir y analizar documentacion.
+                Crea un subproyecto real para subir y analizar documentación.
               </div>
-            )}
-            {active.length > 0 && (
-              <p className="rounded-md border border-[#E4DED6] bg-white p-2 text-xs text-[#667085]">
-                Regla: sube .md, .txt o imagenes de menos de 1 MB. Si el archivo trae informacion util, se crean tareas editables; si no, se descarta.
-              </p>
             )}
             {active.map((client) => {
               const projectTasks = (tasks || []).filter((task) => task.companyId === company.id && task.client === client);
@@ -2284,101 +2332,116 @@ function CompanyPanel({
                     Archivar
                   </button>
                 </div>
-                <div className="p-3">
-                  <label className="mt-2 inline-flex cursor-pointer items-center rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
-                    Subir insumo
-                    <input
-                      type="file"
-                      accept=".md,.txt,image/*"
-                      className="hidden"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) onUploadSourceDocument(client, file);
-                        event.target.value = "";
-                      }}
-                    />
-                  </label>
-<label className="mt-2 block">
-                    <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Descripcion general del proyecto</span>
-                    <textarea
-                      value={company.projectDescriptions?.[client] || ""}
-                      onChange={(event) => onUpdateProjectDescription(client, event.target.value)}
-                      rows={3}
-                      placeholder="Objetivo, alcance, contexto del cliente, responsables y notas generales del subproyecto"
-                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
-                    />
-                  </label>
-                  <div className="mt-2 grid gap-2 md:grid-cols-[140px_1fr]">
-                    <select
-                      value={getProjectBoardConfig(company, client).tool}
-                      onChange={(event) => onUpdateProjectBoard(client, { tool: event.target.value })}
-                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
+                <div className="p-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
+                      <Plus size={15} /> Subir insumo
+                      <input
+                        type="file"
+                        accept=".md,.txt,image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) onUploadSourceDocument(client, file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => onAddTaskToClient(client)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 py-2 text-sm font-semibold"
+                      style={{ borderColor: accent, color: accent }}
                     >
-                      {BOARD_TOOLS.map((tool) => <option key={tool}>{tool}</option>)}
-                    </select>
-                    <input
-                      value={getProjectBoardConfig(company, client).url}
-                      onChange={(event) => onUpdateProjectBoard(client, { url: event.target.value })}
-                      placeholder="Link del tablero o herramienta"
-                      className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
-                    />
-                  </div>
-                  {getProjectBoardConfig(company, client).url && (
-                    <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-semibold text-[#17727A]">
-                      Abrir link
-                    </a>
-                  )}
-                  <div className="mt-3 rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-semibold text-[#344054]">Contexto del subproyecto</p>
-                        <p className="text-xs text-[#667085]">Documentos para entender convenio, alcance y criterios.</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <label className="cursor-pointer rounded-md border border-[#D0D5DD] px-2.5 py-1.5 text-xs font-semibold text-[#344054]">
-                          Subir
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (file) onUploadContextDocument(client, file);
-                              event.target.value = "";
-                            }}
-                          />
-                        </label>
-                        <button type="button" onClick={() => onReadContextDocuments(client)} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
-                          Leer
-                        </button>
-                      </div>
-                    </div>
-                    {contextDocs.length > 0 && (
-                      <ul className="mt-2 space-y-1">
-                        {contextDocs.map((doc, index) => (
-                          <li key={`${doc.path}-${index}`} className="text-xs text-[#475467]">{doc.label}</li>
-                        ))}
-                      </ul>
+                      <Plus size={15} /> Nueva tarea
+                    </button>
+                    {getProjectBoardConfig(company, client).url && (
+                      <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">
+                        <ExternalLink size={15} /> Abrir {getProjectBoardConfig(company, client).tool}
+                      </a>
                     )}
-                    {readableDocs.length > 0 && (
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-xs font-semibold text-[#17727A]">Ver documentos leidos ({readableDocs.length})</summary>
-                        <div className="mt-2 space-y-2">
-                          {readableDocs.map((doc) => (
-                            <article key={doc.path} className="rounded-md border border-[#E4DED6] bg-white p-2">
-                              <p className="text-xs font-semibold text-[#344054]">{doc.label} - {doc.scope}</p>
-                              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-[#F7F4EF] p-2 text-xs text-[#475467]">{doc.text}</pre>
-                            </article>
-                          ))}
+                  </div>
+
+                  <details className="border-t border-[#E4DED6] pt-2">
+                    <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-[#667085]">
+                      <ChevronRight size={15} className="ops-caret" />
+                      Ajustes y contexto del proyecto
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Descripción general del proyecto</span>
+                        <textarea
+                          value={company.projectDescriptions?.[client] || ""}
+                          onChange={(event) => onUpdateProjectDescription(client, event.target.value)}
+                          rows={3}
+                          placeholder="Objetivo, alcance, contexto del cliente, responsables y notas generales del subproyecto"
+                          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
+                        />
+                      </label>
+                      <div className="grid gap-2 md:grid-cols-[140px_1fr]">
+                        <select
+                          value={getProjectBoardConfig(company, client).tool}
+                          onChange={(event) => onUpdateProjectBoard(client, { tool: event.target.value })}
+                          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
+                        >
+                          {BOARD_TOOLS.map((tool) => <option key={tool}>{tool}</option>)}
+                        </select>
+                        <input
+                          value={getProjectBoardConfig(company, client).url}
+                          onChange={(event) => onUpdateProjectBoard(client, { url: event.target.value })}
+                          placeholder="Link del tablero o herramienta"
+                          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <p className="text-xs font-semibold text-[#344054]">Documentos de contexto</p>
+                        <div className="flex flex-wrap gap-2">
+                          <label className="cursor-pointer rounded-md border border-[#D0D5DD] px-2.5 py-1.5 text-xs font-semibold text-[#344054]">
+                            Subir
+                            <input
+                              type="file"
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                if (file) onUploadContextDocument(client, file);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                          <button type="button" onClick={() => onReadContextDocuments(client)} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
+                            Leer
+                          </button>
                         </div>
-                      </details>
-                    )}
-                  </div>
-                  <details className="mt-3 rounded-md border border-[#E4DED6] bg-white p-2" style={{ borderLeft: `3px solid ${accent}` }}>
-                    <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-xs font-semibold" style={{ color: accent }}>Tareas del subproyecto</p>
-                        <p className="text-xs text-[#667085]">Abrir para ver todas las tareas.</p>
                       </div>
+                      {contextDocs.length > 0 && (
+                        <ul className="space-y-1">
+                          {contextDocs.map((doc, index) => (
+                            <li key={`${doc.path}-${index}`} className="text-xs text-[#475467]">{doc.label}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {readableDocs.length > 0 && (
+                        <details>
+                          <summary className="cursor-pointer text-xs font-semibold text-[#17727A]">Ver documentos leídos ({readableDocs.length})</summary>
+                          <div className="mt-2 space-y-2">
+                            {readableDocs.map((doc) => (
+                              <article key={doc.path}>
+                                <p className="text-xs font-semibold text-[#344054]">{doc.label} - {doc.scope}</p>
+                                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-[#F7F4EF] p-2 text-xs text-[#475467]">{doc.text}</pre>
+                              </article>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  </details>
+
+                  <details open className="border-t pt-2" style={{ borderTopColor: `${accent}66` }}>
+                    <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <ChevronRight size={16} className="ops-caret" style={{ color: accent }} />
+                        <span className="text-xs font-semibold" style={{ color: accent }}>Tareas del subproyecto</span>
+                      </span>
                       <span className="flex flex-wrap gap-1">
                         <span className="rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
                         <span className="rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
@@ -2386,19 +2449,12 @@ function CompanyPanel({
                       </span>
                     </summary>
                     <div className="mt-2 space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => onAddTaskToClient(client)}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed px-3 py-2 text-xs font-semibold"
-                        style={{ borderColor: accent, color: accent, background: `${accent}0F` }}
-                      >
-                        <Plus size={14} /> Nueva tarea en {client}
-                      </button>
                       {projectTasks.length ? projectTasks.map((task) => (
                         <ProjectTaskAccordion
                           key={task.id}
                           task={task}
                           company={company}
+                          companies={companies}
                           people={companyPeople}
                           onChangeTask={onChangeTask}
                           onDeleteTask={onDeleteTask}
