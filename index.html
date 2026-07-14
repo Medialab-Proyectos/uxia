@@ -66,6 +66,48 @@
         outline-offset: 2px;
         border-radius: 4px;
       }
+
+      /* Modo oscuro del Centro de Operaciones: remapea sus colores fijos de
+         Tailwind cuando el contenedor tiene data-ops-theme="dark". */
+      /* Fondos — el propio contenedor raíz lleva bg-[#F7F4EF]/text-[#202124], por eso
+         se incluye el selector directo además del descendiente (si no, el fondo de la
+         página se quedaba claro en modo oscuro). */
+      /* Paleta oscura IDÉNTICA a la del Radar (RadarUXIA DARK): negro frío, no café.
+         bg #0E1116 · panel #151B23 · panelHi #1B232E · border #28313E · text #E8EDF3
+         · dim #8B97A6 · faint #5B6675. */
+      [data-ops-theme="dark"],
+      [data-ops-theme="dark"] .bg-\[\#F7F4EF\] { background-color: #0E1116 !important; }
+      [data-ops-theme="dark"] { color: #E8EDF3 !important; }
+      [data-ops-theme="dark"] .bg-white,
+      [data-ops-theme="dark"] .bg-\[\#FFFCF7\] { background-color: #151B23 !important; }
+      [data-ops-theme="dark"] .bg-\[\#F2F4F7\] { background-color: #1B232E !important; }
+      [data-ops-theme="dark"] .bg-\[\#FFF7E6\],
+      [data-ops-theme="dark"] .bg-\[\#FFF2CC\] { background-color: #2a2410 !important; }
+      [data-ops-theme="dark"] .bg-\[\#EAF4F2\] { background-color: #10262a !important; }
+      [data-ops-theme="dark"] .bg-\[\#FEF3F2\] { background-color: #2b1614 !important; }
+      /* Bordes */
+      [data-ops-theme="dark"] .border-\[\#D0D5DD\],
+      [data-ops-theme="dark"] .border-\[\#E4DED6\],
+      [data-ops-theme="dark"] .border-\[\#D9D2C7\] { border-color: #28313E !important; }
+      [data-ops-theme="dark"] .border-\[\#C8BFB3\] { border-color: #3A4553 !important; }
+      /* Texto */
+      [data-ops-theme="dark"] .text-\[\#1D2939\],
+      [data-ops-theme="dark"] .text-\[\#202124\] { color: #E8EDF3 !important; }
+      [data-ops-theme="dark"] .text-\[\#344054\] { color: #D2DAE3 !important; }
+      [data-ops-theme="dark"] .text-\[\#475467\],
+      [data-ops-theme="dark"] .text-\[\#667085\] { color: #8B97A6 !important; }
+      [data-ops-theme="dark"] .text-\[\#8b8272\],
+      [data-ops-theme="dark"] .text-\[\#98A2B3\] { color: #5B6675 !important; }
+      [data-ops-theme="dark"] .text-\[\#17727A\] { color: #4FD1C5 !important; }
+      [data-ops-theme="dark"] .text-\[\#B42318\] { color: #f08a80 !important; }
+      [data-ops-theme="dark"] .text-\[\#B76E00\],
+      [data-ops-theme="dark"] .text-\[\#8A5700\] { color: #e6a94a !important; }
+      /* Inputs/selects/textarea: fondo oscuro y texto claro */
+      [data-ops-theme="dark"] input,
+      [data-ops-theme="dark"] select,
+      [data-ops-theme="dark"] textarea { background-color: #1B232E !important; color: #E8EDF3 !important; }
+      [data-ops-theme="dark"] input::placeholder,
+      [data-ops-theme="dark"] textarea::placeholder { color: #5B6675 !important; }
     </style>
   </head>
   <body>

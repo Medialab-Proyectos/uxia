@@ -125,6 +125,7 @@ export async function loadState(token) {
       projectLinks: { ...asObject(company.project_links), ...projectLinks },
       projectDescriptions: { ...asObject(company.project_descriptions), ...projectDescriptions },
       contextDocuments: asObject(company.context_documents), logo: company.logo || null,
+      projectImages: asObject(company.project_images),
       connectors: asArray(company.connectors),
     };
   });
@@ -151,6 +152,7 @@ export async function saveState(token, state) {
     workspaces: asArray(c.workspaces), archived_clients: asObject(c.archivedClients),
     project_links: asObject(c.projectLinks), project_descriptions: asObject(c.projectDescriptions),
     context_documents: asObject(c.contextDocuments), logo: c.logo || null, connectors: asArray(c.connectors),
+    project_images: asObject(c.projectImages),
     updated_at: updatedAt,
   }));
   if (companyRows.length) {
@@ -254,6 +256,11 @@ export async function saveTaskAttachment(token, { companyId, client, file }) {
 }
 export async function saveCompanyLogo(token, { companyId, file }) {
   const path = `logos/${slug(companyId)}/${Date.now()}-${safeName(file.name)}`;
+  await uploadToBucket(token, path, file, file.type || guessContentType(file.name));
+  return { label: file.name, path, url: publicUrl(path), storage: "supabase", uploadedAt: new Date().toISOString() };
+}
+export async function saveProjectImage(token, { companyId, client, file }) {
+  const path = `project-images/${slug(companyId)}/${client ? slug(client) : "_empresa"}/${Date.now()}-${safeName(file.name)}`;
   await uploadToBucket(token, path, file, file.type || guessContentType(file.name));
   return { label: file.name, path, url: publicUrl(path), storage: "supabase", uploadedAt: new Date().toISOString() };
 }

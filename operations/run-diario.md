@@ -16,13 +16,26 @@ da seguimiento. Nada depende de servidores extra.
 
 ### 1) Centro de Operaciones — insumos → tareas
 ```bash
-npm run daily:fetch          # baja insumos pendientes de Supabase (descarga imágenes)
+npm run daily:fetch          # baja insumos pendientes de Supabase (imágenes Y textos)
 ```
-- Claude lee `operations/_run/insumos.json` + las imágenes, arma tareas claras y
-  escribe `operations/_run/tasks.json` (`{tasks, processedInsumoIds, keepFileInsumoIds}`).
+- Los insumos de **texto** (`.md`/`.txt` subidos por subproyecto) llegan con
+  `kind:"texto"` y su contenido en `raw_text`; las **imágenes** con `kind:"imagen"`.
+  **Nada se convierte en tarea al subirlo** — todo queda pendiente hasta esta corrida.
+- Claude lee `operations/_run/insumos.json` (texto en `raw_text` + las imágenes
+  descargadas), arma tareas claras y escribe `operations/_run/tasks.json`
+  (`{tasks, processedInsumoIds, keepFileInsumoIds}`).
 ```bash
 npm run daily:push           # sube las tareas y retira los insumos procesados
 ```
+- **Si un archivo NO se puede leer o no genera tareas, AVISAR al usuario** (no
+  descartarlo en silencio). Decirle explícitamente cuál es el caso:
+  - **Corrupto / ilegible:** no se pudo abrir, imagen borrosa, o texto sin sentido
+    (p. ej. transcripción automática cruda con fragmentos sueltos). Pedir que lo
+    vuelva a subir con mejor calidad o en otro formato.
+  - **Vacío / sin nada accionable:** se leyó bien pero no hay acuerdos, pendientes,
+    responsables ni fechas. Confirmar que no había tareas.
+  - En ambos casos, **NO inventar tareas** y **preguntar** si descartar el insumo
+    (con o sin conservar el archivo) o dejarlo pendiente. Solo retirarlo tras su OK.
 - **Ruteo de imágenes:** los insumos con `companyId` normal → tareas del Centro
   Operativo. Los insumos con **`companyId: "radar"`** (subidos en Radar → "Subir
   propuesta") → Claude los lee y los agrega a **Propuestas/Empleos** (bloques 2 y 3),
@@ -54,10 +67,13 @@ levantan capital, buscan agencia/aliado/partner de diseño**, o edtech/comunidad
   como entradas tipo "listado" para explorar directo. Bajan el score pero dan volumen.
 - Curar en `operations/_run/vacantes.json` (o un archivo aparte y `radar:jobs -- ruta`).
 
-### 4) Imágenes subidas en el Radar ("Subir propuesta")
-- `daily:fetch` ya baja los insumos con `companyId:"radar"`. Claude lee cada imagen
-  (captura de una oferta/post), la convierte en propuesta o vacante, la añade al JSON
-  correspondiente y **borra el insumo** con `opsData.deleteInsumo`.
+### 4) Insumos subidos en el Radar ("Subir propuesta")
+- `daily:fetch` ya baja los insumos con `companyId:"radar"` (imagen **o texto**).
+  Claude lee cada imagen o el `rawText`, lo convierte en propuesta o vacante (respeta
+  la prioridad Colombia-remoto), lo añade al JSON correspondiente y **borra el insumo**
+  con `opsData.deleteInsumo`.
+- **Frescura de empleos:** preferir ofertas recientes y listados siempre vigentes; las
+  tarjetas muestran "Capturada hace Nd" y avisan "puede estar vencida" a los >15 días.
 
 ### Guardar propuestas + empleos (un comando)
 ```bash

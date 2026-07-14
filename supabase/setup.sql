@@ -48,6 +48,9 @@ create index if not exists vacantes_estado_idx on vacantes (estado, score desc);
 -- 3) Método de conexión por persona ---------------------------------------------
 alter table people add column if not exists contact_method text default 'auto';
 
+-- 3b) Imagen por subproyecto (jsonb en la empresa) -------------------------------
+alter table companies add column if not exists project_images jsonb not null default '{}'::jsonb;
+
 -- 4) Políticas RLS: usuario autenticado gestiona todo (herramienta interna) -------
 do $$
 declare t text;

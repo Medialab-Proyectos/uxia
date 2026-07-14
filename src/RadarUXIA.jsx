@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import logoUrl from "./logos/logouxiaoscuro.fw.png";
+import { Heart, ExternalLink, Trash2, Upload, Briefcase, Globe, MapPin, X } from "lucide-react";
+import logoLight from "./logos/logouxia.fw.png";
+import logoDark from "./logos/logouxiaoscuro.fw.png";
 import * as opsData from "./opsData.js";
 
 // ─── Almacenamiento local (reemplaza window.storage del artefacto) ──────────
@@ -79,19 +81,21 @@ async function callClaude(body) {
 }
 
 // ─── Paleta ────────────────────────────────────────────────────────────────
-const C = {
-  bg: "#F7F4EF",
-  panel: "#FFFCF7",
-  panelHi: "#F5F0E9",
-  border: "#E7E0D5",
-  text: "#1D2939",
-  dim: "#667085",
-  faint: "#8b8272",
-  amber: "#E8751A",
-  cyan: "#2AABB3",
-  coral: "#C0362C",
-  green: "#0D8F7D",
+const LIGHT = {
+  bg: "#F7F4EF", panel: "#FFFCF7", panelHi: "#F5F0E9", border: "#E7E0D5",
+  text: "#1D2939", dim: "#667085", faint: "#8b8272",
+  amber: "#E8751A", cyan: "#2AABB3", coral: "#C0362C", green: "#0D8F7D",
 };
+const DARK = {
+  bg: "#0E1116", panel: "#151B23", panelHi: "#1B232E", border: "#28313E",
+  text: "#E8EDF3", dim: "#8B97A6", faint: "#5B6675",
+  amber: "#E8751A", cyan: "#2AABB3", coral: "#FF6B57", green: "#4ADE80",
+};
+let _radarTheme = "light";
+try { _radarTheme = localStorage.getItem("radar-theme") || "light"; } catch { _radarTheme = "light"; }
+// C es reactivo al tema vía Proxy: cada uso de C.x lee la paleta actual, y un
+// setState en el toggle fuerza el re-render de todo el árbol.
+const C = new Proxy({}, { get: (_t, k) => (_radarTheme === "dark" ? DARK : LIGHT)[k] });
 
 const FONT = {
   display: "'Poppins', 'Segoe UI Semibold', sans-serif",
@@ -111,6 +115,13 @@ function jobRank(j) {
   if (latam && remote) return 2;
   if (latam) return 3;
   return 4;
+}
+
+// Días desde que se capturó (created_at de Supabase). Ofertas viejas pueden estar
+// vencidas — se avisa en la tarjeta.
+function diasDesde(createdAt) {
+  if (!createdAt) return null;
+  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000);
 }
 
 // Filtro por periodicidad (cuándo se capturó, según created_at de Supabase).
@@ -446,7 +457,8 @@ function OutreachBox({ item, mode, message, loading, copied, onGenerate, onCopy 
 }
 
 // ─── App ───────────────────────────────────────────────────────────────────
-export default function RadarUXIA({ token = "" } = {}) {
+export default function RadarUXIA({ token = "", theme = "light" } = {}) {
+  _radarTheme = theme === "dark" ? "dark" : "light";
   const [tab, setTab] = useState("oportunidades");
   const [showNotif, setShowNotif] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -460,6 +472,8 @@ export default function RadarUXIA({ token = "" } = {}) {
   const [oppQuery, setOppQuery] = useState("");
   const [jobQuery, setJobQuery] = useState("");
   const [periodo, setPeriodo] = useState("todas");
+  const [panelItem, setPanelItem] = useState(null); // { item, kind } abierto en el panel lateral (solo web)
+  const [iframeLoaded, setIframeLoaded] = useState(false); // el iframe del panel logró cargar
   const [radarInsumos, setRadarInsumos] = useState([]);
   const [uploadingInsumo, setUploadingInsumo] = useState(false);
   const [query, setQuery] = useState("UX UI product designer remoto");
@@ -894,15 +908,33 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     try { await opsData.deleteInsumo(token, id); } catch { /* se refresca igual */ }
     loadRadarInsumos();
   };
+  const uploadRadarText = async () => {
+    const text = pasted.trim();
+    if (!text) return;
+    if (!opsData.opsDataReady()) { setParseError("Configura Supabase para subir texto."); return; }
+    setUploadingInsumo(true);
+    setParseError("");
+    try {
+      const file = new File([text], `propuesta-${Date.now()}.txt`, { type: "text/plain" });
+      await opsData.saveInsumo(token, { companyId: "radar", client: "propuesta", file, kind: "texto", rawText: text });
+      setPasted("");
+      await loadRadarInsumos();
+    } catch (e) {
+      setParseError(`No pude subir el texto. ${e.message || ""}`);
+    } finally {
+      setUploadingInsumo(false);
+    }
+  };
 
   useEffect(() => { loadRadarInsumos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const visible = jobs
     .filter((j) => {
-      if (filter === "todas") return j.estado !== "descartada";
-      if (filter === "remotas") return j.remoto === "remoto" && j.estado !== "descartada";
-      if (filter === "español") return j.idioma === "español" && j.estado !== "descartada";
-      return j.estado === filter;
+      if (filter === "todas") return true;
+      if (filter === "remotas") return j.remoto === "remoto";
+      if (filter === "español") return j.idioma === "español";
+      if (filter === "megusta") return j.estado === "me_interesa";
+      return true;
     })
     .filter((j) => withinPeriod(j.createdAt, periodo))
     .filter((j) => {
@@ -914,13 +946,57 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
   const stats = {
     total: jobs.length,
     remotas: jobs.filter((j) => j.remoto === "remoto").length,
-    aplicadas: jobs.filter((j) => j.estado === "aplicada").length,
-    pendientes: jobs.filter((j) => j.estado !== "aplicada" && j.estado !== "descartada").length,
+    colombia: jobs.filter((j) => j.esColombia).length,
+    megusta: jobs.filter((j) => j.estado === "me_interesa").length,
   };
+
+  // En WEB (pantalla ancha) la oferta/propuesta se abre en el panel lateral con su DETALLE
+  // (los portales bloquean el iframe, así que mostramos lo que ya tenemos + botón "Abrir en el
+  // sitio"). En móvil se deja que el enlace abra normalmente en otra pestaña.
+  const openOffer = (e, item, kind) => {
+    if (!item) return;
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      e.preventDefault();
+      setIframeLoaded(false);
+      setPanelItem({ item, kind });
+    }
+  };
+
+  // Abre la url en una ventana emergente REUTILIZABLE (nombre fijo "radarSitio"): siempre es la
+  // MISMA ventana y se recarga con la nueva URL en cada propuesta (no abre muchas). Cierra el panel.
+  const abrirEnSitio = (url) => {
+    if (!url) return;
+    const w = 1100, h = 820;
+    const left = typeof window !== "undefined" ? Math.max(0, Math.round((window.screen.width - w) / 2)) : 0;
+    const top = typeof window !== "undefined" ? Math.max(0, Math.round((window.screen.height - h) / 2)) : 0;
+    window.open(url, "radarSitio", `width=${w},height=${h},left=${left},top=${top}`);
+    setPanelItem(null);
+  };
+
+  // Fallback: si el iframe no logra cargar en unos segundos (el sitio bloquea el embebido o no
+  // responde), se abre la página en la ventana reutilizable y se cierra el panel. Los sitios que
+  // SÍ permiten iframe (blogs, notas) disparan onLoad y cancelan este fallback.
+  useEffect(() => {
+    const url = panelItem?.item?.url;
+    if (!url) return;
+    const t = setTimeout(() => {
+      setIframeLoaded((loaded) => {
+        if (!loaded) abrirEnSitio(url);
+        return loaded;
+      });
+    }, 4500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelItem]);
 
   // Listas alternas "Me interesa" / "No me interesa".
   const interesSi = interesList.filter((x) => x.interes === "si");
   const interesNo = interesList.filter((x) => x.interes === "no");
+
+  // "Me gusta" reales (persistido en Supabase, estado === "me_interesa").
+  const likedJobs = jobs.filter((j) => j.estado === "me_interesa");
+  const likedOpps = oppResults.filter((o) => o.estado === "me_interesa");
+  const likedCount = likedJobs.length + likedOpps.length;
 
   // Notificaciones: vacantes sin acción (ni aplicada ni descartada) por varios días.
   const staleJobs = jobs
@@ -994,39 +1070,43 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
       <style>{`
         *:focus-visible { outline: 2px solid #E8751A; outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+        @keyframes radarSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
       `}</style>
 
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Encabezado */}
-        <header className="mb-8">
-          <img
-            src={logoUrl}
-            alt="Radar UX·IA"
-            className="mb-3"
-            style={{ height: 48, width: "auto", display: "block" }}
-          />
-          <p className="text-sm" style={{ color: C.dim }}>
-            Vacantes UX/UI · prioridad: español + remoto · IA como bono
-          </p>
-          <p className="text-xs mt-0.5" style={{ color: C.faint }}>
-            Una idea de{" "}
-            <a
-              href="https://medialab.design/"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: C.amber, textDecoration: "none" }}
-            >
-              MediaLab Ingeniería
-            </a>
-          </p>
+        <header className="mb-8 flex items-start justify-between gap-3">
+          <div>
+            <img
+              src={theme === "dark" ? logoDark : logoLight}
+              alt="Radar UX·IA"
+              className="mb-3"
+              style={{ height: 44, width: "auto", display: "block" }}
+            />
+            <p className="text-sm" style={{ color: C.dim }}>
+              Empleos UX/UI · prioridad: Colombia + remoto + español
+            </p>
+          </div>
+          {/* Subir propuesta: acción propia, junto al logo (fuera de las pestañas). */}
+          <button
+            onClick={() => setTab("importar")}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: tab === "importar" ? C.panelHi : C.panel,
+              border: `1px solid ${tab === "importar" ? C.amber : C.border}`,
+              color: tab === "importar" ? C.amber : C.text,
+              fontFamily: FONT.display,
+            }}
+          >
+            <Upload size={15} /> Subir propuesta
+          </button>
         </header>
 
         <nav className="flex gap-1 mb-6 p-1 rounded-md overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
           {[
             ["oportunidades", "Propuestas · MediaLab"],
             ["tablero", `Empleos${jobs.length ? ` · ${jobs.length}` : ""}`],
-            ["interes", `Me gusta${interesSi.length ? ` · ${interesSi.length}` : ""}`],
-            ["importar", "Subir propuesta"],
+            ["interes", `Me gusta${likedCount ? ` · ${likedCount}` : ""}`],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1044,21 +1124,23 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
           ))}
         </nav>
 
-        {/* ── Indicadores del tablero (siempre visibles) ── */}
+        {/* ── Indicadores del tablero (solo en Empleos) ── */}
+        {tab === "tablero" && (
         <div className="mb-4">
           <div className="grid grid-cols-4 gap-2">
             {[
-              ["Capturadas", stats.total, C.text],
-              ["Remotas", stats.remotas, C.green],
-              ["Aplicadas", stats.aplicadas, C.cyan],
-              ["Pendientes", stats.pendientes, stats.pendientes ? C.amber : C.faint],
-            ].map(([label, val, color]) => (
+              [Briefcase, "Empleos", stats.total, C.text],
+              [Globe, "Remotos", stats.remotas, C.green],
+              [MapPin, "Colombia", stats.colombia, C.amber],
+              [Heart, "Me gusta", stats.megusta, stats.megusta ? C.coral : C.faint],
+            ].map(([Icon, label, val, color]) => (
               <button
                 key={label}
                 onClick={() => setTab("tablero")}
                 className="rounded-md px-2 py-2.5 text-center"
                 style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
               >
+                <Icon size={15} style={{ color, margin: "0 auto 3px" }} />
                 <div className="text-lg font-bold" style={{ color, fontFamily: FONT.display }}>{val}</div>
                 <div className="text-[10px] leading-tight" style={{ color: C.faint }}>{label}</div>
               </button>
@@ -1116,6 +1198,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             </div>
           )}
         </div>
+        )}
 
         {/* ── RADAR EN VIVO ── */}
         {tab === "radar" && (
@@ -1345,55 +1428,43 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {/* ── OPORTUNIDADES (prospección) ── */}
         {tab === "oportunidades" && (
           <section>
-            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
+            <div className="rounded-md p-4 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
               <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
-                Radar comercial · señales de demanda
+                Propuestas de negocio para MediaLab
               </h2>
-              <p className="text-sm mb-3 leading-relaxed" style={{ color: C.dim }}>
-                Aquí no buscas empleo: buscas clientes. El radar rastrea <strong style={{ color: C.text }}>empresas y personas</strong>
-                {" "}(no solo CEOs o líderes): fundadores, equipos, marcas o profesionales que expresan retos o
-                dolores de UX, que buscan consultoría, agencia, aliado o partner de diseño, o que quieren aprender
-                producto. Ideal para ofrecer los servicios de MediaLab Ingeniería. Cubre lo indexado públicamente en español.
+              <p className="text-sm leading-relaxed" style={{ color: C.dim }}>
+                Empresas y personas que expresan retos de UX/producto o buscan agencia/aliado.
+                El MD las llena por dentro; aquí las revisas, buscas y les das seguimiento.
               </p>
-              <button
-                onClick={scanOpportunities}
-                disabled={oppScanning}
-                className="px-5 py-2.5 rounded-md text-sm font-semibold w-full"
-                style={{
-                  backgroundColor: C.coral,
-                  color: "#1A0805",
-                  opacity: oppScanning ? 0.6 : 1,
-                  fontFamily: FONT.display,
-                }}
-              >
-                {oppScanning ? "Actualizando…" : "Actualizar oportunidades"}
-              </button>
               {oppError && <p className="text-sm mt-2" style={{ color: C.coral }}>{oppError}</p>}
             </div>
 
-            {/* Búsquedas manuales de prospección */}
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: C.faint, fontFamily: FONT.display }}>
-              Búsquedas manuales de prospección
-            </h3>
-            <div className="space-y-2 mb-6">
-              {buildOpportunitySources(query).map((s) => (
-                <div key={s.name} className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}22` }}>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm" style={{ color: C.text, fontFamily: FONT.display }}>{s.name}</span>
-                      <Badge color={C.coral} bg={`${C.coral}14`}>{s.tag}</Badge>
+            {/* Búsquedas manuales de prospección (desplegable, igual que en Empleos) */}
+            <details className="rounded-md mb-6" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3">
+                <span className="text-sm font-semibold" style={{ fontFamily: FONT.display, color: C.text }}>Búsquedas manuales de prospección</span>
+                <span className="text-xs" style={{ color: C.faint }}>▾</span>
+              </summary>
+              <div className="px-4 pb-4 space-y-2">
+                {buildOpportunitySources(query).map((s) => (
+                  <div key={s.name} className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3" style={{ backgroundColor: C.bg, border: `1px solid ${C.coral}22` }}>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm" style={{ color: C.text, fontFamily: FONT.display }}>{s.name}</span>
+                        <Badge color={C.coral} bg={`${C.coral}14`}>{s.tag}</Badge>
+                      </div>
+                      <p className="text-xs mt-0.5" style={{ color: C.dim }}>{s.desc}</p>
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: C.dim }}>{s.desc}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => copyLink(s.url, s.name)} className="text-xs px-2.5 py-1.5 rounded-md font-medium" style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}>
+                        {copied === s.name ? "Copiado ✓" : "Copiar"}
+                      </button>
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-sm" style={{ color: C.coral, textDecoration: "none" }}>Abrir →</a>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => copyLink(s.url, s.name)} className="text-xs px-2.5 py-1.5 rounded-md font-medium" style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}>
-                      {copied === s.name ? "Copiado ✓" : "Copiar"}
-                    </button>
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-sm" style={{ color: C.coral, textDecoration: "none" }}>Abrir →</a>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </details>
 
             {/* Resultados de oportunidades */}
             {oppResults.length > 0 && (
@@ -1437,7 +1508,25 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                             {o.persona} · {o.fuente}
                           </p>
                         </div>
-                        <span className="shrink-0 text-xs" style={{ color: C.faint }}>▾</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            onClick={(e) => { e.preventDefault(); updateOppEstado(o.id, o.estado === "me_interesa" ? "nueva" : "me_interesa"); }}
+                            title={o.estado === "me_interesa" ? "Quitar me gusta" : "Me gusta"}
+                            className="inline-flex items-center justify-center rounded-md"
+                            style={{ width: 34, height: 34, backgroundColor: o.estado === "me_interesa" ? C.coral : `${C.coral}14`, color: o.estado === "me_interesa" ? "#fff" : C.coral, border: `1px solid ${C.coral}44` }}
+                          >
+                            <Heart size={16} fill={o.estado === "me_interesa" ? "#fff" : "none"} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.preventDefault(); removeOpp(o.id); }}
+                            title="Eliminar"
+                            className="inline-flex items-center justify-center rounded-md"
+                            style={{ width: 34, height: 34, color: C.coral, border: `1px solid ${C.coral}33` }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          <span className="text-xs" style={{ color: C.faint }}>▾</span>
+                        </div>
                       </summary>
                       <div className="px-4 pb-4">
                         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1451,43 +1540,11 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           <p className="text-xs mt-1 leading-relaxed" style={{ color: C.dim }}>Encaje: {o.encaje}</p>
                         )}
                         <ContactLine contacto={o.contacto} />
-                        <OutreachBox
-                          item={o}
-                          mode="lead"
-                          message={outreachMessages[o.id]}
-                          loading={outreachLoading === o.id}
-                          copied={copied === `msg-${o.id}`}
-                          onGenerate={() => generateOutreach(o, "lead")}
-                          onCopy={(text) => copyLink(text, `msg-${o.id}`)}
-                        />
-                        <div className="flex gap-2 mt-3 flex-wrap items-center">
-                          {o.url && (
-                            <a href={o.url} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}44`, textDecoration: "none" }}>
-                              Ver publicación →
-                            </a>
-                          )}
-                          <button
-                            onClick={() => updateOppEstado(o.id, o.estado === "me_interesa" ? "nueva" : "me_interesa")}
-                            className="text-xs px-3 py-1 rounded-md font-medium"
-                            style={{ backgroundColor: o.estado === "me_interesa" ? C.green : `${C.green}14`, color: o.estado === "me_interesa" ? "#ffffff" : C.green, border: `1px solid ${C.green}55` }}
-                          >
-                            {o.estado === "me_interesa" ? "★ Me interesa" : "Me interesa"}
-                          </button>
-                          <button
-                            onClick={() => updateOppEstado(o.id, "descartada")}
-                            className="text-xs px-3 py-1 rounded-md font-medium"
-                            style={{ color: C.dim, border: `1px solid ${C.border}` }}
-                          >
-                            Descartar
-                          </button>
-                          <button
-                            onClick={() => removeOpp(o.id)}
-                            className="text-xs px-3 py-1 rounded-md font-medium"
-                            style={{ color: C.coral, border: `1px solid ${C.coral}33` }}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
+                        {o.url && (
+                          <a href={o.url} target="_blank" rel="noopener noreferrer" onClick={(e) => openOffer(e, o, "propuesta")} className="inline-flex items-center gap-1 text-xs mt-3 px-3 py-1.5 rounded-md font-medium" style={{ color: C.cyan, border: `1px solid ${C.cyan}44`, textDecoration: "none" }}>
+                            <ExternalLink size={14} /> Ver publicación
+                          </a>
+                        )}
                       </div>
                     </details>
                       ))}
@@ -1502,77 +1559,41 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {/* ── ME INTERESA (lista alterna) ── */}
         {tab === "interes" && (
           <section>
-            <div className="rounded-md p-5 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.green}33` }}>
-              <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>
-                Me interesa · lista alterna
-              </h2>
+            <div className="rounded-md p-4 mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.coral}33` }}>
+              <h2 className="font-semibold mb-1" style={{ fontFamily: FONT.display }}>Me gusta</h2>
               <p className="text-sm leading-relaxed" style={{ color: C.dim }}>
-                Marca cada resultado de búsqueda como «Me interesa» o «No me interesa». Aquí quedan
-                separados de tu tablero para revisarlos después. Puedes moverlos al tablero cuando decidas.
+                Propuestas y empleos que marcaste con ♥. Se guardan en Supabase (compartido entre equipos).
+                Toca ♥ de nuevo para quitarlo, o 🗑 para eliminarlo.
               </p>
             </div>
 
-            {interesList.length === 0 ? (
+            {likedCount === 0 ? (
               <div className="rounded-md p-8 text-center" style={{ backgroundColor: C.panel, border: `1px dashed ${C.border}` }}>
-                <p className="text-sm mb-1" style={{ color: C.dim }}>Aún no has marcado resultados.</p>
-                <p className="text-xs" style={{ color: C.faint }}>
-                  En «Buscar», usa «Me interesa» / «No me interesa» en cada oferta.
-                </p>
+                <p className="text-sm mb-1" style={{ color: C.dim }}>Aún no marcaste nada con ♥.</p>
+                <p className="text-xs" style={{ color: C.faint }}>En Propuestas o Empleos, toca el corazón de una tarjeta.</p>
               </div>
             ) : (
-              <>
+              <div className="space-y-3">
                 {[
-                  { title: "Me interesan", color: C.green, items: interesSi },
-                  { title: "No me interesan", color: C.coral, items: interesNo },
-                ].filter((g) => g.items.length > 0).map((group) => (
-                  <div key={group.title} className="mb-6">
-                    <h3 className="text-sm font-semibold mb-2" style={{ color: group.color, fontFamily: FONT.display }}>
-                      {group.title} · {group.items.length}
-                    </h3>
-                    <div className="space-y-3">
-                      {group.items.map((j) => (
-                        <article key={j.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, opacity: j.interes === "no" ? 0.6 : 1 }}>
-                          <div className="flex gap-3">
-                            <ScoreRing score={j.score} />
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-sm leading-snug" style={{ fontFamily: FONT.display }}>{j.titulo}</h3>
-                              <p className="text-xs mt-0.5" style={{ color: C.dim }}>
-                                {j.empresa} · {j.fuente} · {j.ubicacion}
-                              </p>
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {j.esColombia && <Badge color={C.amber} bg={`${C.amber}14`}>Colombia</Badge>}
-                                {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
-                                {j.idioma === "español" && <Badge color={C.cyan} bg={`${C.cyan}14`}>Español</Badge>}
-                                {j.fechaPublicacion && <Badge color={C.faint} bg={`${C.faint}14`}>Publicada: {j.fechaPublicacion}</Badge>}
-                              </div>
-                              <ContactLine contacto={j.contacto} />
-                              <div className="flex gap-2 mt-3 items-center flex-wrap">
-                                {j.interes === "no" ? (
-                                  <button onClick={() => markInteres(j, "si")} className="text-xs px-3 py-1 rounded-md font-medium" style={{ backgroundColor: `${C.green}14`, color: C.green, border: `1px solid ${C.green}55` }}>
-                                    Me interesa
-                                  </button>
-                                ) : (
-                                  <button onClick={() => saveScanned(j)} className="text-xs px-3 py-1 rounded-md font-medium" style={{ backgroundColor: `${C.cyan}1A`, color: C.cyan, border: `1px solid ${C.cyan}44` }}>
-                                    Guardar en tablero
-                                  </button>
-                                )}
-                                {j.url && (
-                                  <a href={j.url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{ color: C.amber, textDecoration: "none" }}>
-                                    Ver oferta →
-                                  </a>
-                                )}
-                                <button onClick={() => removeInteres(j.key)} className="text-xs px-3 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}33` }}>
-                                  Quitar
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </article>
-                      ))}
+                  ...likedOpps.map((o) => ({ id: o.id, kind: "Propuesta", score: o.score, titulo: o.empresa, sub: `${o.persona || ""} · ${o.fuente || ""}`, url: o.url, unlike: () => updateOppEstado(o.id, "nueva"), del: () => removeOpp(o.id) })),
+                  ...likedJobs.map((j) => ({ id: j.id, kind: "Empleo", score: j.score, titulo: j.titulo, sub: `${j.empresa || ""} · ${j.ubicacion || ""}`, url: j.url, unlike: () => updateEstado(j.id, "nueva"), del: () => removeJob(j.id) })),
+                ].map((item) => (
+                  <article key={item.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+                    <div className="flex gap-3 items-center">
+                      <ScoreRing score={item.score} />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-sm leading-snug truncate" style={{ fontFamily: FONT.display }}>{item.titulo}</h3>
+                        <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>{item.sub} · {item.kind}</p>
+                      </div>
+                      <div className="flex gap-2 items-center shrink-0">
+                        <button onClick={item.unlike} title="Quitar me gusta" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, backgroundColor: C.coral, color: "#fff", border: `1px solid ${C.coral}` }}><Heart size={16} fill="#fff" /></button>
+                        {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" title="Ver" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, color: C.cyan, border: `1px solid ${C.cyan}44` }}><ExternalLink size={16} /></a>}
+                        <button onClick={item.del} title="Eliminar" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, color: C.coral, border: `1px solid ${C.coral}33` }}><Trash2 size={16} /></button>
+                      </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
-              </>
+              </div>
             )}
           </section>
         )}
@@ -1733,6 +1754,26 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadRadarInsumo(f); e.target.value = ""; }}
                 />
               </label>
+
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: C.faint, fontFamily: FONT.display }}>…o pega el texto</p>
+                <textarea
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2.5 rounded-md text-sm resize-y outline-none"
+                  style={{ backgroundColor: C.bg, border: `1px solid ${C.border}`, color: C.text }}
+                  placeholder={"Pega aquí la oferta, un post o una URL. Ej:\nBuscamos UX/UI remoto para Colombia. Enviar a talento@empresa.com…"}
+                />
+                <button
+                  onClick={uploadRadarText}
+                  disabled={uploadingInsumo || !pasted.trim()}
+                  className="mt-2 px-5 py-2.5 rounded-md text-sm font-semibold"
+                  style={{ backgroundColor: C.cyan, color: "#04201F", opacity: uploadingInsumo || !pasted.trim() ? 0.5 : 1, fontFamily: FONT.display }}
+                >
+                  Subir texto
+                </button>
+              </div>
               {parseError && <p className="text-sm mt-2" style={{ color: C.coral }}>{parseError}</p>}
 
               {radarInsumos.length > 0 && (
@@ -1762,16 +1803,16 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {/* ── TABLERO ── */}
         {tab === "tablero" && (
           <section>
-            {/* Buscador + periodicidad */}
+            {/* Buscador y filtro de fecha: al lado en web; en responsive la fecha baja a otra línea. */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <input
                 value={jobQuery}
                 onChange={(e) => setJobQuery(e.target.value)}
                 placeholder="Buscar empleo por texto…"
-                className="flex-1 min-w-[160px] rounded-md px-3 py-2 text-sm outline-none"
+                className="flex-1 min-w-[200px] rounded-md px-3 py-2 text-sm outline-none"
                 style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}
               />
-              <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} className="rounded-md px-2 py-2 text-sm outline-none" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}>
+              <select value={periodo} onChange={(e) => setPeriodo(e.target.value)} className="w-full sm:w-auto rounded-md px-2 py-2 text-sm outline-none" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}`, color: C.text }}>
                 <option value="todas">Todas las fechas</option>
                 <option value="hoy">Capturadas hoy</option>
                 <option value="semana">Última semana</option>
@@ -1781,11 +1822,10 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 mb-4">
               {[
-                ["todas", "Activas"],
+                ["todas", "Todas"],
                 ["remotas", "Solo remotas"],
                 ["español", "En español"],
-                ["aplicada", "Aplicadas"],
-                ["descartada", "Descartadas"],
+                ["megusta", "Me gusta"],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -1801,6 +1841,36 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 </button>
               ))}
             </div>
+
+            {/* Buscar en las plataformas (filtros especializados) — enlaces a LinkedIn, Computrabajo, etc. */}
+            <details className="rounded-md mb-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3">
+                <span className="text-sm font-semibold" style={{ fontFamily: FONT.display, color: C.text }}>Buscar en las plataformas · filtros especializados</span>
+                <span className="text-xs" style={{ color: C.faint }}>▾</span>
+              </summary>
+              <div className="px-4 pb-4">
+                <label className="flex items-center gap-2 mb-3 text-sm cursor-pointer" style={{ color: C.dim }}>
+                  <input type="checkbox" checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} style={{ accentColor: C.green }} />
+                  Priorizar remoto
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[...postSources, ...sources].map((s) => (
+                    <div key={s.name} className="flex items-center justify-between gap-2 rounded-md px-3 py-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold truncate" style={{ color: C.text, fontFamily: FONT.display }}>{s.name}</div>
+                        <div className="text-[11px] truncate" style={{ color: C.faint }}>{s.tag}</div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => copyLink(s.url, s.name)} className="text-xs px-2 py-1 rounded-md" style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}>
+                          {copied === s.name ? "Copiado" : "Copiar"}
+                        </button>
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-1 rounded-md" style={{ color: s.name.includes("LinkedIn") ? C.amber : C.cyan, border: `1px solid ${C.border}`, textDecoration: "none" }}>Abrir</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
 
             {/* Lista */}
             {!loaded ? (
@@ -1834,7 +1904,25 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           {j.empresa} · {j.fuente}{j.ubicacion ? ` · ${j.ubicacion}` : ""}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs" style={{ color: C.faint }}>▾</span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          onClick={(e) => { e.preventDefault(); updateEstado(j.id, j.estado === "me_interesa" ? "nueva" : "me_interesa"); }}
+                          title={j.estado === "me_interesa" ? "Quitar me gusta" : "Me gusta"}
+                          className="inline-flex items-center justify-center rounded-md"
+                          style={{ width: 34, height: 34, backgroundColor: j.estado === "me_interesa" ? C.coral : `${C.coral}14`, color: j.estado === "me_interesa" ? "#fff" : C.coral, border: `1px solid ${C.coral}44` }}
+                        >
+                          <Heart size={16} fill={j.estado === "me_interesa" ? "#fff" : "none"} />
+                        </button>
+                        <button
+                          onClick={(e) => { e.preventDefault(); removeJob(j.id); }}
+                          title="Eliminar"
+                          className="inline-flex items-center justify-center rounded-md"
+                          style={{ width: 34, height: 34, color: C.coral, border: `1px solid ${C.coral}33` }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                        <span className="text-xs" style={{ color: C.faint }}>▾</span>
+                      </div>
                     </summary>
                     <div className="px-4 pb-4">
                         <div className="flex flex-wrap gap-1.5">
@@ -1851,69 +1939,26 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           {j.fechaPublicacion && (
                             <Badge color={C.faint} bg={`${C.faint}14`}>Publicada: {j.fechaPublicacion}</Badge>
                           )}
-                          {j.estado !== "aplicada" && j.estado !== "descartada" && daysSince(j) != null && daysSince(j) >= STALE_DAYS && (
-                            <Badge color={C.coral} bg={`${C.coral}14`}>Sin acción {daysSince(j)} días</Badge>
-                          )}
+                          {(() => {
+                            const d = diasDesde(j.createdAt);
+                            if (d == null) return null;
+                            const vieja = d > 15;
+                            return (
+                              <Badge color={vieja ? C.coral : C.faint} bg={`${vieja ? C.coral : C.faint}14`}>
+                                {d <= 0 ? "Capturada hoy" : `Capturada hace ${d}d`}{vieja ? " · puede estar vencida" : ""}
+                              </Badge>
+                            );
+                          })()}
                         </div>
                         {j.resumen && (
                           <p className="text-xs mt-2 leading-relaxed" style={{ color: C.dim }}>{j.resumen}</p>
                         )}
                         <ContactLine contacto={j.contacto} />
-                        <OutreachBox
-                          item={j}
-                          mode={j.categoria === "lead comercial" || j.categoria === "partner MediaLab" ? "lead" : "job"}
-                          message={outreachMessages[j.id]}
-                          loading={outreachLoading === j.id}
-                          copied={copied === `msg-${j.id}`}
-                          onGenerate={() => generateOutreach(j, j.categoria === "lead comercial" || j.categoria === "partner MediaLab" ? "lead" : "job")}
-                          onCopy={(text) => copyLink(text, `msg-${j.id}`)}
-                        />
-                        <div className="flex gap-2 mt-3 flex-wrap items-center">
-                          {j.url && (
-                            <a
-                              href={j.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs px-3 py-1 rounded-md font-medium"
-                              style={{ color: C.amber, border: `1px solid ${C.amber}44`, textDecoration: "none" }}
-                            >
-                              Ver oferta →
-                            </a>
-                          )}
-                          {j.estado !== "aplicada" && (
-                            <button
-                              onClick={() => updateEstado(j.id, "aplicada")}
-                              className="text-xs px-3 py-1 rounded-md font-medium"
-                              style={{ backgroundColor: `${C.cyan}1A`, color: C.cyan, border: `1px solid ${C.cyan}44` }}
-                            >
-                              Marcar aplicada
-                            </button>
-                          )}
-                          {j.estado !== "descartada" ? (
-                            <button
-                              onClick={() => updateEstado(j.id, "descartada")}
-                              className="text-xs px-3 py-1 rounded-md font-medium"
-                              style={{ color: C.dim, border: `1px solid ${C.border}` }}
-                            >
-                              Descartar
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => updateEstado(j.id, "nueva")}
-                              className="text-xs px-3 py-1 rounded-md font-medium"
-                              style={{ color: C.dim, border: `1px solid ${C.border}` }}
-                            >
-                              Restaurar
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeJob(j.id)}
-                            className="text-xs px-3 py-1 rounded-md font-medium"
-                            style={{ color: C.coral, border: `1px solid ${C.coral}33` }}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
+                        {j.url && (
+                          <a href={j.url} target="_blank" rel="noopener noreferrer" onClick={(e) => openOffer(e, j, "empleo")} className="inline-flex items-center gap-1 text-xs mt-3 px-3 py-1.5 rounded-md font-medium" style={{ color: C.cyan, border: `1px solid ${C.cyan}44`, textDecoration: "none" }}>
+                            <ExternalLink size={14} /> Ver oferta
+                          </a>
+                        )}
                     </div>
                   </details>
                 ))}
@@ -1922,6 +1967,41 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
           </section>
         )}
       </div>
+
+      {/* Panel lateral (web): intenta mostrar la página real en un iframe (funciona con blogs/notas
+          de propuestas). Si el sitio bloquea el embebido o no responde en ~4.5s, se abre en otra
+          pestaña y se cierra el panel (ver el useEffect de fallback). En móvil el enlace abre solo. */}
+      {panelItem && panelItem.item.url && (
+        <div className="fixed inset-0 z-50 flex">
+          <button aria-label="Cerrar" onClick={() => setPanelItem(null)} className="flex-1" style={{ backgroundColor: "rgba(0,0,0,0.45)", border: "none", cursor: "pointer" }} />
+          <div className="h-full flex flex-col shadow-2xl" style={{ width: "min(680px, 96vw)", backgroundColor: C.bg, borderLeft: `1px solid ${C.border}`, animation: "radarSlideIn .25s ease-out" }}>
+            <div className="flex items-center justify-between gap-2 px-3 py-2" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <span className="text-xs truncate" title={panelItem.item.url} style={{ color: C.dim }}>
+                {panelItem.item.titulo || panelItem.item.empresa || panelItem.item.url}
+              </span>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => abrirEnSitio(panelItem.item.url)} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md font-medium" style={{ color: C.cyan, border: `1px solid ${C.cyan}44`, backgroundColor: "transparent", cursor: "pointer" }}>
+                  <ExternalLink size={13} /> Abrir en el sitio
+                </button>
+                <button onClick={() => setPanelItem(null)} aria-label="Cerrar panel" className="inline-flex items-center justify-center rounded-md" style={{ width: 30, height: 30, color: C.dim, border: `1px solid ${C.border}`, backgroundColor: "transparent" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              key={panelItem.item.url}
+              src={panelItem.item.url}
+              title="Vista de la página"
+              onLoad={() => setIframeLoaded(true)}
+              className="flex-1 w-full"
+              style={{ border: "none", backgroundColor: "#fff" }}
+            />
+            <div className="px-3 py-1.5 text-[10px]" style={{ color: C.faint, borderTop: `1px solid ${C.border}` }}>
+              Los portales de empleo (LinkedIn, Indeed…) no permiten verse aquí; si no carga se abre en otra pestaña, o usa «Abrir en el sitio».
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

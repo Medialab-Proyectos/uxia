@@ -1,7 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
+import * as opsData from "./opsData.js";
 import logoMediaLab from "./logos/logo-medialab.png";
 
 const AUTH_STORE_KEY = "uxia.supabaseSession";
@@ -68,9 +70,48 @@ async function refreshSession(session) {
 function AppShell() {
   const [module, setModule] = React.useState(() => localStorage.getItem("uxia.activeModule") || "operations");
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [notifOpen, setNotifOpen] = React.useState(false);
+  const [theme, setTheme] = React.useState(() => {
+    try { return localStorage.getItem("radar-theme") || "light"; } catch { return "light"; }
+  });
+  const toggleTheme = () => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      try { localStorage.setItem("radar-theme", next); } catch { /* ignore */ }
+      return next;
+    });
+  };
+  const [notifs, setNotifs] = React.useState([]);
   const [session, setSession] = React.useState(() => readStoredSession());
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
+  const token = session?.access_token;
+  React.useEffect(() => {
+    if (!token || !opsData.opsDataReady()) return;
+    (async () => {
+      try {
+        const [state, vacantes] = await Promise.all([
+          opsData.loadState(token).catch(() => null),
+          opsData.listVacantes(token).catch(() => []),
+        ]);
+        const list = [];
+        const today = new Date().toISOString().slice(0, 10);
+        const tasks = state?.tasks || [];
+        const vencen = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate <= today).length;
+        const bloq = tasks.filter((t) => t.status === "blocked").length;
+        if (vencen) list.push({ kind: "operations", text: `${vencen} tarea(s) vencen hoy o están vencidas` });
+        if (bloq) list.push({ kind: "operations", text: `${bloq} tarea(s) bloqueadas` });
+        const viejas = (vacantes || []).filter((v) => {
+          if (!v.createdAt) return false;
+          return Math.floor((Date.now() - new Date(v.createdAt).getTime()) / 86400000) > 15;
+        }).length;
+        if (viejas) list.push({ kind: "radar", text: `${viejas} empleo(s) con +15 días (revisa o elimina)` });
+        setNotifs(list);
+      } catch {
+        setNotifs([]);
+      }
+    })();
+  }, [token, module]);
 
   React.useEffect(() => {
     async function bootstrapAuth() {
@@ -151,68 +192,97 @@ function AppShell() {
     return <LoginScreen notice={authNotice} onLogin={handleLogin} />;
   }
 
+  // Tema global: claro/oscuro se aplica a AMBOS módulos por igual (el Centro mapea sus
+  // colores fijos vía data-ops-theme="dark" en index.html) para que la plataforma sea uniforme.
+  const dark = theme === "dark";
+  const navBg = dark ? "#151B23" : "#FFFCF7";
+  const navBorder = dark ? "#28313E" : "#E7E0D5";
+  const navDim = dark ? "#8B97A6" : "#667085";
+  const navText = dark ? "#E8EDF3" : "#344054";
+  const ctrlBg = dark ? "#1B232E" : "#FFFFFF";
+  const iconBtn = "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border";
+
+  function ModuleBtn({ id, label, Icon, activeColor }) {
+    const active = module === id;
+    return (
+      <button
+        type="button"
+        onClick={() => { selectModule(id); setMenuOpen(false); }}
+        className="flex min-h-[40px] w-full items-center gap-2 rounded-md px-2 text-left text-sm font-semibold sm:w-auto"
+        style={{ color: active ? activeColor : navText, background: "transparent" }}
+      >
+        <Icon size={16} style={{ color: active ? activeColor : navDim }} /> {label}
+      </button>
+    );
+  }
+
   return (
-    <div>
-      <nav className="sticky top-0 z-50 border-b border-[#E7E0D5] bg-[#FFFCF7] px-3 py-2 sm:px-5">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+    <div style={{ minHeight: "100vh", background: dark ? "#0E1116" : "#F7F4EF" }}>
+      <nav className="sticky top-0 z-50 border-b px-3 py-2 sm:px-5" style={{ backgroundColor: navBg, borderColor: navBorder }}>
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0" />
               <div className="min-w-0">
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">MediaLab Ingeniería</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: navDim }}>MediaLab Ingeniería</span>
                 {authNotice && <p className="mt-1 text-xs font-semibold text-[#17727A]">{authNotice}</p>}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((value) => !value)}
-              aria-label="Menú"
-              aria-expanded={menuOpen}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-xl leading-none text-[#344054] sm:hidden"
-            >
-              {menuOpen ? "✕" : "☰"}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="relative">
+                <button type="button" onClick={() => setNotifOpen((v) => !v)} aria-label={`Notificaciones${notifs.length ? ` · ${notifs.length}` : ""}`} aria-expanded={notifOpen} className={`relative ${iconBtn}`} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: navText }}>
+                  <Bell size={18} />
+                  {notifs.length > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold" style={{ minWidth: 18, height: 18, padding: "0 4px", backgroundColor: "#C0362C", color: "#fff" }}>
+                      {notifs.length}
+                    </span>
+                  )}
+                </button>
+                {notifOpen && (
+                  <div className="absolute right-0 mt-2 w-72 rounded-md border p-3 text-sm shadow-lg z-50" style={{ backgroundColor: ctrlBg, borderColor: navBorder, color: navText }}>
+                    <p className="font-semibold mb-2">Notificaciones</p>
+                    {notifs.length === 0 ? (
+                      <p className="text-xs" style={{ color: navDim }}>Sin alertas por ahora.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {notifs.map((n, i) => (
+                          <li key={i}>
+                            <button type="button" onClick={() => { selectModule(n.kind); setNotifOpen(false); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs" style={{ border: `1px solid ${navBorder}`, color: navText }}>
+                              <span className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: n.kind === "radar" ? "#E8751A" : "#17727A" }} />
+                              <span>{n.text} <span style={{ color: navDim }}>· {n.kind === "radar" ? "Radar" : "Centro"}</span></span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button type="button" onClick={toggleTheme} aria-label={dark ? "Modo claro" : "Modo oscuro"} title={dark ? "Modo claro" : "Modo oscuro"} className={iconBtn} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: "#E8751A" }}>
+                {dark ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-label="Menú" aria-expanded={menuOpen} className={`${iconBtn} sm:hidden`} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: navText }}>
+                {menuOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
+            </div>
           </div>
-          <div className={`${menuOpen ? "grid" : "hidden"} grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center`}>
-            <button
-              type="button"
-              onClick={() => { selectModule("operations"); setMenuOpen(false); }}
-              className="flex min-h-[44px] items-center justify-center rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
-              style={{
-                borderColor: module === "operations" ? "#17727A" : "#D0D5DD",
-                color: module === "operations" ? "#FFFFFF" : "#344054",
-                background: module === "operations" ? "#17727A" : "transparent",
-              }}
-            >
-              Centro operativo
-            </button>
-            <button
-              type="button"
-              onClick={() => { selectModule("radar"); setMenuOpen(false); }}
-              className="flex min-h-[44px] items-center justify-center rounded-md border px-2 py-1.5 text-sm font-semibold sm:px-3"
-              style={{
-                borderColor: module === "radar" ? "#E8751A" : "#D0D5DD",
-                color: module === "radar" ? "#1A1205" : "#344054",
-                background: module === "radar" ? "#E8751A" : "transparent",
-              }}
-            >
-              Radar oportunidades
-            </button>
-            <UserMenu
-              email={session.user?.email || session.user?.user_metadata?.email || ""}
-              onChangePassword={handleChangePassword}
-            />
+          <div className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-1`}>
+            <ModuleBtn id="operations" label="Centro operativo" Icon={LayoutDashboard} activeColor="#17727A" />
+            <ModuleBtn id="radar" label="Radar oportunidades" Icon={Radar} activeColor="#E8751A" />
+            <div className="my-1 h-px w-full sm:my-0 sm:mx-1 sm:h-5 sm:w-px" style={{ backgroundColor: navBorder }} />
+            <UserMenu email={session.user?.email || session.user?.user_metadata?.email || ""} onChangePassword={handleChangePassword} navText={navText} navDim={navDim} ctrlBg={ctrlBg} navBorder={navBorder} />
             <button
               type="button"
               onClick={() => { handleLogout(); setMenuOpen(false); }}
-              className="flex min-h-[44px] items-center justify-center rounded-md bg-[#E8751A] px-3 py-1.5 text-sm font-semibold text-[#1A1205]"
+              className="flex min-h-[40px] w-full items-center gap-2 rounded-md px-2 text-left text-sm font-semibold sm:w-auto"
+              style={{ background: "transparent", color: "#C0362C" }}
             >
-              Cerrar sesión
+              <LogOut size={16} /> Cerrar sesión
             </button>
           </div>
         </div>
       </nav>
-      {module === "radar" ? <RadarUXIA token={session.access_token} /> : <OperationsHub currentUser={session.user} token={session.access_token} />}
+      {module === "radar" ? <RadarUXIA token={session.access_token} theme={theme} /> : <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} />}
     </div>
   );
 }
@@ -279,7 +349,7 @@ function LoginScreen({ notice, onLogin }) {
   );
 }
 
-function UserMenu({ email, onChangePassword }) {
+function UserMenu({ email, onChangePassword, navText = "#344054", navDim = "#667085", ctrlBg = "#FFFFFF", navBorder = "#E7E0D5" }) {
   const [open, setOpen] = React.useState(false);
   const [password, setPassword] = React.useState("");
   const [message, setMessage] = React.useState("");
@@ -303,28 +373,31 @@ function UserMenu({ email, onChangePassword }) {
   }
 
   return (
-    <div className="relative col-span-2 sm:col-span-1">
+    <div className="relative w-full sm:w-auto">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex min-h-[44px] w-full items-center justify-center rounded-md border border-[#D0D5DD] px-3 py-1.5 text-sm font-semibold text-[#344054] sm:w-auto"
+        title={email}
+        className="flex min-h-[40px] w-full items-center gap-2 rounded-md px-2 text-left text-sm font-semibold sm:w-auto"
+        style={{ color: navText, background: "transparent" }}
       >
-        {email || "Usuario"}
+        <User size={16} style={{ color: navDim }} /> Cuenta
       </button>
       {open && (
-        <div className="fixed left-3 right-3 top-28 z-50 rounded-md border border-[#E7E0D5] bg-[#FFFCF7] p-3 text-[#344054] shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72">
-          <p className="text-xs text-[#667085]">Sesión activa</p>
+        <div className="fixed left-3 right-3 top-28 z-50 rounded-md border p-3 shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72" style={{ backgroundColor: ctrlBg, borderColor: navBorder, color: navText }}>
+          <p className="text-xs" style={{ color: navDim }}>Sesión activa</p>
           <p className="mt-1 break-all text-sm font-semibold">{email}</p>
-          <form onSubmit={changePassword} className="mt-3 border-t border-[#E7E0D5] pt-3">
+          <form onSubmit={changePassword} className="mt-3 border-t pt-3" style={{ borderColor: navBorder }}>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase text-[#667085]">Nueva contraseña</span>
+              <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: navDim }}>Nueva contraseña</span>
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
                 autoComplete="new-password"
-                className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+                className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[#17727A]"
+                style={{ backgroundColor: ctrlBg, borderColor: navBorder, color: navText }}
               />
             </label>
             {message && <p className="mt-2 text-xs font-semibold text-[#17727A]">{message}</p>}

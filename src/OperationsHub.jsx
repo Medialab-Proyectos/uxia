@@ -26,6 +26,22 @@ function statusTone(status) {
   return STATUS_TONE[status] || STATUS_TONE.backlog;
 }
 
+// Acento diferencial por subproyecto: color saturado y estable derivado del nombre.
+// Se usa como franja/borde e identificador para distinguir cada tarjeta y desplegable
+// y mejorar la jerarquía de información. Se aplican como colores sólidos + tintes
+// translúcidos (rgba con alpha en hex) para que funcionen igual en claro y oscuro.
+const PROJECT_ACCENTS = ["#17727A", "#E8751A", "#6941C6", "#0D7A4F", "#B54708", "#1570EF", "#C11574", "#4E5BA6"];
+function projectAccent(name) {
+  const key = String(name || "");
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return PROJECT_ACCENTS[h % PROJECT_ACCENTS.length];
+}
+function projectInitials(name) {
+  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
+  return (parts.slice(0, 2).map((w) => w[0]?.toUpperCase() || "").join("") || "?").slice(0, 2);
+}
+
 
 const PRIORITY = {
   alta: "#B42318",
@@ -456,7 +472,7 @@ const defaultCompanies = [
 
 const defaultTasks = [];
 
-export default function OperationsHub({ token = "" } = {}) {
+export default function OperationsHub({ token = "", theme = "light" } = {}) {
   const [companies, setCompanies] = useState(defaultCompanies);
   const [tasks, setTasks] = useState(defaultTasks);
   const [sourceRecords, setSourceRecords] = useState([]);
@@ -673,32 +689,8 @@ export default function OperationsHub({ token = "" } = {}) {
     loadInsumos();
   }
 
-  function createTaskFromInsumo(insumo) {
-    const nextTask = {
-      id: uid(),
-      title: `Revisar insumo: ${insumo.fileName}`,
-      companyId: insumo.companyId || activeCompany,
-      client: insumo.client || activeCompanyClients[0] || "Sin subproyecto",
-      role: "Project Manager",
-      owner: "",
-      priority: "media",
-      status: "backlog",
-      dueDate: addDays(2),
-      deliveryDate: "",
-      source: `Insumo: ${insumo.fileName}`,
-      audience: "Interno MediaLab",
-      syncMode: "Manual",
-      evidence: "",
-      attachments: insumo.url ? [{ type: "file", label: insumo.fileName, url: insumo.url, path: insumo.storagePath }] : [],
-      createdAt: new Date().toISOString(),
-    };
-    setTasks((current) => [nextTask, ...current]);
-    // keepFile: la tarea se queda con el archivo; solo se quita de "pendientes".
-    opsData.deleteInsumo(token, insumo.id, { keepFile: true }).catch(() => {}).finally(loadInsumos);
-    setActiveView("tasks");
-    setActiveStatus("open");
-    setNotice(`Tarea creada desde el insumo ${insumo.fileName}.`);
-  }
+  // Los insumos NO se convierten en tareas manualmente: solo el análisis del MD diario
+  // (daily:fetch → Claude → daily:push) los interpreta. Aquí solo se descargan o borran.
 
   function updateTask(id, patch) {
     setTasks((current) => current.map((task) => (task.id === id ? { ...task, ...patch } : task)));
@@ -888,17 +880,12 @@ export default function OperationsHub({ token = "" } = {}) {
     if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir insumos."); return; }
     try {
       if (isText) {
+        // El texto NO se convierte en tareas al instante: queda como insumo pendiente
+        // (con su contenido en raw_text) y la corrida diaria del MD lo interpreta.
         const text = await file.text();
-        const extracted = localFallbackAnalyze(text, activeCompany).map((task) => ({ ...task, client: task.client || client }));
-        mergeTasks(extracted);
-        if (extracted.length) {
-          mergeRecords([buildPastedRecord({ text, companyId: activeCompany, client, tasks: extracted })]);
-          setActiveView("tasks");
-          setActiveStatus("open");
-          setNotice(`${extracted.length} tareas creadas para ${client}.`);
-        } else {
-          setNotice(`El texto no generó tareas para ${client}.`);
-        }
+        await opsData.saveInsumo(token, { companyId: company.id, client, file, kind: "texto", rawText: text });
+        setNotice(`Insumo (texto) guardado para ${client}. Se convierte en tareas cuando corra el MD diario.`);
+        loadInsumos();
         return;
       }
       // Imagen: se guarda como insumo pendiente (Claude Code la analiza en el run diario).
@@ -925,6 +912,23 @@ export default function OperationsHub({ token = "" } = {}) {
       setNotice(`Logo actualizado: ${logo.label}`);
     } catch (error) {
       setNotice(`No pude subir el logo. ${error.message || ""}`);
+    }
+  }
+
+  async function uploadProjectImage(client, file) {
+    if (!file || !company) return;
+    if (!isTaskImageFile(file)) { setNotice("La imagen del subproyecto debe ser una imagen (jpg, png, webp…)."); return; }
+    if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir la imagen."); return; }
+    try {
+      const image = await opsData.saveProjectImage(token, { companyId: company.id, client, file });
+      setCompanies((current) => current.map((item) => (
+        item.id === company.id
+          ? { ...item, projectImages: { ...(item.projectImages || {}), [client]: image } }
+          : item
+      )));
+      setNotice(`Imagen actualizada para ${client}.`);
+    } catch (error) {
+      setNotice(`No pude subir la imagen. ${error.message || "Revisa políticas de Storage."}`);
     }
   }
 
@@ -1003,6 +1007,30 @@ export default function OperationsHub({ token = "" } = {}) {
     setNotice("Tarea manual creada. Puedes completar responsable, proyecto y detalle.");
   }
 
+  // Crea una tarea ya asignada a un subproyecto concreto (botón dentro de cada subproyecto).
+  function addTaskForClient(client) {
+    const target = client || activeCompanyClients[0] || "Sin subproyecto";
+    const nextTask = {
+      id: uid(),
+      title: "Nueva tarea",
+      companyId: activeCompany,
+      client: target,
+      role: "Project Manager",
+      owner: "",
+      priority: "media",
+      status: "backlog",
+      dueDate: addDays(2),
+      deliveryDate: "",
+      source: "Manual",
+      audience: "Interno MediaLab",
+      syncMode: "Manual",
+      evidence: "",
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((current) => [nextTask, ...current]);
+    setNotice(`Tarea creada en ${target}. Ábrela para completar responsable, fecha y detalle.`);
+  }
+
   function dailyBrief() {
     const rows = companyTasks
       .filter((task) => task.status !== "done")
@@ -1030,24 +1058,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F4EF] text-[#202124]" style={{ fontFamily: "'Lato', 'Segoe UI', system-ui, sans-serif" }}>
-      <header className="border-b border-[#D9D2C7] bg-[#FFFCF7]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <img src={logoUrl} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0 sm:h-9" />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
-              <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
-              <p className="mt-0.5 text-xs text-[#667085]">{saveStatus}</p>
-            </div>
+    <div data-ops-theme={theme} className="min-h-screen bg-[#F7F4EF] text-[#202124]" style={{ fontFamily: "'Lato', 'Segoe UI', system-ui, sans-serif" }}>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-5 sm:py-8">
+        {/* El header de marca (logo + nav) lo pone el shell (main.jsx); aquí solo el título de la
+            vista + el estado de guardado, para no duplicar el encabezado. */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
+            <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
           </div>
-          <p className="w-fit rounded-md border border-[#E4DED6] bg-white px-3 py-2 text-xs font-semibold text-[#667085]">
-            Acceso operativo
-          </p>
+          <p className="shrink-0 text-xs text-[#667085]">{saveStatus}</p>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 py-5 sm:px-5 sm:py-6">
         {/* A-3 / WCAG 4.1.3 — region viva: anuncia a lectores de pantalla el
             resultado de procesar insumos sin que el usuario tenga que buscarlo. */}
         <div role="status" aria-live="polite">
@@ -1096,7 +1117,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
         {activeView === "companies" && insumos.length > 0 && (
           <section className="mt-6 rounded-md border border-[#F2C879] bg-[#FFF7E6] p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-[#8A5700]">Insumos pendientes de revisar ({insumos.length})</h2>
-            <p className="mt-1 text-xs text-[#8b8272]">Imágenes y archivos que subiste durante el día. Conviértelos en tarea, descárgalos o bórralos.</p>
+            <p className="mt-1 text-xs text-[#8b8272]">Imágenes y textos que subiste durante el día. El análisis del MD diario los convierte en tareas; aquí solo puedes descargarlos o borrarlos.</p>
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {insumos.map((insumo) => (
                 <li key={insumo.id} className="flex items-center gap-3 rounded-md border border-[#E4DED6] bg-white p-2">
@@ -1110,7 +1131,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                     <p className="truncate text-xs text-[#8b8272]">{insumo.client || "Sin subproyecto"}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={() => createTaskFromInsumo(insumo)} title="Crear tarea desde este insumo" className="inline-flex min-h-[36px] items-center rounded-md bg-[#17727A] px-2 text-xs font-semibold text-white">Crear tarea</button>
                     {insumo.url && (
                       <a href={insumo.url} download target="_blank" rel="noopener noreferrer" title="Descargar" className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"><Download size={14} /></a>
                     )}
@@ -1156,6 +1176,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onChangeTask={updateTask}
             onDeleteTask={deleteTask}
             onUploadLogo={uploadCompanyLogo}
+            onUploadProjectImage={uploadProjectImage}
+            onAddTaskToClient={addTaskForClient}
             onUploadSourceDocument={uploadSourceDocument}
             onUploadTaskAttachment={uploadTaskAttachment}
             onDeleteTaskAttachment={deleteTaskAttachment}
@@ -1489,6 +1511,7 @@ function contactFor(person, message, subject) {
 }
 
 function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const assignedPerson = personById(people, task.assigneeId);
   const board = getProjectBoardConfig(company, task.client);
   const contactMessage = buildContactMessage(task, company);
@@ -1587,18 +1610,36 @@ function ProjectTaskAccordion({ task, company, people = [], onChangeTask, onDele
               }}
             />
           </label>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (window.confirm("Borrar esta tarea?")) onDeleteTask(task.id);
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#B42318] bg-white text-[#B42318]"
-            title="Eliminar tarea"
-          >
-            <Trash2 size={14} />
-          </button>
+          {confirmDelete ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-[#B42318] bg-[#FEF3F2] px-1.5 py-0.5">
+              <span className="text-xs font-semibold text-[#B42318]">¿Borrar?</span>
+              <button
+                type="button"
+                onClick={(event) => { event.preventDefault(); event.stopPropagation(); onDeleteTask(task.id); }}
+                className="inline-flex h-7 items-center rounded bg-[#B42318] px-2 text-xs font-semibold text-white"
+                title="Confirmar borrado"
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                onClick={(event) => { event.preventDefault(); event.stopPropagation(); setConfirmDelete(false); }}
+                className="inline-flex h-7 items-center rounded border border-[#D0D5DD] bg-white px-2 text-xs font-semibold text-[#344054]"
+                title="Cancelar"
+              >
+                No
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={(event) => { event.preventDefault(); event.stopPropagation(); setConfirmDelete(true); }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#B42318] bg-white text-[#B42318]"
+              title="Eliminar tarea"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </span>
       </summary>
       <div className="mt-2 space-y-2">
@@ -1745,6 +1786,8 @@ function CompanyPanel({
   onChangeTask,
   onDeleteTask,
   onUploadLogo,
+  onUploadProjectImage,
+  onAddTaskToClient,
   onUploadSourceDocument,
   onUploadTaskAttachment,
   onDeleteTaskAttachment,
@@ -1940,28 +1983,50 @@ function CompanyPanel({
               const contextKey = `${company.id}:${client || "_empresa"}`;
               const contextDocs = company.contextDocuments?.[client] || [];
               const readableDocs = contextPreview?.[contextKey] || [];
+              const accent = projectAccent(client);
+              const projectImage = company.projectImages?.[client];
               return (
-              <div key={client} className="rounded-md border border-[#E4DED6] bg-white p-3">
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div key={client} className="overflow-hidden rounded-md border border-[#E4DED6] bg-white" style={{ borderLeft: `4px solid ${accent}` }}>
+                {/* Cabecera con acento diferencial + imagen del subproyecto */}
+                <div className="flex items-start gap-3 border-b border-[#E4DED6] p-3" style={{ background: `${accent}14` }}>
+                  <label
+                    className="relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-md border"
+                    style={{ borderColor: `${accent}55`, background: `${accent}22` }}
+                    title="Subir o cambiar la imagen del subproyecto"
+                  >
+                    {projectImage?.url ? (
+                      <img src={projectImage.url} alt={client} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-base font-bold" style={{ color: accent }}>{projectInitials(client)}</span>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) onUploadProjectImage(client, file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-semibold text-[#344054]">{client}</p>
+                    <p className="break-words text-sm font-semibold" style={{ color: accent }}>{client}</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       <span className="inline-flex rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
                       <span className="inline-flex rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onArchiveClient(client)}
-                      className="rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
-                    >
-                      Archivar
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onArchiveClient(client)}
+                    className="shrink-0 rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
+                  >
+                    Archivar
+                  </button>
                 </div>
-                <div>
+                <div className="p-3">
                   <label className="mt-2 inline-flex cursor-pointer items-center rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
                     Subir insumo
                     <input
@@ -2050,10 +2115,10 @@ function CompanyPanel({
                       </details>
                     )}
                   </div>
-                  <details className="mt-3 rounded-md border border-[#E4DED6] bg-white p-2">
+                  <details className="mt-3 rounded-md border border-[#E4DED6] bg-white p-2" style={{ borderLeft: `3px solid ${accent}` }}>
                     <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="text-xs font-semibold text-[#344054]">Tareas del subproyecto</p>
+                        <p className="text-xs font-semibold" style={{ color: accent }}>Tareas del subproyecto</p>
                         <p className="text-xs text-[#667085]">Abrir para ver todas las tareas.</p>
                       </div>
                       <span className="flex flex-wrap gap-1">
@@ -2063,6 +2128,14 @@ function CompanyPanel({
                       </span>
                     </summary>
                     <div className="mt-2 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => onAddTaskToClient(client)}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed px-3 py-2 text-xs font-semibold"
+                        style={{ borderColor: accent, color: accent, background: `${accent}0F` }}
+                      >
+                        <Plus size={14} /> Nueva tarea en {client}
+                      </button>
                       {projectTasks.length ? projectTasks.map((task) => (
                         <ProjectTaskAccordion
                           key={task.id}
