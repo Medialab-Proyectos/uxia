@@ -1132,28 +1132,13 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
 
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Encabezado */}
-        <header className="mb-8 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold leading-tight sm:text-3xl" style={{ color: C.text, fontFamily: FONT.display }}>
-              Radar de oportunidades
-            </h1>
-            <p className="mt-1 text-sm" style={{ color: C.dim }}>
-              Propuestas y empleos UX/UI · prioridad: Colombia + remoto + español
-            </p>
-          </div>
-          {/* Subir propuesta: acción propia, junto al logo (fuera de las pestañas). */}
-          <button
-            onClick={() => setTab("importar")}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-            style={{
-              backgroundColor: tab === "importar" ? C.panelHi : C.panel,
-              border: `1px solid ${tab === "importar" ? C.amber : C.border}`,
-              color: tab === "importar" ? C.amber : C.text,
-              fontFamily: FONT.display,
-            }}
-          >
-            <Upload size={15} /> Subir propuesta
-          </button>
+        <header className="mb-4">
+          <h1 className="text-2xl font-semibold leading-tight sm:text-3xl" style={{ color: C.text, fontFamily: FONT.display }}>
+            Radar de oportunidades
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: C.dim }}>
+            Oportunidades y vacantes UX/UI · prioridad: Colombia + remoto + español
+          </p>
         </header>
 
         {radarNotice && (
@@ -1163,20 +1148,35 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
           </div>
         )}
 
-        <nav className="flex gap-1 mb-6 p-1 rounded-md overflow-x-auto" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
+        {/* Subir propuesta: full-width en móvil (antes del menú), automático en web. */}
+        <button
+          onClick={() => setTab("importar")}
+          className="mb-4 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors sm:w-auto"
+          style={{
+            backgroundColor: tab === "importar" ? C.panelHi : C.panel,
+            border: `1px solid ${tab === "importar" ? C.amber : C.border}`,
+            color: tab === "importar" ? C.amber : C.text,
+            fontFamily: FONT.display,
+          }}
+        >
+          <Upload size={16} /> Subir propuesta
+        </button>
+
+        {/* Menú estilo Centro (pestañas subrayadas) */}
+        <nav className="mb-6 flex gap-2 overflow-x-auto" style={{ borderBottom: `1px solid ${C.border}` }}>
           {[
-            ["oportunidades", "Propuestas · MediaLab"],
-            ["tablero", `Empleos${jobs.length ? ` · ${jobs.length}` : ""}`],
+            ["oportunidades", "Oportunidades"],
+            ["tablero", `Vacantes${jobs.length ? ` · ${jobs.length}` : ""}`],
             ["interes", `Me gusta${likedCount ? ` · ${likedCount}` : ""}`],
           ].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className="flex-shrink-0 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap"
+              className="flex-shrink-0 whitespace-nowrap px-3 py-2 text-sm font-semibold transition-colors"
               style={{
-                backgroundColor: tab === key ? C.panelHi : "transparent",
-                color: tab === key ? C.text : C.dim,
-                border: tab === key ? `1px solid ${C.border}` : "1px solid transparent",
+                borderBottom: `2px solid ${tab === key ? C.amber : "transparent"}`,
+                color: tab === key ? C.amber : C.dim,
+                background: "transparent",
                 fontFamily: FONT.display,
               }}
             >
@@ -1489,7 +1489,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         {tab === "oportunidades" && (
           <section>
             <div className="mb-4">
-              <h2 className="text-base font-semibold" style={{ fontFamily: FONT.display, color: C.text }}>Propuestas de negocio</h2>
+              <h2 className="text-base font-semibold" style={{ fontFamily: FONT.display, color: C.text }}>Oportunidades de negocio</h2>
               <p className="text-xs mt-0.5" style={{ color: C.dim }}>Empresas o personas que buscan agencia/aliado o expresan retos de UX. Revisa, filtra y da seguimiento.</p>
               {oppError && <p className="text-sm mt-2" style={{ color: C.coral }}>{oppError}</p>}
             </div>
@@ -1542,6 +1542,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 {(() => {
                   const t = oppQuery.trim().toLowerCase();
                   const filtered = oppResults
+                    .filter((o) => o.estado !== "archivada")
                     .filter((o) => withinPeriod(o.createdAt, periodo))
                     .filter((o) => !t || `${o.empresa || ""} ${o.dolor || ""} ${o.encaje || ""} ${o.ubicacion || ""} ${o.tipo || ""}`.toLowerCase().includes(t))
                     .slice()

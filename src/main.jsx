@@ -4,7 +4,7 @@ import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User } from "
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import * as opsData from "./opsData.js";
-import logoMediaLab from "./logos/logo-medialab.png";
+import logoMediaLab from "./logos/logo.svg";
 
 const AUTH_STORE_KEY = "uxia.supabaseSession";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
@@ -67,6 +67,11 @@ async function refreshSession(session) {
   return saveSession(refreshed);
 }
 
+// Emails con acceso al Centro de Operaciones (solo el CEO). Coma-separado en VITE_CEO_EMAIL.
+// Si no se define, no se restringe (compatibilidad). Configúralo en Vercel para limitar el acceso.
+const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
+  .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+
 function AppShell() {
   const [module, setModule] = React.useState(() => localStorage.getItem("uxia.activeModule") || "operations");
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -83,6 +88,16 @@ function AppShell() {
   };
   const [notifs, setNotifs] = React.useState([]);
   const [session, setSession] = React.useState(() => readStoredSession());
+
+  // Solo el CEO entra al Centro de Operaciones; el resto se queda en el Radar.
+  const userEmail = String(session?.user?.email || session?.user?.user_metadata?.email || "").toLowerCase();
+  const esCEO = CEO_EMAILS.length === 0 || CEO_EMAILS.includes(userEmail);
+  React.useEffect(() => {
+    if (!esCEO && module === "operations") {
+      setModule("radar");
+      try { localStorage.setItem("uxia.activeModule", "radar"); } catch { /* ignore */ }
+    }
+  }, [esCEO, module]);
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
   const token = session?.access_token;
@@ -267,7 +282,7 @@ function AppShell() {
             </div>
           </div>
           <div className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-1`}>
-            <ModuleBtn id="operations" label="Centro operativo" Icon={LayoutDashboard} activeColor="#17727A" />
+            {esCEO && <ModuleBtn id="operations" label="Centro operativo" Icon={LayoutDashboard} activeColor="#17727A" />}
             <ModuleBtn id="radar" label="Radar oportunidades" Icon={Radar} activeColor="#E8751A" />
             <div className="my-1 h-px w-full sm:my-0 sm:mx-1 sm:h-5 sm:w-px" style={{ backgroundColor: navBorder }} />
             <UserMenu email={session.user?.email || session.user?.user_metadata?.email || ""} onChangePassword={handleChangePassword} navText={navText} navDim={navDim} ctrlBg={ctrlBg} navBorder={navBorder} />
@@ -282,7 +297,16 @@ function AppShell() {
           </div>
         </div>
       </nav>
-      {module === "radar" ? <RadarUXIA token={session.access_token} theme={theme} /> : <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} />}
+      {/* Overlay que oscurece la interfaz al abrir el menú en responsive (evita confundir
+          el color del menú con el de la app). El nav (z-50) queda por encima. */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 sm:hidden"
+          onClick={() => setMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} /> : <RadarUXIA token={session.access_token} theme={theme} />}
     </div>
   );
 }

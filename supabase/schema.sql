@@ -67,6 +67,8 @@ create table if not exists tasks (
   completed_at timestamptz,
   worked_hours numeric,
   category text,
+  rating numeric,
+  rating_comment text,
   created_at timestamptz not null default now()
 );
 

@@ -55,6 +55,7 @@ const rowToTask = (row) => ({
   acceptanceCriteria: asArray(row.acceptance_criteria), attachments: asArray(row.attachments),
   emailTo: row.email_to || "", emailSubject: row.email_subject || "", createdAt: row.created_at || "",
   completedAt: row.completed_at || "", workedHours: row.worked_hours ?? null, category: row.category || "",
+  rating: row.rating ?? null, ratingComment: row.rating_comment || "",
 });
 
 const taskToRow = (task) => ({
@@ -67,6 +68,7 @@ const taskToRow = (task) => ({
   attachments: asArray(task.attachments), email_to: task.emailTo || "", email_subject: task.emailSubject || "",
   completed_at: task.completedAt || null, worked_hours: task.workedHours ?? null,
   category: task.category || null,
+  rating: task.rating ?? null, rating_comment: task.ratingComment || null,
   created_at: task.createdAt || new Date().toISOString(),
 });
 
@@ -205,7 +207,7 @@ export async function saveState(token, state) {
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours"]);
+    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba

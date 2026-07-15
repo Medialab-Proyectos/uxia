@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Download, ExternalLink, Link2, ListChecks, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Send, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Download, ExternalLink, Link2, ListChecks, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Send, Star, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 
@@ -1423,15 +1423,35 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
 
         {activeView === "companies" && (
           <section className="mt-6">
-            <div className={asideOpen ? "grid gap-5 lg:grid-cols-[1fr_320px]" : ""}>
+            <div>
+            {!asideOpen && (
             <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm text-[#667085]">Empresa activa: <b className="text-[#1D2939]">{company?.name || "—"}</b></span>
+            {/* Carrusel de empresas: cambia de empresa sin abrir el panel de empresas/personas. */}
+            <div className="mb-3 flex items-center gap-2">
+              <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
+                {companies.filter((c) => c.status !== "inactiva").map((c) => {
+                  const on = c.id === activeCompany;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setActiveCompany(c.id)}
+                      className="flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold"
+                      style={on ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", background: "#fff", color: "#667085" }}
+                    >
+                      {c.logo?.url
+                        ? <img src={c.logo.url} alt="" className="h-5 w-5 shrink-0 rounded-full bg-white object-contain" />
+                        : <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: on ? "#17727A" : "#E4DED6", color: on ? "#fff" : "#667085" }}>{projectInitials(c.name)}</span>}
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
               {!asideOpen && (
                 <button
                   type="button"
                   onClick={() => setAsideOpen(true)}
-                  className="inline-flex min-h-[40px] items-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]"
+                  className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]"
                 >
                   Empresas y personas <ChevronRight size={16} />
                 </button>
@@ -1479,9 +1499,10 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               }}
             />
             </div>
+            )}
 
             {asideOpen && (
-              <aside className="space-y-3">
+              <aside className="mx-auto max-w-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-[#667085]">Empresas y personas</h2>
                   <button
@@ -1508,12 +1529,15 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                     Crear empresa
                   </button>
                 </div>
-                {companies.map((item) => (
+                {/* Activas primero, inactivas después (atenuadas). */}
+                {[...companies].sort((a, b) => (a.status === "inactiva" ? 1 : 0) - (b.status === "inactiva" ? 1 : 0)).map((item) => {
+                  const inactiva = item.status === "inactiva";
+                  return (
                   <button
                     key={item.id}
                     onClick={() => setActiveCompany(item.id)}
                     className="w-full rounded-md border bg-white p-4 text-left shadow-sm"
-                    style={{ borderColor: item.id === activeCompany ? "#17727A" : "#E4DED6" }}
+                    style={{ borderColor: item.id === activeCompany ? "#17727A" : "#E4DED6", opacity: inactiva ? 0.6 : 1 }}
                   >
                     <div className="flex items-start gap-3">
                       {item.logo?.url ? (
@@ -1527,10 +1551,11 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         <p className="truncate font-semibold text-[#1D2939]">{item.name}</p>
                         <p className="mt-1 truncate text-xs text-[#667085]">{item.workspaces.join(" + ")}</p>
                       </div>
-                      <span className="shrink-0 rounded-full bg-[#EAF4F2] px-2 py-1 text-xs font-semibold text-[#17727A]">{item.status}</span>
+                      <span className="shrink-0 rounded-full px-2 py-1 text-xs font-semibold" style={inactiva ? { background: "#F2F4F7", color: "#667085" } : { background: "#EAF4F2", color: "#17727A" }}>{item.status}</span>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
                 <PeoplePanel
                   people={people}
                   newPerson={newPerson}
@@ -2260,6 +2285,31 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </ul>
         )}
+        {task.status === "done" && (
+          <div className="rounded-md border border-[#A6D9C4] bg-[#E5F5EE] p-2">
+            <p className="text-xs font-semibold text-[#0D7A4F]">Satisfacción tras entrega (opcional)</p>
+            <div className="mt-1 flex items-center gap-0.5">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onChangeTask(task.id, { rating: n === task.rating ? null : n })}
+                  title={`${n} estrella(s)`}
+                  className="p-0.5"
+                >
+                  <Star size={18} style={{ color: "#F2A93B" }} fill={n <= (task.rating || 0) ? "#F2A93B" : "none"} />
+                </button>
+              ))}
+              {task.rating ? <span className="ml-1 text-xs font-semibold text-[#0D7A4F]">{task.rating}/5</span> : <span className="ml-1 text-xs text-[#8b8272]">Sin calificar</span>}
+            </div>
+            <input
+              value={task.ratingComment || ""}
+              onChange={(event) => onChangeTask(task.id, { ratingComment: event.target.value })}
+              placeholder="Comentario del cliente (opcional)"
+              className="mt-2 w-full rounded-md border border-[#A6D9C4] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#0D7A4F]"
+            />
+          </div>
+        )}
       </div>
     </details>
   );
@@ -2305,6 +2355,7 @@ function CompanyPanel({
   useEffect(() => { if (highlightId) setOpenTaskId(highlightId); }, [highlightId]);
   const [editCompanyName, setEditCompanyName] = useState(null); // string en edición o null
   const [editClient, setEditClient] = useState(null); // { old, value } o null
+  const [showKpi, setShowKpi] = useState(false);
   // "Subproyecto y contexto" siempre oculto al abrir/cambiar de empresa.
   useEffect(() => { setSideOpen(false); }, [company?.id]);
   if (!company) return null;
@@ -2342,8 +2393,9 @@ function CompanyPanel({
               <button type="button" onClick={() => setEditCompanyName(null)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]" title="Cancelar"><X size={16} /></button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <h2 className="text-lg font-semibold text-[#1D2939]">{company.name}</h2>
+              <span className="rounded-full bg-[#EAF4F2] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#17727A]">Empresa activa</span>
               <button type="button" onClick={() => setEditCompanyName(company.name)} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]" title="Editar nombre de la empresa"><Pencil size={13} /></button>
             </div>
           )}
@@ -2367,6 +2419,14 @@ function CompanyPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-[#FFF2CC] px-3 py-1 text-sm font-semibold text-[#8A5700]">{company.owner}</span>
+          <button
+            type="button"
+            onClick={() => setShowKpi((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-semibold"
+            style={showKpi ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#344054" }}
+          >
+            <BarChart3 size={15} /> {showKpi ? "Ver proyectos" : "Indicadores"}
+          </button>
           <button onClick={onToggleStatus} className="rounded-md border border-[#D0D5DD] px-3 py-1.5 text-sm font-semibold text-[#344054]">
             {company.status === "inactiva" ? "Activar empresa" : "Desactivar empresa"}
           </button>
@@ -2505,6 +2565,9 @@ function CompanyPanel({
           </div>
         </div>
         )}
+        {showKpi ? (
+          <CompanyKpiPanel company={company} tasks={tasks} clients={active} />
+        ) : (
         <div className="min-w-0">
           {!sideOpen && (
             <button
@@ -2768,7 +2831,147 @@ function CompanyPanel({
             </div>
           )}
         </div>
+        )}
       </div>
     </section>
+  );
+}
+
+// Panel de indicadores (KPI) por empresa: cumplidas vs total, por subproyecto, salud,
+// satisfacción (rating de tareas) y curva de crecimiento por periodo.
+function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
+  const [period, setPeriod] = useState("trimestre");
+  const companyTasks = tasks.filter((t) => t.companyId === company.id);
+  const now = new Date();
+  const cutoff = new Date(now);
+  if (period === "mes") cutoff.setMonth(now.getMonth() - 1);
+  else if (period === "trimestre") cutoff.setMonth(now.getMonth() - 3);
+  else if (period === "semestre") cutoff.setMonth(now.getMonth() - 6);
+  else cutoff.setFullYear(now.getFullYear() - 1);
+  const done = companyTasks.filter((t) => t.status === "done");
+  const doneInPeriod = done.filter((t) => t.completedAt && new Date(t.completedAt) >= cutoff);
+  const total = companyTasks.length;
+  const pctDone = total ? Math.round((done.length / total) * 100) : 0;
+  const ratedAll = done.filter((t) => t.rating);
+  const avg = ratedAll.length ? ratedAll.reduce((s, t) => s + Number(t.rating), 0) / ratedAll.length : null;
+
+  const bySub = clients.map((cl) => {
+    const ts = companyTasks.filter((t) => t.client === cl);
+    const d = ts.filter((t) => t.status === "done").length;
+    const overdue = ts.filter(taskIsOverdue).length;
+    const blocked = ts.filter((t) => t.status === "blocked").length;
+    const donePct = ts.length ? d / ts.length : 0;
+    const health = Math.max(0, Math.min(100, Math.round(donePct * 100 - overdue * 15 - blocked * 10)));
+    return { cl, total: ts.length, done: d, overdue, blocked, health };
+  });
+
+  const months = [];
+  for (let i = 5; i >= 0; i -= 1) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
+  const series = months.map((m) => {
+    const ds = done.filter((t) => {
+      if (!t.completedAt) return false;
+      const c = new Date(t.completedAt);
+      return c.getFullYear() === m.getFullYear() && c.getMonth() === m.getMonth();
+    });
+    const r = ds.filter((t) => t.rating);
+    return { label: m.toLocaleDateString("es-CO", { month: "short" }), done: ds.length, sat: r.length ? r.reduce((s, t) => s + Number(t.rating), 0) / r.length : 0 };
+  });
+  const feedback = done.filter((t) => t.rating || t.ratingComment).slice().reverse();
+  const healthColor = (hh) => (hh >= 70 ? "#0D7A4F" : hh >= 40 ? "#B76E00" : "#B42318");
+
+  return (
+    <div className="mt-3 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-[#1D2939]">Indicadores de {company.name}</h3>
+        <div className="flex flex-wrap gap-1">
+          {[["mes", "Mes"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["año", "Año"]].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+          <p className="text-xs text-[#667085]">Cumplidas / total</p>
+          <p className="mt-1 font-metrics text-2xl font-semibold text-[#0D7A4F]">{done.length}<span className="text-base text-[#98A2B3]">/{total}</span></p>
+          <div className="mt-1 h-1.5 w-full rounded-full bg-[#F2F4F7]"><div className="h-1.5 rounded-full bg-[#0D7A4F]" style={{ width: `${pctDone}%` }} /></div>
+        </div>
+        <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+          <p className="text-xs text-[#667085]">Cumplidas ({period})</p>
+          <p className="mt-1 font-metrics text-2xl font-semibold text-[#17727A]">{doneInPeriod.length}</p>
+        </div>
+        <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+          <p className="text-xs text-[#667085]">Satisfacción</p>
+          <p className="mt-1 flex items-center gap-1 font-metrics text-2xl font-semibold text-[#F2A93B]">{avg ? avg.toFixed(1) : "—"} <Star size={16} fill="#F2A93B" style={{ color: "#F2A93B" }} /></p>
+          <p className="text-[10px] text-[#98A2B3]">{ratedAll.length} calificada(s)</p>
+        </div>
+        <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+          <p className="text-xs text-[#667085]">Subproyectos</p>
+          <p className="mt-1 font-metrics text-2xl font-semibold text-[#344054]">{clients.length}</p>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <p className="mb-2 text-xs font-semibold text-[#344054]">Curva de cumplimiento y satisfacción (últimos 6 meses)</p>
+        <KpiSparkline series={series} />
+      </div>
+
+      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <p className="mb-2 text-xs font-semibold text-[#344054]">Salud por subproyecto</p>
+        {bySub.length ? (
+          <div className="space-y-2">
+            {bySub.map((s) => (
+              <div key={s.cl}>
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate font-semibold text-[#344054]">{s.cl}</span>
+                  <span className="shrink-0 text-[#667085]">{s.done}/{s.total} · {s.overdue} venc · {s.blocked} bloq · <b style={{ color: healthColor(s.health) }}>{s.health}%</b></span>
+                </div>
+                <div className="mt-1 h-2 w-full rounded-full bg-[#F2F4F7]"><div className="h-2 rounded-full" style={{ width: `${s.health}%`, background: healthColor(s.health) }} /></div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-xs text-[#8b8272]">Sin subproyectos.</p>}
+      </div>
+
+      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <p className="mb-2 text-xs font-semibold text-[#344054]">Feedback tras entrega ({feedback.length})</p>
+        {feedback.length ? (
+          <ul className="space-y-2">
+            {feedback.map((t) => (
+              <li key={t.id} className="rounded-md border border-[#E4DED6] p-2">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={12} fill={n <= (t.rating || 0) ? "#F2A93B" : "none"} style={{ color: "#F2A93B" }} />)}
+                  <span className="ml-1 truncate text-xs font-semibold text-[#344054]">{t.title}</span>
+                </div>
+                {t.ratingComment && <p className="mt-0.5 text-xs text-[#667085]">«{t.ratingComment}»</p>}
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs text-[#8b8272]">Aún no hay calificaciones. Al finalizar una tarea puedes darle estrellas.</p>}
+      </div>
+    </div>
+  );
+}
+
+function KpiSparkline({ series }) {
+  const w = 320, h = 70, pad = 6;
+  const maxDone = Math.max(1, ...series.map((s) => s.done));
+  const n = series.length;
+  const x = (i) => pad + (i * (w - 2 * pad)) / Math.max(1, n - 1);
+  const yDone = (v) => h - pad - (v / maxDone) * (h - 2 * pad);
+  const ySat = (v) => h - pad - (v / 5) * (h - 2 * pad);
+  const line = (acc, yfn) => series.map((s, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${yfn(acc(s)).toFixed(1)}`).join(" ");
+  return (
+    <div className="overflow-x-auto">
+      <svg width={w} height={h + 16} viewBox={`0 0 ${w} ${h + 16}`} className="max-w-full">
+        <path d={line((s) => s.done, yDone)} fill="none" stroke="#17727A" strokeWidth="2" />
+        <path d={line((s) => s.sat, ySat)} fill="none" stroke="#F2A93B" strokeWidth="2" strokeDasharray="3 2" />
+        {series.map((s, i) => <text key={i} x={x(i)} y={h + 12} textAnchor="middle" fontSize="9" fill="#98A2B3">{s.label}</text>)}
+      </svg>
+      <div className="mt-1 flex gap-4 text-[10px] text-[#667085]">
+        <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4" style={{ background: "#17727A" }} /> Cumplidas</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4" style={{ background: "#F2A93B" }} /> Satisfacción</span>
+      </div>
+    </div>
   );
 }

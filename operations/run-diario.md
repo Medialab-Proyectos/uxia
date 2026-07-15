@@ -100,6 +100,18 @@ levantan capital, buscan agencia/aliado/partner de diseño**, o edtech/comunidad
 - Fuentes típicas (noticias de funding/producto): Crunchbase, Cuantico VP, Techloy,
   BNamericas, This Week in Fintech, LatamRepublic, Failory, KPMG/reportes.
 - Curar **solo reales con URL verificable** en `operations/_run/oportunidades.json`.
+- **DEDUP + ARCHIVADO (pedido de Christian 2026-07-14):** al correr, traer nuevas y
+  **validar contra las que YA existen** en la tabla `oportunidades` (todas: nuevas,
+  me_interesa, descartadas y **archivadas**). Antes de insertar:
+  - Si la propuesta **ya existe** (mismo id/URL/empresa) → **no** volver a crearla.
+  - Si ya fue **borrada** por el usuario → no re-agregarla.
+  - Si ya está en **me gusta** (`estado:"me_interesa"`) → no tratarla como nueva.
+  - Deduplicar por **id determinista** = hash(url|empresa) para que la misma señal no entre dos veces.
+- **Archivar tras 1 semana, NO borrar:** una propuesta con **más de 7 días** desde su
+  `created_at` pasa a **`estado:"archivada"`** (no se elimina). Las archivadas **no se
+  muestran** en la app, pero **sí se conservan** para el dedup (que no reentren iguales).
+  Marcar el archivado en la corrida: `PATCH oportunidades?created_at=lt.<hoy-7d>&estado=in.(nueva)  {estado:"archivada"}`
+  (no tocar me_interesa ni descartada).
 
 ### 3) Radar — EMPLEOS (vacantes) — rol central: Colombia-remoto-español
 **Orden de prioridad (así los ordena la app con `jobRank`):**

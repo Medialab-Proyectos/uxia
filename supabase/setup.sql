@@ -59,6 +59,10 @@ alter table tasks add column if not exists worked_hours numeric;
 alter table companies add column if not exists scope jsonb not null default '[]'::jsonb;
 alter table tasks add column if not exists category text;
 
+-- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
+alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
+alter table tasks add column if not exists rating_comment text;
+
 -- 4) Políticas RLS: usuario autenticado gestiona todo (herramienta interna) -------
 do $$
 declare t text;
