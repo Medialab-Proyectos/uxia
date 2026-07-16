@@ -325,6 +325,7 @@ function taskToRow(task) {
     attachments: asArray(task.attachments),
     email_to: task.emailTo || "",
     email_subject: task.emailSubject || "",
+    category: task.category || null,
     created_at: task.createdAt || new Date().toISOString(),
   };
 }
