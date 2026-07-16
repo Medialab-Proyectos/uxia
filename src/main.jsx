@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
+import EmployeePortal from "./EmployeePortal.jsx";
 import * as opsData from "./opsData.js";
 import logoMediaLab from "./logos/logo.svg";
 
@@ -229,6 +230,28 @@ function AppShell() {
 
   if (!session?.access_token) {
     return <LoginScreen notice={authNotice} onLogin={handleLogin} />;
+  }
+
+  // EMPLEADO (no CEO): portal restringido — solo SUS tareas e indicadores. Sin Radar,
+  // sin Centro de Operaciones. Solo puede comentar y cambiar el estado de sus tareas.
+  if (!esCEO) {
+    const dk = theme === "dark";
+    return (
+      <div style={{ minHeight: "100vh", background: dk ? "#0E1116" : "#F7F4EF" }}>
+        <nav className="sticky top-0 z-50 flex items-center justify-between border-b px-4 py-2" style={{ backgroundColor: dk ? "#151B23" : "#FFFCF7", borderColor: dk ? "#28313E" : "#E7E0D5" }}>
+          <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-6 w-auto" />
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={toggleTheme} className="inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: dk ? "#28313E" : "#E7E0D5", color: "#E8751A" }} aria-label="Tema">
+              {dk ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button type="button" onClick={handleLogout} className="flex items-center gap-1.5 rounded-md px-2 py-2 text-sm font-semibold" style={{ color: "#C0362C" }}>
+              <LogOut size={16} /> Salir
+            </button>
+          </div>
+        </nav>
+        <EmployeePortal token={session.access_token} user={session.user} theme={theme} />
+      </div>
+    );
   }
 
   // Tema global: claro/oscuro se aplica a AMBOS módulos por igual (el Centro mapea sus

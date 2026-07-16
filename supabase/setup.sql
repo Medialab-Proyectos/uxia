@@ -86,6 +86,12 @@ alter table tasks add column if not exists category text;
 -- y NO cambia aunque se borren/reordenen tareas. Sirve para citar una tarea en cualquier lado.
 alter table tasks add column if not exists task_ref text;
 
+-- 3d-ter) Portal de empleados: comentarios del empleado + marca de "actualizada".
+-- comments = [{ author, role, text, at }]; employee_touched_at = última acción del empleado
+-- (el admin ve la tarea como "Actualizada" hasta que la revise).
+alter table tasks add column if not exists comments jsonb not null default '[]'::jsonb;
+alter table tasks add column if not exists employee_touched_at timestamptz;
+
 -- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
 alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
 alter table tasks add column if not exists rating_comment text;
@@ -109,7 +115,31 @@ create or replace view satisfaccion_por_empresa as
   from tasks t left join companies c on c.id = t.company_id
   group by t.company_id, c.name;
 
--- 4) Políticas RLS: usuario autenticado gestiona todo (herramienta interna) -------
+-- 4) Políticas RLS POR ROL --------------------------------------------------------
+-- El ADMIN (CEO) gestiona TODO. El EMPLEADO (Supabase Auth con user_metadata.role =
+-- 'employee', que crea api/employee.js) solo ve/actualiza SUS tareas, ve su propio
+-- registro de personas y los nombres de empresas/proyectos. NO ve Radar (oportunidades/
+-- vacantes), insumos, ni datos de otros.
+
+-- Lista de ADMINS (CEO). Deny-by-default: quien NO esté aquí y no sea empleado no ve nada.
+-- >>> Ajusta el correo del CEO si cambia. <<<
+create table if not exists app_admins (email text primary key);
+insert into app_admins (email) values ('hello@medialab.design') on conflict do nothing;
+alter table app_admins enable row level security; -- solo accesible vía las funciones definer
+
+-- ¿Admin? (email en app_admins). SECURITY DEFINER: lee app_admins saltando su RLS.
+create or replace function app_is_admin() returns boolean
+  language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from app_admins a where lower(a.email) = lower(auth.jwt() ->> 'email'))
+$fn$;
+
+-- ¿Empleado? (Supabase Auth con user_metadata.role = 'employee', que pone api/employee.js).
+create or replace function app_is_employee() returns boolean
+  language sql stable as $fn$
+  select coalesce(auth.jwt() -> 'user_metadata' ->> 'role', '') = 'employee'
+$fn$;
+
+-- Habilita RLS y limpia políticas previas en todas las tablas.
 do $$
 declare t text;
 begin
@@ -117,9 +147,71 @@ begin
   loop
     execute format('alter table %I enable row level security;', t);
     execute format('drop policy if exists "auth_all_%1$s" on %1$I;', t);
-    execute format('create policy "auth_all_%1$s" on %1$I for all to authenticated using (true) with check (true);', t);
+    execute format('drop policy if exists "admin_all_%1$s" on %1$I;', t);
   end loop;
 end $$;
+
+-- ADMIN (email en app_admins): control total en TODAS las tablas.
+do $$
+declare t text;
+begin
+  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes','product_signals']
+  loop
+    execute format('create policy "admin_all_%1$s" on %1$I for all to authenticated using (app_is_admin()) with check (app_is_admin());', t);
+  end loop;
+end $$;
+
+-- EMPLEADO: lectura de nombres de empresas y proyectos (para mostrar contexto).
+drop policy if exists "emp_read_companies" on companies;
+create policy "emp_read_companies" on companies for select to authenticated using (app_is_employee());
+drop policy if exists "emp_read_projects" on projects;
+create policy "emp_read_projects" on projects for select to authenticated using (app_is_employee());
+
+-- EMPLEADO: solo SU propio registro en people.
+drop policy if exists "emp_self_people" on people;
+create policy "emp_self_people" on people for select to authenticated
+  using (app_is_employee() and lower(email) = lower(auth.jwt() ->> 'email'));
+
+-- EMPLEADO: solo SUS tareas (assignee_id = su persona). Puede leer y actualizar.
+drop policy if exists "emp_read_tasks" on tasks;
+create policy "emp_read_tasks" on tasks for select to authenticated
+  using (app_is_employee() and assignee_id in (
+    select id from people where lower(email) = lower(auth.jwt() ->> 'email')));
+drop policy if exists "emp_update_tasks" on tasks;
+create policy "emp_update_tasks" on tasks for update to authenticated
+  using (app_is_employee() and assignee_id in (
+    select id from people where lower(email) = lower(auth.jwt() ->> 'email')))
+  with check (app_is_employee() and assignee_id in (
+    select id from people where lower(email) = lower(auth.jwt() ->> 'email')));
+
+-- Blindaje de COLUMNAS: aunque el empleado tenga UPDATE, solo puede cambiar status
+-- (a doing/review/actualizada), comments y employee_touched_at. Lo demás se revierte.
+create or replace function app_guard_employee_task_update() returns trigger
+  language plpgsql as $fn$
+begin
+  if app_is_employee() then
+    new.company_id := old.company_id; new.client := old.client; new.title := old.title;
+    new.priority := old.priority; new.role := old.role; new.owner := old.owner;
+    new.assignee_id := old.assignee_id; new.due_date := old.due_date;
+    new.delivery_date := old.delivery_date; new.source := old.source;
+    new.audience := old.audience; new.sync_mode := old.sync_mode; new.evidence := old.evidence;
+    new.description := old.description; new.user_story := old.user_story;
+    new.acceptance_criteria := old.acceptance_criteria; new.attachments := old.attachments;
+    new.email_to := old.email_to; new.email_subject := old.email_subject;
+    new.completed_at := old.completed_at; new.worked_hours := old.worked_hours;
+    new.category := old.category; new.rating := old.rating;
+    new.rating_comment := old.rating_comment; new.ai_usage := old.ai_usage;
+    new.task_ref := old.task_ref; new.created_at := old.created_at;
+    if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then
+      new.status := old.status;
+    end if;
+  end if;
+  return new;
+end
+$fn$;
+drop trigger if exists app_guard_task_update on tasks;
+create trigger app_guard_task_update before update on tasks
+  for each row execute function app_guard_employee_task_update();
 
 -- 5) Storage (bucket operations-documents): lectura pública, escritura autenticada
 drop policy if exists "ops_public_read" on storage.objects;

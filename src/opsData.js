@@ -67,6 +67,7 @@ const rowToTask = (row) => ({
   completedAt: row.completed_at || "", workedHours: row.worked_hours ?? null, category: row.category || "",
   rating: row.rating ?? null, ratingComment: row.rating_comment || "", aiUsage: row.ai_usage ?? null,
   ref: row.task_ref || "",
+  comments: asArray(row.comments), employeeTouchedAt: row.employee_touched_at || "",
 });
 
 const taskToRow = (task) => ({
@@ -81,6 +82,7 @@ const taskToRow = (task) => ({
   category: task.category || null,
   rating: task.rating ?? null, rating_comment: task.ratingComment || null, ai_usage: task.aiUsage ?? null,
   task_ref: task.ref || null,
+  comments: asArray(task.comments), employee_touched_at: task.employeeTouchedAt || null,
   created_at: task.createdAt || new Date().toISOString(),
 });
 
@@ -219,7 +221,7 @@ export async function saveState(token, state) {
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref"]);
+    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba

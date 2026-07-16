@@ -353,6 +353,13 @@ de `supabase/schema-insumos-pendientes.sql`).
    - Título accionable, descripción clara, responsable sugerido (`role`/owner), vencimiento.
    - Cruzar varias fuentes; **no** una tarea por archivo; **dedup** contra tareas existentes.
    - Cada tarea con `priority` (alta = vital 20% / cuello de botella / urgente).
+   - **Tipo de tarea por CONTEXTO** (`category`): a partir de lo que pide el insumo, clasifica
+     la tarea en una categoría del alcance (ej. Diseño UX/UI, Desarrollo, Gestión de proyecto,
+     QA, Infraestructura, Comercial…). Ponla en `category` y coherente con `role`.
+   - **Asignar usuario si se identifica** (`assigneeId`/`owner`): si el contexto nombra a la
+     persona que debe tomar la tarea (o es obvia por su rol/subproyecto y existe en `people`),
+     asígnala. Si NO se puede identificar, deja la tarea SIN responsable (queda para asignar en
+     la plataforma con el filtro "Sin responsable").
    - Si un insumo trae señales de salud del producto (bugs, quejas, satisfacción, calidad,
      tecnología, presupuesto, dependencias, mercado), agregar `productSignals` (mueven el MDSSP).
    - Insumo sin nada accionable ni medible → solo `processedInsumoIds` (se retira, sin basura).

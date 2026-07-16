@@ -10,6 +10,7 @@ const STATUS = {
   doing: "En proceso",
   review: "En revisión",
   blocked: "Bloqueada",
+  actualizada: "Actualizada",
   done: "Finalizada",
 };
 
@@ -20,6 +21,7 @@ const STATUS_TONE = {
   doing:   { border: "#9CC7E4", bg: "#EAF2FB", text: "#1D5A99" },
   review:  { border: "#B7D8D4", bg: "#EAF4F2", text: "#17727A" },
   blocked: { border: "#F3B0A8", bg: "#FEF3F2", text: "#B42318" },
+  actualizada: { border: "#C4B5FD", bg: "#F5F3FF", text: "#6D28D9" },
   done:    { border: "#A6D9C4", bg: "#E5F5EE", text: "#0D7A4F" },
 };
 
@@ -572,6 +574,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [companyFilter, setCompanyFilter] = useState("all");
   const [taskQuery, setTaskQuery] = useState("");
   const [highlightTaskId, setHighlightTaskId] = useState(null);
+  const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
+  const [sortRecent, setSortRecent] = useState(false);    // ordenar por últimas incluidas
   const [activeView, setActiveView] = useState("companies");
   const [asideOpen, setAsideOpen] = useState(false);
   const [globalOpen, setGlobalOpen] = useState(false);
@@ -584,7 +588,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [newClientName, setNewClientName] = useState("");
   const [newClientTool, setNewClientTool] = useState("No aplica");
   const [newClientBoardUrl, setNewClientBoardUrl] = useState("");
-  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto" });
+  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "" });
   const [contextPreview, setContextPreview] = useState({});
   const [loadedState, setLoadedState] = useState(false);
   const [saveStatus, setSaveStatus] = useState("Sin guardar");
@@ -691,6 +695,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const sinProyecto = task.companyId === "por-asignar" || !task.client;
     if (assignFilter === "unassigned" && !sinProyecto) return false;
     if (assignFilter === "assigned" && sinProyecto) return false;
+    // Sin responsable = sin persona asignada (ni assigneeId ni owner).
+    if (ownerFilter === "unowned" && (task.assigneeId || task.owner)) return false;
     if (taskQ) {
       // Al buscar por palabras se ignora el filtro de estado, para encontrar también
       // las tareas FINALIZADAS (archivadas) en cualquier consulta.
@@ -870,11 +876,29 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setNotice("Adjunto eliminado de la tarea.");
   }
 
+  // Da/actualiza el acceso del empleado al portal (correo + contraseña) vía la función
+  // serverless segura (usa service_role del lado servidor, no en el navegador).
+  async function grantAccess(email, password) {
+    if (!email || !password) return;
+    try {
+      const res = await fetch("/api/employee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setNotice(res.ok ? `Acceso ${data.created ? "creado" : "actualizado"} para ${email}.` : `No se pudo dar acceso: ${data.error || res.status}`);
+    } catch {
+      setNotice("No se pudo contactar el servicio de acceso.");
+    }
+  }
+
   function addPerson() {
     const name = newPerson.name.trim();
     if (!name) return;
     const email = newPerson.email.trim();
     const phone = newPerson.phone.trim();
+    const password = (newPerson.password || "").trim();
     if (email && !EMAIL_PATTERN.test(email)) {
       setNotice("Revisa el correo de la persona antes de guardarla.");
       return;
@@ -883,6 +907,15 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       setNotice("Revisa el WhatsApp: incluye indicativo y al menos 8 digitos.");
       return;
     }
+    if (password && !email) {
+      setNotice("Para dar acceso con contraseña, la persona debe tener correo.");
+      return;
+    }
+    if (password && password.length < 6) {
+      setNotice("La contraseña de acceso debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (password && email) grantAccess(email, password);
     setPeople((current) => [
       ...current,
       {
@@ -896,7 +929,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         companyIds: [], // persona global: disponible para asignar en todas las empresas
       },
     ]);
-    setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto" });
+    setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "" });
     setNotice(`Persona agregada: ${name}.`);
   }
 
@@ -1619,6 +1652,10 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onStatus={setActiveStatus}
             assignFilter={assignFilter}
             onAssignFilter={setAssignFilter}
+            ownerFilter={ownerFilter}
+            onOwnerFilter={setOwnerFilter}
+            sortRecent={sortRecent}
+            onSortRecent={setSortRecent}
             companyFilter={companyFilter}
             onCompanyFilter={setCompanyFilter}
             taskQuery={taskQuery}
@@ -1633,7 +1670,18 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
         )}
 
         {activeView === "priority" && (
-          <PriorityView tasks={tasks} companies={companies} />
+          <PriorityView
+            tasks={tasks}
+            companies={companies}
+            onOpenTask={(t) => {
+              setCompanyFilter("all");
+              setAssignFilter("all");
+              setActiveStatus("open");
+              setTaskQuery("");
+              setHighlightTaskId(t.id);
+              setActiveView("tasks");
+            }}
+          />
         )}
       </main>
     </div>
@@ -1754,7 +1802,7 @@ function buildTaskRefs(tasks, companies) {
     .tasks.reduce((acc, t) => { acc[t.id] = t.ref; return acc; }, {});
 }
 
-function PriorityView({ tasks, companies }) {
+function PriorityView({ tasks, companies, onOpenTask }) {
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
   const refs = buildTaskRefs(tasks, companies);
   const ranked = tasks
@@ -1780,7 +1828,14 @@ function PriorityView({ tasks, companies }) {
   const scoreColor = (s) => (s >= 70 ? "#B42318" : s >= 45 ? "#B76E00" : "#1570EF");
 
   const TaskRow = ({ t, rank }) => (
-    <div className="flex items-start gap-3 rounded-md border border-[#E4DED6] bg-white p-3">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenTask?.(t)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenTask?.(t); } }}
+      title="Abrir la tarea"
+      className="flex cursor-pointer items-start gap-3 rounded-md border border-[#E4DED6] bg-white p-3 hover:border-[#17727A] hover:bg-[#F7FAFA]"
+    >
       {rank != null && <span className="mt-0.5 w-5 shrink-0 text-sm font-bold text-[#98A2B3]">{rank}</span>}
       <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: scoreColor(t.score) }}>{t.score}</span>
       <div className="min-w-0 flex-1">
@@ -1870,6 +1925,10 @@ function TasksTable({
   onStatus,
   assignFilter,
   onAssignFilter,
+  ownerFilter,
+  onOwnerFilter,
+  sortRecent,
+  onSortRecent,
   companyFilter,
   onCompanyFilter,
   taskQuery,
@@ -1884,6 +1943,20 @@ function TasksTable({
   const [openTaskId, setOpenTaskId] = useState(null);
   // Al crear una tarea nueva, se abre automáticamente para completarla.
   useEffect(() => { if (highlightId) setOpenTaskId(highlightId); }, [highlightId]);
+  // Modo "Recientes": una sola lista con las últimas tareas incluidas (por fecha de creación).
+  const recentGroups = sortRecent
+    ? [{
+        key: "__recent__",
+        label: "Últimas tareas incluidas",
+        bandeja: false,
+        hasHighlight: tasks.some((t) => t.id === highlightId),
+        tasks: [...tasks].sort((a, b) => {
+          if (a.id === highlightId) return -1;
+          if (b.id === highlightId) return 1;
+          return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+        }),
+      }]
+    : null;
   // Agrupa por proyecto (empresa · subproyecto); lo que no tiene proyecto real va a "Bandeja".
   const groups = [];
   const byKey = new Map();
@@ -1985,11 +2058,38 @@ function TasksTable({
               {label}
             </button>
           ))}
+          <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Responsable:</span>
+          {[["all", "Todas"], ["unowned", "Sin responsable"]].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => onOwnerFilter?.(key)}
+              className="rounded-full border px-3 py-1 text-xs font-semibold"
+              style={{
+                borderColor: ownerFilter === key ? "#B42318" : "#D0D5DD",
+                background: ownerFilter === key ? "#FEF3F2" : "#FFFFFF",
+                color: ownerFilter === key ? "#B42318" : "#667085",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            onClick={() => onSortRecent?.(!sortRecent)}
+            className="ml-2 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
+            style={{
+              borderColor: sortRecent ? "#17727A" : "#D0D5DD",
+              background: sortRecent ? "#EAF4F2" : "#FFFFFF",
+              color: sortRecent ? "#17727A" : "#667085",
+            }}
+            title="Ordenar por últimas tareas incluidas"
+          >
+            <Clock size={12} /> Recientes
+          </button>
         </div>
       </div>
 
       <div className="space-y-5">
-        {groups.length ? groups.map((group) => (
+        {(recentGroups || groups).length ? (recentGroups || groups).map((group) => (
           <div key={group.key} className="space-y-2">
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: group.bandeja ? "#B76E00" : "#17727A" }}>{group.label}</h3>
@@ -2076,6 +2176,17 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
           >
             {CONTACT_METHODS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
+        </label>
+        <label className="block text-xs font-semibold text-[#667085]">Contraseña de acceso al portal (opcional)
+          <input
+            value={newPerson.password || ""}
+            onChange={(event) => onNewPerson({ ...newPerson, password: event.target.value })}
+            placeholder="Mín. 6 caracteres — deja vacío si no dará acceso"
+            type="password"
+            autoComplete="new-password"
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
+          />
+          <span className="mt-1 block font-normal text-[#8b8272]">Con correo + contraseña, la persona podrá entrar al portal y ver solo SUS tareas.</span>
         </label>
         <p className="text-xs text-[#8b8272]">Así se envía la tarea a esta persona. "Automático" usa WhatsApp para externos, Google Chat para internos y el correo como respaldo.</p>
         <button onClick={onAddPerson} className="w-full rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
