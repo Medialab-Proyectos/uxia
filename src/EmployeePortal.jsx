@@ -37,6 +37,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [openId, setOpenId] = React.useState(null);
   const [draft, setDraft] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [companyFilter, setCompanyFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("active");
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
 
@@ -70,10 +72,21 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "";
 
   const active = tasks.filter((t) => t.status !== "done");
-  const ranked = [...active].map((t) => ({ ...t, dueDate: t.due_date, score: scoreTask({ ...t, dueDate: t.due_date }) }))
-    .sort((a, b) => b.score - a.score);
   const done = tasks.filter((t) => t.status === "done");
   const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review").length;
+
+  // Empresas presentes en MIS tareas (para el filtro).
+  const myCompanies = [...new Set(tasks.map((t) => t.company_id))].map((id) => ({ id, name: nameOf(id) }));
+
+  // Filtros por empresa y estado → lista ordenada por prioridad.
+  const filtered = tasks.filter((t) => {
+    if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
+    if (statusFilter === "active") return t.status !== "done";
+    if (statusFilter === "all") return true;
+    return t.status === statusFilter;
+  });
+  const ranked = [...filtered].map((t) => ({ ...t, dueDate: t.due_date, score: scoreTask({ ...t, dueDate: t.due_date }) }))
+    .sort((a, b) => b.score - a.score);
 
   async function patch(taskId, patch) {
     setBusy(true);
@@ -144,7 +157,24 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
 
         {error && <p className="mb-3 rounded-md border border-[#F3B0A8] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
 
-        <h2 className="mb-2 text-sm font-bold" style={{ color: "#17727A" }}>Por prioridad</h2>
+        {/* Filtros: empresa y estado */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {myCompanies.length > 1 && (
+            <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
+              className="rounded-md border px-2 py-1.5 text-xs font-semibold" style={{ borderColor: border, background: card, color: text }}>
+              <option value="all">Todas las empresas</option>
+              {myCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          {[["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setStatusFilter(k)}
+              className="rounded-full border px-3 py-1 text-xs font-semibold"
+              style={statusFilter === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: dim }}>
+              {l}
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-2">
           {ranked.length ? ranked.map((t) => {
             const isOpen = openId === t.id;
@@ -208,19 +238,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                 )}
               </div>
             );
-          }) : <p className="text-sm" style={{ color: dim }}>No tienes tareas activas. 🎉</p>}
+          }) : <p className="text-sm" style={{ color: dim }}>No hay tareas con estos filtros.</p>}
         </div>
-
-        {done.length > 0 && (
-          <details className="mt-5">
-            <summary className="cursor-pointer text-sm font-semibold" style={{ color: dim }}>Finalizadas ({done.length})</summary>
-            <ul className="mt-2 space-y-1">
-              {done.map((t) => (
-                <li key={t.id} className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: border, background: card, color: dim }}>{t.title}</li>
-              ))}
-            </ul>
-          </details>
-        )}
       </div>
     </div>
   );
