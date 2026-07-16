@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User } from "lucide-react";
+import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
@@ -389,6 +389,7 @@ function AppShell() {
 function LoginScreen({ notice, onLogin }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [showPwd, setShowPwd] = React.useState(false);
   const [error, setError] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
@@ -428,15 +429,26 @@ function LoginScreen({ notice, onLogin }) {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: "#8B97A6" }}>Contraseña</span>
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              autoComplete="current-password"
-              className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[#2AABB3]"
-              style={{ background: "#1B232E", borderColor: "#28313E", color: "#E8EDF3" }}
-              required
-            />
+            <div className="relative">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={showPwd ? "text" : "password"}
+                autoComplete="current-password"
+                className="w-full rounded-md border px-3 py-2 pr-10 text-sm outline-none focus:border-[#2AABB3]"
+                style={{ background: "#1B232E", borderColor: "#28313E", color: "#E8EDF3" }}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd((v) => !v)}
+                aria-label={showPwd ? "Ocultar contraseña" : "Ver contraseña"}
+                title={showPwd ? "Ocultar contraseña" : "Ver contraseña"}
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-[#8B97A6] hover:text-[#E8EDF3]"
+              >
+                {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </label>
         </div>
         {notice && <p className="mt-3 rounded-md border border-[#E8751A55] bg-[#E8751A22] p-2 text-xs font-semibold text-[#F0A968]">{notice}</p>}
