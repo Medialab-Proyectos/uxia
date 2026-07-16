@@ -2371,9 +2371,14 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         </span>
         <span className="min-w-0 flex-1 space-y-1">
           {open ? (
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#17727A]">Editando tarea</span>
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#17727A]">
+              Editando tarea{task.ref ? ` · ${task.ref}` : ""}
+            </span>
           ) : (
-            <span className="block break-words">{task.title}</span>
+            <span className="block break-words">
+              {task.ref && <span className="mr-1.5 rounded border border-[#D9D2C7] bg-[#F7F4EF] px-1 py-0.5 font-mono text-[10px] font-bold text-[#475467]">{task.ref}</span>}
+              {task.title}
+            </span>
           )}
           {!open && (
             <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
