@@ -298,7 +298,7 @@ function AppShell() {
                   )}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-2 w-72 rounded-md border p-3 text-sm shadow-lg z-50" style={{ backgroundColor: ctrlBg, borderColor: navBorder, color: navText }}>
+                  <div className="fixed left-3 right-3 top-16 z-50 max-h-[70vh] overflow-y-auto rounded-md border p-3 text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72" style={{ backgroundColor: ctrlBg, borderColor: navBorder, color: navText }}>
                     <p className="font-semibold mb-2">Notificaciones</p>
                     {notifs.length === 0 ? (
                       <p className="text-xs" style={{ color: navDim }}>Sin alertas por ahora.</p>
