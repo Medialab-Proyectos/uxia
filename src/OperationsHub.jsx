@@ -2125,8 +2125,8 @@ function TasksTable({
 
 // Control de acceso por persona: fija/resetea la contraseña del portal (email + password).
 function AccessControl({ person, onGrantAccess }) {
-  const [pwd, setPwd] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
+  const [pwd, setPwd] = useState("");
+  const [saving, setSaving] = useState(false);
   const email = (person.email || "").trim();
   return (
     <div className="mt-2 rounded-md border border-[#E4DED6] bg-white p-2">
