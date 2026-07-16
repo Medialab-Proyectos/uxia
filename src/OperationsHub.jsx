@@ -2318,6 +2318,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [openInternal, setOpenInternal] = useState(false);
+  const [reply, setReply] = useState("");
   // Popup al finalizar: satisfacción (1-5) + recomendaciones + % de IA usada.
   const [doneModal, setDoneModal] = useState(false);
   const [mRating, setMRating] = useState(0);
@@ -2397,6 +2398,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
                 {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
               </span>
+              {Array.isArray(task.comments) && task.comments.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6D28D9" }}>
+                  <MessageCircle size={11} /> {task.comments.length}
+                </span>
+              )}
               {task.dueDate && (
                 <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
                   <CalendarDays size={11} />
@@ -2501,6 +2507,39 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         </span>
       </summary>
       <div className="mt-2 space-y-2">
+        {Array.isArray(task.comments) && task.comments.length > 0 && (
+          <div className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#6D28D9]">
+                <MessageCircle size={12} className="mr-1 inline align-[-2px]" /> Comentarios ({task.comments.length})
+              </span>
+              {task.employeeTouchedAt && (
+                <button type="button" onClick={() => onChangeTask(task.id, { employeeTouchedAt: "" })}
+                  className="rounded border border-[#6D28D9] px-1.5 py-0.5 text-[10px] font-semibold text-[#6D28D9]">
+                  Marcar revisada
+                </button>
+              )}
+            </div>
+            <ul className="space-y-1.5">
+              {task.comments.map((c, i) => (
+                <li key={i} className="rounded-md border border-[#E4DED6] bg-white p-2 text-xs">
+                  <span className="font-semibold text-[#344054]">{c.author}</span>
+                  <span className="text-[#98A2B3]"> · {c.role === "employee" ? "empleado" : "admin"} · {String(c.at || "").slice(0, 10)}</span>
+                  <p className="mt-0.5 text-[#667085]">{c.text}</p>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex items-center gap-2">
+              <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Responder al empleado…"
+                onKeyDown={(e) => { if (e.key === "Enter" && reply.trim()) { onChangeTask(task.id, { comments: [...task.comments, { author: "Administrador", role: "admin", text: reply.trim(), at: new Date().toISOString() }] }); setReply(""); } }}
+                className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]" />
+              <button type="button" disabled={!reply.trim()} onClick={() => { onChangeTask(task.id, { comments: [...task.comments, { author: "Administrador", role: "admin", text: reply.trim(), at: new Date().toISOString() }] }); setReply(""); }}
+                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#6D28D9" }}>
+                <Send size={12} /> Responder
+              </button>
+            </div>
+          </div>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Título</span>
           <input
