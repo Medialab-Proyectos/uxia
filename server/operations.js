@@ -201,6 +201,36 @@ export async function insertTasks(tasks = []) {
   return { inserted: rows.length };
 }
 
+function productSignalToRow(signal) {
+  const now = new Date().toISOString();
+  return {
+    id: signal.id,
+    company_id: signal.companyId || signal.company_id,
+    client: signal.client || null,
+    force: signal.force,
+    intensity: signal.intensity != null ? Number(signal.intensity) : 0.4,
+    weight: signal.weight != null ? Number(signal.weight) : null,
+    title: signal.title || signal.force,
+    evidence: signal.evidence || null,
+    source: signal.source || "Run diario",
+    status: signal.status || "activa",
+    updated_at: now,
+  };
+}
+
+// Señales de producto (mediciones que alimentan el modelo MDSSP). Upsert por id.
+export async function insertProductSignals(signals = []) {
+  if (!hasSupabase()) throw new Error("Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY.");
+  const rows = signals.filter((s) => s.force && (s.companyId || s.company_id)).map(productSignalToRow);
+  if (!rows.length) return { inserted: 0 };
+  await supabaseRequest("product_signals?on_conflict=id", {
+    method: "POST",
+    body: rows,
+    prefer: "resolution=merge-duplicates,return=minimal",
+  });
+  return { inserted: rows.length };
+}
+
 async function deleteSupabaseRowsByIds(table, ids) {
   const cleanIds = [...new Set(ids.filter(Boolean).map(String))];
   const batchSize = 50;

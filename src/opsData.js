@@ -26,9 +26,19 @@ async function rest(token, path, { method = "GET", body, query = "", prefer = ""
   if (!response.ok) {
     const error = new Error(data?.message || data?.error || `Supabase ${response.status}`);
     error.detail = data;
+    error.status = response.status;
+    // Sesion caida/expirada: 401 (JWT vencido/invalido) o 403 (RLS sin auth). El mensaje
+    // de PostgREST suele contener "JWT expired". Se marca para avisar en la UI.
+    error.authExpired = response.status === 401 ||
+      (response.status === 403 && /jwt|token|expired|autenti/i.test(String(data?.message || "")));
     throw error;
   }
   return data;
+}
+
+// La app puede envolver una promesa de guardado con esto para reaccionar a sesion caida.
+export function isAuthError(error) {
+  return !!(error && (error.authExpired || error.status === 401));
 }
 
 // ---------- helpers de forma ----------
@@ -56,6 +66,7 @@ const rowToTask = (row) => ({
   emailTo: row.email_to || "", emailSubject: row.email_subject || "", createdAt: row.created_at || "",
   completedAt: row.completed_at || "", workedHours: row.worked_hours ?? null, category: row.category || "",
   rating: row.rating ?? null, ratingComment: row.rating_comment || "", aiUsage: row.ai_usage ?? null,
+  ref: row.task_ref || "",
 });
 
 const taskToRow = (task) => ({
@@ -69,6 +80,7 @@ const taskToRow = (task) => ({
   completed_at: task.completedAt || null, worked_hours: task.workedHours ?? null,
   category: task.category || null,
   rating: task.rating ?? null, rating_comment: task.ratingComment || null, ai_usage: task.aiUsage ?? null,
+  task_ref: task.ref || null,
   created_at: task.createdAt || new Date().toISOString(),
 });
 
@@ -207,7 +219,7 @@ export async function saveState(token, state) {
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage"]);
+    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba

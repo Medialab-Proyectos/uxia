@@ -62,6 +62,81 @@ Cuando se sube un insumo:
 - No debe dejar una lista visible de "fuentes procesadas" como si fueran el resultado.
 - Si el insumo no contiene informacion accionable, se elimina o se ignora.
 
+## Documentos SIN tareas → mediciones de producto (modelo MDSSP)
+
+No todo insumo produce tareas. Un documento puede ser **feedback o contexto para vigilar
+el producto**: quejas de usuarios, resultados de pruebas de calidad/usabilidad/rendimiento,
+conteo de bugs, satisfaccion del equipo, necesidades de personal, presupuesto ajustado,
+dependencias/normas externas, urgencia o comparacion con la competencia.
+
+Esa informacion NO es una tarea: es una **medicion de salud** que alimenta el mapa de
+particulas de `/mdssp.html`. Cuando un insumo traiga este tipo de senales, ademas (o en vez)
+de tareas, agrega al `tasks.json` un arreglo `productSignals` con una entrada por senal:
+
+```json
+"productSignals": [
+  { "companyId": "bid", "client": "ClientPortal", "force": "bugs",
+    "intensity": 0.6, "title": "8 bugs abiertos en el portal",
+    "evidence": "Reporte QA 2026-07-16", "source": "qa-portal.md" }
+]
+```
+
+- `force` es una clave del **catalogo de fuerzas** del MDSSP: `bugs`, `calidad`, `usabilidad`,
+  `satisfaccion_equipo`, `presupuesto`, `tecnologia`, `dependencias`, `mercado`, `salud`
+  (satisfaccion alta jala al centro), tambien `vencidas`/`tardanza`/`bloqueos` si aplica.
+- `intensity` 0..1: que tan fuerte es la evidencia (pocos datos → valor bajo).
+- `weight` (opcional) 0..1: cuanto le duele al producto; si se omite usa el peso por defecto.
+- `client` = subproyecto (omitir para toda la empresa).
+- El `daily-push.mjs` las sube a la tabla `product_signals`; el MDSSP las lee y mueve la
+  particula del subproyecto. Cada entrada del catalogo ya define hacia que borde empuja.
+
+Si el mismo tema se vuelve a medir, reusa el `id` para actualizar (upsert) en vez de duplicar.
+
+## Priorizacion de tareas (SIEMPRE, despues de analizar)
+
+Cada vez que se analizan tareas o documentos nuevos y ya estan depuradas/asignadas, el MD
+DEBE priorizarlas. No se entregan tareas "planas": se ordenan por impacto y se marca el
+foco de la semana. La priorizacion se apoya en marcos probados de eficiencia y ejecucion:
+
+- **Pareto 80/20 (Richard Koch)** — identificar el ~20% de tareas que produce el ~80% del
+  resultado. Esas son "vitales"; el resto es "trivial muchos".
+- **The 12 Week Year (Moran & Lennington)** — horizonte de 12 semanas, no de 12 meses:
+  cada tarea debe apuntar a una meta trimestral concreta y medible con avance semanal.
+- **Theory of Constraints (Goldratt)** — encontrar el CUELLO DE BOTELLA que frena todo el
+  sistema y priorizar lo que lo destraba antes que cualquier otra cosa.
+- **First Things First / Eisenhower (Covey)** — clasificar Importante vs Urgente; proteger
+  el cuadrante Importante-No-Urgente (prevencion, estrategia), no vivir apagando incendios.
+- **GTD (David Allen)** — toda tarea con "next action" concreta, contexto y responsable;
+  nada ambiguo. Si una tarea no tiene siguiente accion clara, se reformula.
+- **OKR (John Doerr)** — cada tarea se alinea a un Objetivo y aporta a un Key Result medible.
+- **Deep Work (Cal Newport)** — separar trabajo profundo (alto valor, requiere foco) de
+  trabajo superficial; agendar el profundo en bloques y no fragmentarlo.
+- **High Output Management (Andy Grove)** — priorizar por apalancamiento: tareas que
+  multiplican la salida del equipo (habilitadores, plantillas, automatizacion) van primero.
+- **Atomic Habits (James Clear)** — preferir avances pequenos y consistentes; partir tareas
+  grandes en pasos de 1-2 dias que se puedan cerrar.
+- **The Gap and the Gain (Dan Sullivan)** — medir contra el punto de partida (avance real),
+  no contra el ideal; reconocer lo cumplido para sostener el ritmo.
+- **Drucker / Lencioni** — gestion por resultados y claridad de responsables; una tarea sin
+  dueno no se prioriza, se asigna.
+
+### Como se aplica en cada run
+
+1. Marca cada tarea con una **prioridad**: `alta` (vital 20% / destraba cuello de botella /
+   Importante), `media`, `baja` (trivial, se puede diferir o agrupar).
+2. Elige el **FOCO de la semana** (12-Week-Year): 1-3 tareas vitales cuyo avance mueve la
+   meta del trimestre. Ponlas primero.
+3. Destaca el **cuello de botella** actual (Goldratt) si existe: la tarea que, si no se
+   resuelve, bloquea a las demas.
+4. Verifica que cada tarea tenga **siguiente accion clara + responsable + fecha** (GTD/Drucker).
+5. Agenda el **trabajo profundo** (Newport) en bloques y separa lo superficial.
+6. Considera **proyectos internos de MediaLab**: recuperacion economica/financiera, gestion
+   de recursos, espacios y mejoras operativas de la organizacion cuentan como proyectos y
+   se priorizan con la misma vara (los proyectos son de MediaLab).
+
+La priorizacion tambien retroalimenta el modelo MDSSP: tareas vitales sin avanzar o el
+cuello de botella se reflejan como fuerzas mas fuertes hacia los bordes de riesgo.
+
 ## Como debe verse una tarea
 
 Las tareas viven debajo de `Contexto del subproyecto`.
@@ -255,20 +330,32 @@ de `supabase/schema-insumos-pendientes.sql`).
    Descarga las imágenes a `operations/_run/` y escribe `operations/_run/insumos.json`.
 
 2. **Analizar (Claude):** leer cada imagen (`operations/_run/*`) y cada `rawText`,
-   e identificar tareas claras por empresa/subproyecto. Escribir
-   `operations/_run/tasks.json`:
+   e identificar (a) **tareas** claras por empresa/subproyecto y (b) **mediciones de
+   producto** (feedback/contexto sin tarea, ver sección de fuerzas MDSSP). Además
+   **priorizar** cada tarea (ver sección de priorización: Pareto, cuello de botella,
+   urgencia). Escribir `operations/_run/tasks.json`:
    ```json
    {
      "tasks": [
        { "title": "…", "companyId": "…", "client": "…", "description": "…",
-         "status": "ready", "dueDate": "2026-07-15", "attachments": [] }
+         "status": "ready", "priority": "alta|media|baja", "dueDate": "2026-07-16",
+         "role": "…", "attachments": [] }
+     ],
+     "productSignals": [
+       { "companyId": "…", "client": "…", "force": "bugs|calidad|usabilidad|satisfaccion_equipo|presupuesto|tecnologia|dependencias|mercado|salud|vencidas|tardanza|bloqueos",
+         "intensity": 0.6, "title": "…", "evidence": "…", "source": "<archivo>" }
      ],
      "processedInsumoIds": ["<id de cada insumo convertido>"],
      "keepFileInsumoIds": ["<ids cuyo archivo queda como adjunto de la tarea>"]
    }
    ```
-   La tarea queda **clara y bien escrita** (título accionable, descripción,
-   responsable sugerido, vencimiento).
+   Reglas de análisis (aplicar SIEMPRE):
+   - Título accionable, descripción clara, responsable sugerido (`role`/owner), vencimiento.
+   - Cruzar varias fuentes; **no** una tarea por archivo; **dedup** contra tareas existentes.
+   - Cada tarea con `priority` (alta = vital 20% / cuello de botella / urgente).
+   - Si un insumo trae señales de salud del producto (bugs, quejas, satisfacción, calidad,
+     tecnología, presupuesto, dependencias, mercado), agregar `productSignals` (mueven el MDSSP).
+   - Insumo sin nada accionable ni medible → solo `processedInsumoIds` (se retira, sin basura).
 
 3. **Subir tareas y limpiar insumos:**
    ```bash

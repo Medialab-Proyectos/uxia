@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import logoUrl from "./logos/logo.svg";
 
-const STORE_KEY = "uxia.mdssp.prototype.v2"; // v2: ejemplo BID con 2 proyectos
+const STORE_KEY = "uxia.mdssp.prototype.v3"; // v3: motor de fuerzas (catalogo + pesos)
 
 const DIMENSIONS = [
   {
@@ -145,47 +145,31 @@ const INITIAL_PROJECTS = [
 
 const INITIAL_SIGNALS = [
   // ---- Ejemplo BID (datos reales del Centro de Operaciones, 2026-07-15) ----
+  // ClientPortal: pocos datos aun → fuerzas moderadas, se mantiene cerca del centro.
   {
-    id: "bid-sig-1",
-    projectId: "bid-demo",
-    client: "ClientPortal",
-    dimension: "tecnologia",
-    axis: "rendimiento",
-    title: "Bloqueos activos: 3 · ClientPortal",
+    id: "bid-sig-1", projectId: "bid-demo", client: "ClientPortal",
+    force: "bloqueos", intensity: 0.4,
+    title: "3 bloqueos activos",
     evidence: "Data issues con Arvin, bug de login y dependencia del equipo SG Delta.",
-    severity: 5,
-    probability: 4,
-    detectability: 3,
-    confidence: 5,
-    trend: "sube",
   },
   {
-    id: "bid-sig-2",
-    projectId: "bid-demo",
-    client: "ClientPortal",
-    dimension: "organizacion",
-    axis: "economica",
-    title: "Tardanza en entregas: 1 fuera de fecha · ClientPortal",
+    id: "bid-sig-2", projectId: "bid-demo", client: "ClientPortal",
+    force: "tardanza", intensity: 0.22,
+    title: "1 entrega fuera de fecha",
     evidence: "Entrega completada despues de la fecha comprometida.",
-    severity: 3,
-    probability: 3,
-    detectability: 3,
-    confidence: 4,
-    trend: "estable",
   },
   {
-    id: "bid-sig-3",
-    projectId: "bid-demo",
-    client: "Interfaz Fiduciaria",
-    dimension: "tarea",
-    axis: "carga",
-    title: "Mal uso de recursos: 1 vencida · Interfaz Fiduciaria",
+    id: "bid-sig-2b", projectId: "bid-demo", client: "ClientPortal",
+    force: "incumplimiento", intensity: 0.28,
+    title: "14 de 18 tareas sin cumplir",
+    evidence: "Muchas tareas del periodo siguen abiertas.",
+  },
+  // Interfaz Fiduciaria: solo una vencida → deriva leve hacia alta carga.
+  {
+    id: "bid-sig-3", projectId: "bid-demo", client: "Interfaz Fiduciaria",
+    force: "vencidas", intensity: 0.25,
+    title: "1 tarea vencida",
     evidence: "'Ajustar Figma para Rafa' vencio el 2026-07-14 y sigue abierta.",
-    severity: 3,
-    probability: 4,
-    detectability: 2,
-    confidence: 5,
-    trend: "sube",
   },
   {
     id: "sig-1",
@@ -266,85 +250,112 @@ function readSessionToken() {
 function deriveSignalsForCompany(tasks, projectId) {
   const out = [];
   const today = new Date().toISOString().slice(0, 10);
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const byClient = {};
   for (const t of tasks) (byClient[t.client || "General"] ||= []).push(t);
 
-  // FUERZAS DEL PROYECTO (se estiman por dia con los datos del Centro de Operaciones):
-  // tardanza en entregas, tiempo elevado, mal uso de recursos, bloqueos, calidad
-  // insuficiente y feedback de usuarios. Cada una tiene `axis` explicito (el minimo
-  // que amenaza: calidad / usabilidad / rendimiento).
+  // Cada FUERZA lleva `force` (clave del catalogo), `intensity` 0..1 (que tan fuerte segun
+  // los datos) y opcionalmente `weight` (si no, usa el peso por defecto del catalogo).
+  // La intensidad se mide en TIEMPOS RELATIVOS: mas vencidas/bloqueos frente al total del
+  // proyecto = fuerza mas grande. Ademas, CONFIANZA por cantidad de datos: con poca
+  // informacion la fuerza se atenua (evita diagnosticar "falla" con casi nada).
   for (const [client, list] of Object.entries(byClient)) {
     const active = list.filter((t) => t.status !== "done");
-    // Mal uso de recursos: tareas vencidas sin terminar (en revision no cuenta) → RENDIMIENTO
+    const activeBase = Math.max(1, active.length);
+    // Confianza global del proyecto: crece con la cantidad de tareas observadas (satura en ~8).
+    const confidence = Math.min(1, list.length / 8);
+
+    // 1) Tareas vencidas (solo VENCIDAS jalan; las en progreso aun no). Intensidad = cuantas
+    //    vencidas hay respecto a las tareas activas del proyecto.
     const overdue = active.filter((t) => t.due_date && t.due_date < today && t.status !== "review");
     if (overdue.length) {
       out.push({
         id: `auto-${projectId}-${client}-vencidas`, projectId, client, auto: true,
-        dimension: "tarea", axis: "carga",
-        title: `Mal uso de recursos: ${overdue.length} vencida(s) · ${client}`,
+        force: "vencidas", intensity: confidence * clamp01(overdue.length / activeBase),
+        title: `${overdue.length} tarea(s) vencida(s)`,
         evidence: overdue.slice(0, 3).map((t) => t.title).join(" · "),
-        severity: Math.min(5, 2 + overdue.length), probability: 4, detectability: 2, confidence: 5, trend: "sube",
       });
     }
-    // Bloqueos activos (defectos/dependencias que frenan) → CALIDAD
+
+    // 2) Bloqueos activos → rendimiento. Intensidad = bloqueadas / activas.
     const blocked = active.filter((t) => t.status === "blocked");
     if (blocked.length) {
       out.push({
         id: `auto-${projectId}-${client}-bloqueadas`, projectId, client, auto: true,
-        dimension: "tecnologia", axis: "rendimiento",
-        title: `Bloqueos activos: ${blocked.length} · ${client}`,
+        force: "bloqueos", intensity: confidence * clamp01(blocked.length / activeBase),
+        title: `${blocked.length} bloqueo(s) activo(s)`,
         evidence: blocked.slice(0, 3).map((t) => t.title).join(" · "),
-        severity: Math.min(5, 2 + blocked.length * 2), probability: 4, detectability: 3, confidence: 5, trend: "sube",
       });
     }
+
     const done = list.filter((t) => t.status === "done");
-    // Tardanza en las entregas (completadas despues de la fecha) → RENDIMIENTO
+    const totalConDue = list.filter((t) => t.due_date).length;
+
+    // 3) Incumplimiento del periodo: del total de tareas del proyecto, cuantas SIGUEN sin
+    //    cumplirse (activas). Muchas pendientes vs cumplidas → deriva lenta a economica.
+    if (list.length >= 4) {
+      const pendRatio = active.length / list.length;
+      if (pendRatio > 0.5) {
+        out.push({
+          id: `auto-${projectId}-${client}-incumplimiento`, projectId, client, auto: true,
+          force: "incumplimiento", intensity: confidence * clamp01((pendRatio - 0.5) * 2),
+          title: `${active.length} de ${list.length} tareas sin cumplir`,
+          evidence: "Muchas tareas del periodo siguen abiertas.",
+        });
+      }
+    }
+
+    // 4) Tardanza: entregas completadas despues de su fecha → economica.
     const late = done.filter((t) => t.due_date && t.completed_at && t.completed_at.slice(0, 10) > t.due_date);
     if (late.length) {
       out.push({
         id: `auto-${projectId}-${client}-tarde`, projectId, client, auto: true,
-        dimension: "organizacion", axis: "economica",
-        title: `Tardanza en entregas: ${late.length} fuera de fecha · ${client}`,
+        force: "tardanza", intensity: confidence * clamp01(late.length / Math.max(1, totalConDue)),
+        title: `${late.length} entrega(s) fuera de fecha`,
         evidence: late.slice(0, 3).map((t) => t.title).join(" · "),
-        severity: Math.min(5, 2 + late.length), probability: 3, detectability: 3, confidence: 4, trend: "estable",
       });
     }
-    // Satisfaccion/feedback tras entrega (rating): <3 = calidad insuficiente (CALIDAD);
-    // 3–4 = feedback de usuarios regular (USABILIDAD).
+
+    // 5) Satisfaccion tras entrega (rating 1..5). Baja → calidad insuficiente (rendimiento);
+    //    ALTA (≥4) → SALUD: jala el proyecto hacia el centro (contrarresta lo negativo).
     const rated = done.filter((t) => t.rating != null);
     if (rated.length) {
       const avg = rated.reduce((sum, t) => sum + Number(t.rating), 0) / rated.length;
       if (avg < 3) {
         out.push({
           id: `auto-${projectId}-${client}-calidad`, projectId, client, auto: true,
-          dimension: "tecnologia", axis: "rendimiento",
-          title: `Calidad insuficiente: satisfaccion ${avg.toFixed(1)}/5 · ${client}`,
+          force: "calidad", intensity: confidence * clamp01((3 - avg) / 2),
+          title: `Calidad insuficiente (satisfaccion ${avg.toFixed(1)}/5)`,
           evidence: `${rated.length} entrega(s) calificada(s).`,
-          severity: avg < 2.5 ? 5 : 4, probability: 4, detectability: 3,
-          confidence: Math.min(5, 2 + rated.length), trend: "sube",
         });
       } else if (avg < 4) {
         out.push({
           id: `auto-${projectId}-${client}-feedback`, projectId, client, auto: true,
-          dimension: "interaccion", axis: "rendimiento",
-          title: `Usabilidad / feedback de usuarios: ${avg.toFixed(1)}/5 · ${client}`,
+          force: "usabilidad", intensity: confidence * clamp01((4 - avg) / 1.5),
+          title: `Feedback de usuarios regular (${avg.toFixed(1)}/5)`,
           evidence: `${rated.length} entrega(s) calificada(s).`,
-          severity: 3, probability: 3, detectability: 3,
-          confidence: Math.min(5, 2 + rated.length), trend: "estable",
+        });
+      } else {
+        // Confianza por CANTIDAD de calificaciones (1 rating no da salud maxima).
+        out.push({
+          id: `auto-${projectId}-${client}-salud`, projectId, client, auto: true,
+          force: "salud", intensity: clamp01(rated.length / 4) * clamp01((avg - 4) / 1),
+          title: `Producto saludable (satisfaccion ${avg.toFixed(1)}/5)`,
+          evidence: `${rated.length} entrega(s) bien calificada(s).`,
         });
       }
     }
-    // Tiempo elevado por entrega (worked_hours laborales) → RENDIMIENTO
+
+    // 6) Tiempo elevado por entrega (horas laborales) → carga.
     const hours = done.filter((t) => t.worked_hours != null && Number(t.worked_hours) > 0);
     if (hours.length) {
       const avgH = hours.reduce((sum, t) => sum + Number(t.worked_hours), 0) / hours.length;
       if (avgH > 24) {
         out.push({
           id: `auto-${projectId}-${client}-horas`, projectId, client, auto: true,
-          dimension: "tarea", axis: "carga",
-          title: `Tiempo elevado: ${Math.round(avgH)} h laborales por entrega · ${client}`,
+          force: "tiempo", intensity: confidence * clamp01((avgH - 24) / 56),
+          title: `Tiempo elevado: ${Math.round(avgH)} h por entrega`,
           evidence: `${hours.length} entrega(s) con horas registradas.`,
-          severity: avgH > 60 ? 5 : avgH > 40 ? 4 : 3, probability: 3, detectability: 3, confidence: 4, trend: "estable",
         });
       }
     }
@@ -356,15 +367,18 @@ async function fetchLiveData() {
   const token = readSessionToken();
   if (!SUPABASE_URL || !SUPABASE_ANON || !token) return null;
   const headers = { apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` };
-  const [companiesRes, projectsRes, tasksRes] = await Promise.all([
+  const [companiesRes, projectsRes, tasksRes, measuresRes] = await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/companies?select=id,name,status&order=name.asc`, { headers }),
     fetch(`${SUPABASE_URL}/rest/v1/projects?select=company_id,name,status`, { headers }),
     fetch(`${SUPABASE_URL}/rest/v1/tasks?select=company_id,client,title,status,due_date,completed_at,worked_hours,rating`, { headers }),
+    // Mediciones de producto (de documentos/feedback sin tareas). Si la tabla aun no existe, se ignora.
+    fetch(`${SUPABASE_URL}/rest/v1/product_signals?select=id,company_id,client,force,intensity,weight,title,evidence,source&status=eq.activa`, { headers }).catch(() => null),
   ]);
   if (!companiesRes.ok || !tasksRes.ok) return null;
   const companies = await companiesRes.json();
   const subprojects = projectsRes.ok ? await projectsRes.json() : [];
   const tasks = await tasksRes.json();
+  const measures = measuresRes && measuresRes.ok ? await measuresRes.json() : [];
   const projects = companies
     .filter((c) => c.status !== "inactiva")
     .map((c) => {
@@ -384,7 +398,48 @@ async function fetchLiveData() {
   for (const c of companies) {
     signals.push(...deriveSignalsForCompany(tasks.filter((t) => t.company_id === c.id), c.id));
   }
+  // Mediciones de producto (bugs, quejas, satisfaccion equipo, presupuesto, mercado...):
+  // vienen de documentos SIN tareas analizados por el run diario, o capturadas a mano.
+  for (const m of measures) {
+    signals.push({
+      id: m.id,
+      projectId: m.company_id,
+      client: m.client || undefined,
+      force: m.force,
+      intensity: m.intensity != null ? Number(m.intensity) : 0.4,
+      weight: m.weight != null ? Number(m.weight) : undefined,
+      title: m.title || m.force,
+      evidence: m.evidence || m.source || "",
+    });
+  }
   return { projects, signals };
+}
+
+// Guarda una medicion de producto a mano (variable no derivable de tareas) → tabla
+// product_signals. Requiere sesion de la app principal. Devuelve true si se guardo.
+async function saveProductSignal({ companyId, client, force, intensity, title, evidence }) {
+  const token = readSessionToken();
+  if (!SUPABASE_URL || !SUPABASE_ANON || !token) return false;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/product_signals`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({
+      company_id: companyId,
+      client: client || null,
+      force,
+      intensity,
+      title: title || (FORCE_CATALOG[force]?.label ?? force),
+      evidence: evidence || null,
+      source: "Captura manual",
+      status: "activa",
+    }),
+  });
+  return res.ok;
 }
 
 function riskScore(signal) {
@@ -409,9 +464,15 @@ function uid(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
+// Modo EMBED: el Centro de Operaciones embebe este mapa por empresa via
+// /mdssp.html?embed=1&company=<id>. Mismo codigo, una sola fuente del core.
+const EMBED_PARAMS = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+const EMBED = EMBED_PARAMS.get("embed") === "1";
+const EMBED_COMPANY = EMBED_PARAMS.get("company") || "";
+
 function App() {
   const [state, setState] = React.useState(loadState);
-  const [activeProject, setActiveProject] = React.useState(state.projects[0]?.id || "");
+  const [activeProject, setActiveProject] = React.useState(EMBED_COMPANY || state.projects[0]?.id || "");
   const [tab, setTab] = React.useState("sistema");
   const [draft, setDraft] = React.useState({
     title: "",
@@ -430,25 +491,61 @@ function App() {
     localStorage.setItem(STORE_KEY, JSON.stringify(state));
   }, [state]);
 
-  // Datos reales del Centro de Operaciones (empresas + tareas de Supabase, sesion compartida)
-  React.useEffect(() => {
-    let alive = true;
-    fetchLiveData()
-      .then((data) => {
-        if (!alive || !data?.projects?.length) return;
+  const [liveAt, setLiveAt] = React.useState(null);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  // Datos reales del Centro de Operaciones (empresas + tareas de Supabase, sesion compartida).
+  // Se recalcula el punto de partida CADA VEZ que se entra (mount) con las condiciones
+  // actuales; el boton "Actualizar" vuelve a leer la ultima informacion cargada.
+  const loadLive = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await fetchLiveData();
+      if (data?.projects?.length) {
         setLive(data);
-        setActiveProject((prev) => (data.projects.some((p) => p.id === prev) ? prev : data.projects[0].id));
-      })
-      .catch(() => {});
-    return () => { alive = false; };
+        setLiveAt(new Date());
+        setActiveProject((prev) => {
+          if (EMBED_COMPANY && data.projects.some((p) => p.id === EMBED_COMPANY)) return EMBED_COMPANY;
+          return data.projects.some((p) => p.id === prev) ? prev : data.projects[0].id;
+        });
+      }
+    } catch {
+      // se mantiene el demo local
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  React.useEffect(() => { loadLive(); }, [loadLive]);
+
+  // En modo EMBED: reporta la altura del CONTENIDO INTERNO al Centro (no del documento,
+  // para NO crear un bucle con el alto que el iframe recibe). Solo publica cuando cambia
+  // de verdad (>2px). Asi el iframe crece sin scroll y sin parpadeo/mareo.
+  React.useEffect(() => {
+    if (!EMBED || typeof window === "undefined") return undefined;
+    const root = document.querySelector(".mdssp-embed-inner");
+    if (!root) return undefined;
+    let last = 0;
+    const post = () => {
+      const h = Math.ceil(root.getBoundingClientRect().height) + 10;
+      if (Math.abs(h - last) < 3) return; // dedupe: evita el bucle de realimentacion
+      last = h;
+      try { window.parent?.postMessage({ type: "mdssp-height", height: h }, "*"); } catch { /* ignore */ }
+    };
+    post();
+    const ro = new ResizeObserver(post);
+    ro.observe(root);
+    return () => ro.disconnect();
   }, []);
 
   const projects = live?.projects?.length ? live.projects : state.projects;
   const project = projects.find((item) => item.id === activeProject) || projects[0];
-  const projectSignals = [
+  // Referencia estable: solo cambia cuando cambian los datos reales, no en cada render
+  // (evita reinicializar la simulacion y que las particulas salten).
+  const projectSignals = React.useMemo(() => [
     ...(live?.signals || []).filter((signal) => signal.projectId === project?.id),
     ...state.signals.filter((signal) => signal.projectId === project?.id),
-  ];
+  ], [live, state.signals, project?.id]);
   const avgRisk = projectSignals.length
     ? Math.round(projectSignals.reduce((sum, signal) => sum + riskScore(signal), 0) / projectSignals.length)
     : 0;
@@ -509,6 +606,32 @@ function App() {
     URL.revokeObjectURL(url);
   }
 
+  // Vista EMBEBIDA (dentro del Centro de Operaciones): solo el mapa + su panel de info/
+  // parametrizacion, sin cabecera ni barra lateral. Mismo motor y datos.
+  if (EMBED) {
+    return (
+      <main className="mdssp-app mdssp-embed">
+        <Style />
+        <div className="mdssp-embed-inner">
+          <ParticleSimulation
+            project={project}
+            signals={projectSignals}
+            clients={project?.clients?.length ? project.clients : ["General"]}
+          />
+          <details className="pm-collapse">
+            <summary>Cómo leer · Medición · Resortes</summary>
+            <InfoPanel
+              companyId={project?.id}
+              clients={project?.clients?.length ? project.clients : []}
+              onSaved={loadLive}
+              canSave={!!live}
+            />
+          </details>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mdssp-app">
       <Style />
@@ -529,9 +652,23 @@ function App() {
       <section className="workspace">
         <aside className="sidebar">
           <p className="eyebrow">{live ? "Empresas (datos reales)" : "Proyecto observado (demo)"}</p>
-          {live
-            ? <p className="live-note" style={{ fontSize: 11, color: "#0D7A4F", margin: "0 0 8px", fontWeight: 700 }}>Conectado al Centro de Operaciones</p>
-            : <p className="live-note" style={{ fontSize: 11, color: "#8b8272", margin: "0 0 8px" }}>Inicia sesion en la app principal para ver tus empresas.</p>}
+          {live ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "0 0 8px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: "#0D7A4F", fontWeight: 700 }}>Conectado al Centro</span>
+              <button
+                type="button"
+                onClick={loadLive}
+                disabled={refreshing}
+                title="Recalcular con la ultima informacion cargada"
+                style={{ fontSize: 11, fontWeight: 700, border: "1px solid #cbd5e1", borderRadius: 6, padding: "2px 8px", background: "#fff", cursor: "pointer", color: "#334155" }}
+              >
+                {refreshing ? "Actualizando…" : "↻ Actualizar"}
+              </button>
+              {liveAt && <span style={{ fontSize: 10, color: "#98928A" }}>{liveAt.toLocaleTimeString()}</span>}
+            </div>
+          ) : (
+            <p className="live-note" style={{ fontSize: 11, color: "#8b8272", margin: "0 0 8px" }}>Inicia sesion en la app principal para ver tus empresas.</p>
+          )}
           <div className="project-list">
             {projects.map((item) => (
               <button
@@ -587,47 +724,13 @@ function App() {
                   signals={projectSignals}
                   clients={project?.clients?.length ? project.clients : ["General"]}
                 />
-                <p className="note">
-                  Simulacion fiel al modelo: cada variable de entrada es un circulo (limite extremo y marginal); la
-                  region factible es su interseccion y el sistema se inicializa en el circulo maximo inscrito. Los
-                  actores son particulas de masa 1 unidas por cuerdas (k desde los indices β y δ, rango 0.6–1.5),
-                  integradas con Runge-Kutta 4 y arrastradas por el centro de masas. Si una particula cruza un limite
-                  marginal el sistema esta en riesgo; si cruza un limite extremo entra en desequilibrio y la simulacion
-                  se detiene senalando la variable violada.
-                </p>
-                <LimitStrip counts={limitCounts} />
               </article>
-              <article className="panel diagnosis-panel">
-                <div className="panel-title">
-                  <BarChart3 size={18} />
-                  <h3>Como leer el mapa</h3>
-                </div>
-                <div className="research-grid">
-                  {[
-                    ["Particulas", "Cada particula es un proyecto de la empresa. Es lo mas importante del mapa."],
-                    ["Fuerzas", "Las flechas nacen de condiciones reales del proyecto: tardanza, bloqueos, tiempo elevado, mala satisfaccion. Cada flecha dice de que condicion viene."],
-                    ["Cuerdas", "Cada proyecto es independiente: su cuerda al punto ideal es la que lo trae de vuelta al centro cuando las fuerzas lo empujan."],
-                    ["Limites", "Linea naranja = riesgo (limite marginal). Linea azul = falla: la simulacion se detiene y senala que limite se cruzo y que proyecto fue."],
-                  ].map(([title, text]) => (
-                    <div key={title}>
-                      <b>{title}</b>
-                      <p>{text}</p>
-                    </div>
-                  ))}
-                </div>
-              </article>
-              <article className="panel spring-panel">
-                <div className="panel-title">
-                  <GitBranch size={18} />
-                  <h3>Significado de los resortes</h3>
-                </div>
-                <div className="spring-meaning">
-                  <p><b>Rigidez</b> = que tan dificil es deformar una relacion del sistema.</p>
-                  <p><b>Longitud de reposo</b> = distancia esperada para que la relacion este alineada.</p>
-                  <p><b>Amortiguacion</b> = perdida por friccion, retrabajo, espera o ruido organizacional.</p>
-                  <p><b>Estiramiento</b> = tension: cuanto mas se alarga, mas cerca esta de accion, alarma o fracaso.</p>
-                </div>
-              </article>
+              <InfoPanel
+                companyId={project?.id}
+                clients={project?.clients?.length ? project.clients : []}
+                onSaved={loadLive}
+                canSave={!!live}
+              />
             </section>
           )}
 
@@ -721,20 +824,6 @@ function Progress({ label, value, color }) {
   );
 }
 
-function LimitStrip({ counts }) {
-  return (
-    <div className="limit-strip">
-      {LIMITS.map((limit) => (
-        <div key={limit.id} style={{ borderColor: `${limit.color}55` }}>
-          <span style={{ backgroundColor: limit.color }} />
-          <b style={{ color: limit.color }}>{limit.name}</b>
-          <small>{counts?.[limit.id] || 0} senal(es)</small>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // =====================================================================================
 // MOTOR FISICO MDSSP — puerto JS fiel del fork traer.physics de la tesis
 // (G:\TesisDC\Netbeans\JavaFXApplication3\src\traer\physics) y del documento
@@ -756,15 +845,76 @@ function LimitStrip({ counts }) {
 
 const K_MIN = 0.6;            // rango modelado de la constante de cuerda (tesis; Java: fsola/fentre)
 const K_MAX = 1.5;
-const GAMMA = 0.25;           // coeficiente de friccion global (-gamma*v, ec. 2)
+const CENTER_K = 1.0;         // rigidez de la cuerda al punto ideal (retorno al centro)
+const GAMMA = 1.4;            // sobre-amortiguado: la particula NO resortea, deriva y se asienta
 const SPRING_DAMPING = 1.0;   // amortiguacion de cuerda (Java: d = 1.0)
 const PARTICLE_MASS = 1;      // tesis: masa = 1 y constante en todas las particulas
-const REF_MASS_FACTOR = 80;   // Java: constantedemasa = 80 (particula del centro de masas)
-const REF_FORCE_SCALE = 0.005; // fraccion de la resultante que arrastra el centro de masas
-const MARGINAL_RATIO = 0.85;  // circulos marginales (cirm) respecto a los extremos (cir)
-const WARMUP_FRAMES = 110;    // Java: limitetiempo — tiempo antes de evaluar equilibrio
-const OP_CYCLE = 240;         // "tiempo de operacion" (tesis): cada ciclo se recargan las condiciones
-const DT = 0.35;              // paso de integracion RK4
+const MARGINAL_RATIO = 0.93;  // circulos marginales (cirm) respecto a los extremos (cir): amarillo cerca del rojo
+const WARMUP_FRAMES = 90;     // Java: limitetiempo — tiempo antes de evaluar equilibrio
+const DT = 0.1;               // paso de integracion RK4 (pequeno = deriva lenta y suave)
+
+// ============================ CATALOGO DE FUERZAS =====================================
+// Cada variable que afecta un subproyecto es una FUERZA con: (1) el BORDE hacia el que
+// empuja, (2) un PESO 0..1 (cuanto "le duele" al producto — parametrizable por proyecto),
+// (3) su signo: la mayoria empuja hacia afuera (riesgo); "salud" jala hacia el centro.
+// axis: 'economica' (arriba) · 'rendimiento' (derecha) · 'carga' (abajo) · 'centro' (adentro)
+const FORCE_CATALOG = {
+  // --- Se calculan hoy con datos del Centro de Operaciones ---  (cada fuerza tiene su color)
+  vencidas:      { axis: "carga",       weight: 0.70, color: "#E8751A", label: "Tareas vencidas" },
+  tardanza:      { axis: "economica",   weight: 0.80, color: "#D4351C", label: "Entregas tardias" },
+  tiempo:        { axis: "carga",       weight: 0.55, color: "#B45309", label: "Tiempo elevado por entrega" },
+  bloqueos:      { axis: "rendimiento", weight: 0.85, color: "#7C3AED", label: "Bloqueos activos" },
+  incumplimiento:{ axis: "economica",   weight: 0.75, color: "#0E7490", label: "Tareas no cumplidas (del total)" },
+  calidad:       { axis: "rendimiento", weight: 1.00, color: "#BE123C", label: "Calidad insuficiente (satisfaccion)" },
+  usabilidad:    { axis: "rendimiento", weight: 0.60, color: "#C026D3", label: "Feedback de usuarios / usabilidad" },
+  salud:         { axis: "centro",      weight: 0.70, color: "#2D9A5A", label: "Producto saludable (jala al centro)" },
+  // --- Requieren capturar nuevas variables (ver panel de recomendaciones) ---
+  bugs:          { axis: "rendimiento", weight: 0.90, color: "#DC2626", label: "Bugs abiertos del producto" },
+  satisfaccion_equipo: { axis: "carga", weight: 0.65, color: "#EA580C", label: "Baja satisfaccion del equipo" },
+  presupuesto:   { axis: "economica",   weight: 0.70, color: "#CA8A04", label: "Bajo presupuesto / recursos limitados" },
+  tecnologia:    { axis: "rendimiento", weight: 0.60, color: "#9333EA", label: "Tecnologia insuficiente" },
+  dependencias:  { axis: "economica",   weight: 0.55, color: "#0891B2", label: "Dependencias externas / normas" },
+  mercado:       { axis: "economica",   weight: 0.50, color: "#4F46E5", label: "Referente de mercado / competencia" },
+};
+
+// Colores hacia afuera (riesgo) y hacia adentro (retorno / salud) — el usuario los pidio
+// diferenciados por DIRECCION en el mapa; el color por tipo de fuerza va en el panel.
+const OUT_COLOR = "#E8751A";   // fuerzas que empujan al borde (riesgo)
+const RETURN_COLOR = "#1570EF"; // fuerza de retorno al centro
+const HEALTH_COLOR = "#2D9A5A"; // producto saludable (jala adentro, "bueno")
+
+// Un color por subproyecto (particula).
+const PARTICLE_PALETTE = ["#0EA5E9", "#8B5CF6", "#F59E0B", "#10B981", "#EF4444", "#EC4899"];
+
+// Por que existe cada fuerza y como afecta (para el resumen al hacer click).
+const FORCE_WHY = {
+  vencidas: "Tareas que pasaron su fecha y siguen abiertas. Consumen equipo sin avanzar → empujan a alta carga.",
+  tardanza: "Entregas que se cerraron despues de lo comprometido. Erosionan la confianza del cliente → falla economica.",
+  tiempo: "Cada entrega consume muchas horas laborales. El esfuerzo por resultado es alto → alta carga.",
+  bloqueos: "Tareas frenadas por defectos o dependencias. El producto no avanza → rendimiento inaceptable.",
+  incumplimiento: "Del total del periodo, muchas tareas siguen sin cumplirse. Ritmo lento → falla economica.",
+  calidad: "La satisfaccion tras entrega es baja: el producto no cumple lo esperado → rendimiento inaceptable.",
+  usabilidad: "Feedback regular de usuarios: fricciones de uso que restan valor → rendimiento inaceptable.",
+  salud: "El producto esta bien calificado: es una fuerza BUENA que lo jala de vuelta al centro.",
+  bugs: "Bugs abiertos del producto en el periodo → rendimiento inaceptable.",
+  satisfaccion_equipo: "El equipo reporta baja satisfaccion/sobrecarga → alta carga de trabajo.",
+  presupuesto: "Presupuesto ajustado obliga a recortar alcance o herramientas → falla economica.",
+  tecnologia: "La tecnologia disponible es insuficiente para lo requerido → rendimiento inaceptable.",
+  dependencias: "Normas o terceros condicionan el lanzamiento → falla economica.",
+  mercado: "Referente/competencia marca una brecha frente al producto → falla economica.",
+};
+
+// Variables que NO se pueden derivar de tareas y hay que capturar por proyecto.
+const MANUAL_VARIABLES = [
+  ["bugs", "Bugs abiertos del producto (por periodo)"],
+  ["satisfaccion_equipo", "Satisfaccion del equipo (encuesta)"],
+  ["calidad", "Calidad/rendimiento probado del producto"],
+  ["usabilidad", "Quejas de usuarios / usabilidad"],
+  ["presupuesto", "Presupuesto o recursos limitados"],
+  ["tecnologia", "Tecnologia insuficiente"],
+  ["dependencias", "Dependencias externas / normas"],
+  ["mercado", "Referente de mercado / urgencia del producto"],
+];
 
 // Grafo socio-tecnico de interacciones actor-actor (cuerdas alpha).
 const INTERACTION_GRAPH = [
@@ -958,10 +1108,16 @@ function maxInscribedCircle(circles) {
 // Los 3 ejes/limites del sistema son los de la TESIS (figura original). Las condiciones
 // de negocio (calidad, usabilidad, tardanza, tiempo, recursos, feedback...) son FUERZAS
 // que empujan a los proyectos hacia estos limites.
+// Cada eje/borde tiene su propio color; su vector de fuerza usa el MISMO color.
+const AXIS_COLORS = {
+  economica: "#C2410C",   // naranja quemado (arriba)
+  rendimiento: "#6D28D9", // violeta (derecha)
+  carga: "#0E7490",       // teal (abajo)
+};
 const LIMIT_AXES = [
-  { id: "economica", name: "Falla economica", labelAngle: -Math.PI / 2, color: "#0B69B7" },
-  { id: "rendimiento", name: "Rendimiento inaceptable", labelAngle: 0, color: "#0B69B7" },
-  { id: "carga", name: "Alta carga de trabajo", labelAngle: Math.PI / 2, color: "#0B69B7" },
+  { id: "economica", name: "Falla economica", labelAngle: -Math.PI / 2, color: AXIS_COLORS.economica },
+  { id: "rendimiento", name: "Rendimiento inaceptable", labelAngle: 0, color: AXIS_COLORS.rendimiento },
+  { id: "carga", name: "Alta carga de trabajo", labelAngle: Math.PI / 2, color: AXIS_COLORS.carga },
 ];
 
 // Las 6 dimensiones de senales se agregan sobre los 3 ejes del sistema.
@@ -974,19 +1130,13 @@ const AXIS_FROM_DIMENSION = {
   contexto: "economica",
 };
 
-// Variables de entrada → 3 circulos (equivale a addCirculo(...) del Java). Cada circulo
-// se centra al lado OPUESTO de su etiqueta (triangulo de Reuleaux: la region factible es
-// la interseccion). El riesgo agregado de las senales CIERRA la tolerancia (radio).
-function buildInputCircles(signals) {
-  const byAxis = {};
-  for (const signal of signals) {
-    const axis = AXIS_FROM_DIMENSION[signal.dimension] || "rendimiento";
-    (byAxis[axis] ||= []).push(riskScore(signal) / 100);
-  }
+// Los 3 bordes son FIJOS (umbrales del negocio): 3 circulos centrados al lado OPUESTO de
+// su etiqueta (triangulo de Reuleaux). NO dependen de los datos: lo que se mueve es la
+// particula del proyecto empujada por sus fuerzas, no el borde.
+function buildInputCircles() {
   const DIST = 3.2;
+  const R = 6.5;
   const cir = LIMIT_AXES.map((axis) => {
-    const list = byAxis[axis.id] || [];
-    const risk = list.length ? list.reduce((sum, v) => sum + v, 0) / list.length : 0;
     const centerAngle = axis.labelAngle + Math.PI; // centro opuesto al rotulo
     return {
       id: axis.id,
@@ -995,38 +1145,13 @@ function buildInputCircles(signals) {
       labelAngle: axis.labelAngle,
       x: Math.cos(centerAngle) * DIST,
       y: Math.sin(centerAngle) * DIST,
-      r: 6.5 - risk * 2.2,
-      risk,
+      r: R,
+      risk: 0,
     };
   });
   const cirm = cir.map((c) => ({ ...c, r: c.r * MARGINAL_RATIO }));
   return { cir, cirm };
 }
-
-// Asignacion por profundidad (tesis): los actores mas conectados (wi = suma de k de sus
-// cuerdas) se colocan primero y sus vecinos de grafo quedan contiguos en el circulo.
-function depthAssign(actors, graph) {
-  const weight = {};
-  graph.forEach(([a, b]) => { weight[a] = (weight[a] || 0) + 1; weight[b] = (weight[b] || 0) + 1; });
-  const remaining = [...actors].sort((a, b) => (weight[b.key] || 0) - (weight[a.key] || 0));
-  const ordered = [remaining.shift()];
-  while (remaining.length) {
-    const last = ordered[ordered.length - 1];
-    let idx = remaining.findIndex((actor) =>
-      graph.some(([x, y]) => (x === last.key && y === actor.key) || (y === last.key && x === actor.key)));
-    if (idx < 0) idx = 0;
-    ordered.push(remaining.splice(idx, 1)[0]);
-  }
-  return ordered;
-}
-
-// Actores genericos de cada proyecto (cluster): rodean al centro de masas del proyecto.
-const CLUSTER_ACTORS = [
-  { type: "personas", label: "Personas", color: "#5BAE2D" },
-  { type: "dispositivos", label: "Dispositivos", color: "#5B35D5" },
-  { type: "organizacion", label: "Organizacion", color: "#C82121" },
-  { type: "entorno", label: "Entorno", color: "#F6B400" },
-];
 
 function ParticleSimulation({ project, signals, clients }) {
   const canvasRef = React.useRef(null);
@@ -1035,12 +1160,18 @@ function ParticleSimulation({ project, signals, clients }) {
   const [violations, setViolations] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
   const [runId, setRunId] = React.useState(0);
+  const [zoom, setZoom] = React.useState(1);
   const selectedKeyRef = React.useRef(null);
   const hoverKeyRef = React.useRef(null);
+  const zoomRef = React.useRef(1);
 
   React.useEffect(() => {
     selectedKeyRef.current = selected?.key || null;
   }, [selected]);
+
+  React.useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  const zoomIn = () => setZoom((z) => Math.min(2.2, +(z * 1.2).toFixed(2)));
+  const zoomOut = () => setZoom((z) => Math.max(0.55, +(z / 1.2).toFixed(2)));
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -1052,117 +1183,141 @@ function ParticleSimulation({ project, signals, clients }) {
     let width = 0;
     let height = 0;
     let scale = 1;
+    let fitScale = 1; // escala de ajuste (solo cambia al redimensionar, no cada frame)
     let animation = 0;
     let frames = 0;
     let stopped = false;
     let lastStatusText = "";
     let lastViolationSync = 0;
 
-    // ---- 1) Limites: los 3 ejes del sistema + region factible ----
-    const { cir, cirm } = buildInputCircles(signals);
+    // ---- 1) Limites FIJOS: los 3 bordes del negocio + region factible ----
+    const { cir, cirm } = buildInputCircles();
     const feasible = maxInscribedCircle(cir);
     const infeasible = feasible.r <= 0.45;
     const violated = { cir: new Set(), cirm: new Set() };
 
-    // ---- 2) Clusters: CADA CENTRO DE MASAS ES UN PROYECTO INTERNO de la empresa ----
+    // Direccion unitaria del centro hacia cada borde (hacia donde empuja cada fuerza).
+    const axisDir = {};
+    for (const c of cir) {
+      const dx = c.x - feasible.x; // el centro del circulo esta al lado opuesto del borde...
+      const dy = c.y - feasible.y;
+      const len = Math.hypot(dx, dy) || 1;
+      axisDir[c.id] = { x: -dx / len, y: -dy / len }; // ...asi que -dir apunta al borde/etiqueta
+    }
+    // Cuanto empuja una fuerza al 100%: llega justo al borde rojo (intensidad×peso = 1).
+    const FORCE_GAIN = CENTER_K * feasible.r * 1.02;
+
+    // ---- 2) CADA SUBPROYECTO ES UNA PARTICULA independiente ----
     const clusterNames = (clients && clients.length ? clients : ["General"]).slice(0, 6);
     // Senales por proyecto: las que traen `client` van a su proyecto; las de empresa
-    // (manuales, sin client) aplican a todos los proyectos.
-    const signalsFor = (name) => signals.filter((sg) => !sg.client || sg.client === name);
-
-    // Riesgo total (para β = participacion de eventos adversos por proyecto)
-    const totalRisk = signals.reduce((sum, sg) => sum + riskScore(sg) / 100, 0);
-    const kFromBeta = (b) => K_MAX - Math.min(1, Math.max(0, b)) * (K_MAX - K_MIN);
+    // (manuales, sin client) o compartidas (clients[]) aplican a los proyectos que nombran.
+    const signalsFor = (name) => signals.filter((sg) =>
+      (!sg.client && (!sg.clients || !sg.clients.length)) ||
+      sg.client === name ||
+      (sg.clients && sg.clients.includes(name)));
 
     const sys = new TSystem(0, GAMMA);
     let anchor = null;
-    let ref = null;
     let centers = [];
-    let actors = [];
-    let prevRef = { x: 0, y: 0 };
 
     if (!infeasible) {
-      // Ancla FIJA en el punto ideal de operacion (centro del circulo maximo inscrito).
+      // Ancla FIJA en el punto ideal de operacion (centro de la region factible).
       anchor = sys.makeParticle(1, feasible.x, feasible.y, 0, { kind: "anchor" });
       anchor.makeFixed();
 
-      const R = feasible.r / 2; // tesis: inicializacion equidistante a la mitad del radio
-      const single = clusterNames.length === 1;
+      // Sin datos → en el centro. Con varios proyectos, un pequeno "hogar" para no solapar.
+      const home = clusterNames.length > 1 ? feasible.r * 0.14 : 0;
 
       clusterNames.forEach((name, i) => {
         const ang = -Math.PI / 2 + (i / clusterNames.length) * Math.PI * 2;
-        const dist = single ? R * 0.35 : R;
-        const cx = feasible.x + Math.cos(ang) * dist;
-        const cy = feasible.y + Math.sin(ang) * dist;
-        const clusterSignals = signalsFor(name);
-        const clusterRisk = clusterSignals.reduce((sum, sg) => sum + riskScore(sg) / 100, 0);
-        const beta = totalRisk > 0 ? clusterRisk / totalRisk : 0; // β: solidez del proyecto
+        const cx = feasible.x + Math.cos(ang) * home;
+        const cy = feasible.y + Math.sin(ang) * home;
 
-        // CENTRO DE MASAS del proyecto: la particula que se diagnostica contra los bordes.
-        // Su cuerda al ancla es "la fuerza que lo trae al centro"; k desde β (mas eventos
-        // adversos → cuerda mas debil → el proyecto deriva hacia los limites).
         const center = sys.makeParticle(PARTICLE_MASS, cx, cy, 0, {
-          kind: "center", key: `c-${name}`, name, beta,
+          kind: "center", key: `c-${name}`, name, homeAng: ang,
+          color: PARTICLE_PALETTE[i % PARTICLE_PALETTE.length], // cada proyecto su color
+          phase: i * 1.7, // desfase de "respiracion" para que no se muevan al unisono
         });
-        sys.makeSpring(center, anchor, kFromBeta(beta), SPRING_DAMPING, dist, "centro");
+        // Cuerda al punto ideal: rigidez constante, reposo = hogar (retorna al centro).
+        sys.makeSpring(center, anchor, CENTER_K, SPRING_DAMPING, home, "centro");
         centers.push(center);
 
-        // Condiciones del proyecto (trazables): cada senal → { eje, riesgo, fuente }.
-        center.meta.conditions = clusterSignals.map((sg) => ({
-          axis: sg.axis || AXIS_FROM_DIMENSION[sg.dimension] || "rendimiento",
-          r: riskScore(sg) / 100,
-          source: sg.title,
-          type: SIGNAL_TO_ACTOR_TYPE[sg.dimension] || "entorno",
-        })).sort((a, b) => b.r - a.r);
-
+        // FUERZAS del proyecto (trazables): cada senal → fuerza catalogada con peso y borde.
+        center.meta.conditions = signalsFor(name).map((sg) => {
+          const spec = FORCE_CATALOG[sg.force] || null;
+          const axis = sg.axis || spec?.axis || AXIS_FROM_DIMENSION[sg.dimension] || "rendimiento";
+          const weight = sg.weight != null ? sg.weight : (spec?.weight ?? 0.6);
+          return {
+            axis,
+            intensity: sg.intensity != null ? sg.intensity : riskScore(sg) / 100, // 0..1 segun datos
+            weight,                          // 0..1: cuanto le duele al producto
+            source: sg.title,
+            kind: sg.force || "otro",
+            color: sg.color || spec?.color || (axis === "centro" ? "#2D9A5A" : "#E8751A"),
+          };
+        }).sort((a, b) => (b.intensity * b.weight) - (a.intensity * a.weight));
       });
-
-      // Los proyectos son INDEPENDIENTES (decision de Christian): cada uno tiene sus
-      // propias fuerzas y su cuerda al punto ideal. No hay cuerdas proyecto-proyecto.
-
-      // Particula de referencia (momentum del sistema completo, "Referencia2" del Java).
-      ref = sys.makeParticle(PARTICLE_MASS * Math.max(1, centers.length) * REF_MASS_FACTOR, feasible.x, feasible.y, 0, { kind: "ref" });
-      prevRef = { x: ref.position.x, y: ref.position.y };
-
-      applyOperationForces(0);
     }
 
-    // Fuerzas externas (termino E): cada condicion empuja al CENTRO del proyecto (y al
-    // actor de su tipo) LEJOS del punto ideal del eje correspondiente; la cuerda al ancla
-    // lo trae de vuelta. Se recargan por "tiempos de operacion" (tesis) rotando condicion.
-    function applyOperationForces(cycle) {
-      let sumX = 0;
-      let sumY = 0;
-      for (const p of centers) p.persistent = { x: 0, y: 0, z: 0 };
+    // El sistema NO resortea: la suma de condiciones da un VECTOR RESULTANTE y la particula
+    // deriva LENTO en esa direccion (hacia afuera o adentro) hasta asentarse ("morir
+    // despacio"). Los resortes solo aportan la friccion de retorno (evitan salidas rapidas y
+    // fluctuaciones largas). Una respiracion MINIMA y lenta mantiene el sistema vivo sin
+    // parecer un resorte. Sin condiciones → fuerza 0 → se queda en el centro.
+    const BREATHE_W = (Math.PI * 2) / 14; // periodo ~14 s (lento)
+    function applyForces(t = 0) {
       for (const center of centers) {
-        const list = center.meta.conditions || [];
-        if (!list.length) { center.meta.activeCondition = null; continue; }
-        const cond = list[cycle % list.length];
-        center.meta.activeCondition = cond;
-        const circle = cir.find((c) => c.id === cond.axis);
-        if (!circle) continue;
-        const dx = feasible.x - circle.x;
-        const dy = feasible.y - circle.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const ux = dx / len;
-        const uy = dy / len;
-        center.persistent = { x: ux * cond.r * 1.9, y: uy * cond.r * 1.9, z: 0 };
-        sumX += center.persistent.x;
-        sumY += center.persistent.y;
+        const breathe = 1 + 0.04 * Math.sin(t * BREATHE_W + (center.meta.phase || 0));
+        // Suma de fuerzas de RIESGO (hacia afuera) — direccion FIJA (no depende de la
+        // posicion) → el vector resultante no gira.
+        let fx = 0;
+        let fy = 0;
+        let healthMag = 0;
+        for (const cond of center.meta.conditions || []) {
+          const mag = cond.intensity * cond.weight * FORCE_GAIN * breathe;
+          if (mag <= 0) continue;
+          if (cond.axis === "centro") {
+            healthMag += mag; // la salud NO es un vector propio: reduce el empuje de riesgo
+          } else {
+            const dir = axisDir[cond.axis];
+            if (!dir) continue;
+            fx += dir.x * mag;
+            fy += dir.y * mag;
+          }
+        }
+        // La salud (producto sano) acerca al centro: recorta la MAGNITUD del empuje neto,
+        // manteniendo su direccion (estable). Si la salud supera al riesgo → queda en 0.
+        const ol = Math.hypot(fx, fy);
+        if (ol > 0 && healthMag > 0) {
+          const reduced = Math.max(0, ol - healthMag);
+          fx = (fx / ol) * reduced;
+          fy = (fy / ol) * reduced;
+        }
+        center.persistent = { x: fx, y: fy, z: 0 };
+        center.meta.netForce = Math.hypot(fx, fy);
+        center.meta.healthMag = healthMag;
       }
-      if (ref) ref.persistent = { x: sumX * REF_FORCE_SCALE, y: sumY * REF_FORCE_SCALE, z: 0 };
     }
+    applyForces(0);
 
     // ---- Utilidades ----
-    const extent = Math.max(...cir.map((c) => c.r - Math.hypot(c.x, c.y))) + 2.1;
+    // El canvas se dibuja al TAMANO REAL del contenedor (ancho responsivo, alto fijo por
+    // CSS) con devicePixelRatio → siempre nitido, nunca se pixela. El triangulo se ajusta
+    // al lado menor y queda centrado. Zoom manual via zoomRef.
+    const extent = Math.max(...cir.map((c) => c.r - Math.hypot(c.x, c.y))) + 2.8;
     function toScreen(x, y) {
       return { x: width / 2 + x * scale, y: height / 2 + y * scale };
     }
 
     function resize() {
-      width = Math.max(320, Math.floor(wrap.clientWidth || wrap.getBoundingClientRect().width));
-      height = Math.max(420, Math.floor(wrap.clientHeight || wrap.getBoundingClientRect().height));
-      scale = Math.min(width, height) / 2 / extent;
+      const rect = wrap.getBoundingClientRect();
+      const nw = Math.max(280, Math.floor(wrap.clientWidth || rect.width || 320));
+      const nh = Math.max(280, Math.floor(wrap.clientHeight || rect.height || 320));
+      // Debounce: ignora micro-cambios (ej. scrollbar) para que la escala no tiemble.
+      if (canvas.width && Math.abs(nw - width) < 3 && Math.abs(nh - height) < 3) return;
+      width = nw;
+      height = nh;
+      fitScale = Math.min(width, height) / 2 / extent; // se fija aqui, NO cada frame
       const ratio = window.devicePixelRatio || 1;
       canvas.width = Math.floor(width * ratio);
       canvas.height = Math.floor(height * ratio);
@@ -1202,9 +1357,9 @@ function ParticleSimulation({ project, signals, clients }) {
       }
       if (extreme) {
         stopped = true; // el Java detiene la simulacion al perder el equilibrio
-        pushStatus("desequilibrio", `Falla del sistema en: ${extreme.c.name} (proyecto ${extreme.center.meta.name})`);
+        pushStatus("desequilibrio", `Falla: ${extreme.c.name} · ${extreme.center.meta.name}`);
       } else if (marginal) {
-        pushStatus("riesgo", `Sistema en riesgo en: ${marginal.c.name} (proyecto ${marginal.center.meta.name})`);
+        pushStatus("riesgo", `Riesgo: ${marginal.c.name} · ${marginal.center.meta.name}`);
       } else {
         pushStatus("equilibrio", "Sistema en equilibrio");
       }
@@ -1214,89 +1369,152 @@ function ParticleSimulation({ project, signals, clients }) {
       }
     }
 
+    const AXIS_NAME = { economica: "Falla economica", rendimiento: "Rendimiento inaceptable", carga: "Alta carga de trabajo", centro: "Salud (al centro)" };
     function snapshot(p) {
-      if (p.meta.kind === "center") {
-        const spring = sys.springs.find((s) => s.kind === "centro" && s.a === p);
-        return {
-          key: p.meta.key,
-          label: "Proyecto (centro de masas)",
-          name: p.meta.name,
-          color: "#21A7D8",
-          role: "El diagnostico del sistema se hace por este centro: si se acerca o cruza los bordes, el proyecto esta en riesgo o falla.",
-          kCentro: spring ? spring.ks.toFixed(2) : "-",
-          tension: Math.round((spring?.tension || 0) * 100),
-          beta: Math.round((p.meta.beta || 0) * 100),
-          conditions: (p.meta.conditions || []).slice(0, 5),
-          active: p.meta.activeCondition,
-        };
-      }
-      const spring = sys.springs.find((s) => s.kind === "interaccion" && s.a === p);
+      const dist = Math.hypot(p.position.x - feasible.x, p.position.y - feasible.y);
+      const proximity = Math.min(100, Math.round((dist / feasible.r) * 100));
+      const conds = (p.meta.conditions || [])
+        .map((c) => ({
+          ...c,
+          effect: c.intensity * c.weight,
+          axisName: AXIS_NAME[c.axis] || c.axis,
+          why: FORCE_WHY[c.kind] || "",
+        }))
+        .sort((a, b) => b.effect - a.effect);
+      // Variables aun no capturadas para este proyecto (afinarian el diagnostico).
+      const present = new Set((p.meta.conditions || []).map((c) => c.kind));
+      const missing = MANUAL_VARIABLES.filter(([k]) => !present.has(k)).map(([, label]) => label);
       return {
         key: p.meta.key,
-        label: `${p.meta.name} · ${p.meta.cluster}`,
+        label: "Subproyecto",
         name: p.meta.name,
-        color: p.meta.color,
-        role: `Actor ${p.meta.type} del proyecto ${p.meta.cluster}.`,
-        kCentro: p.meta.k ? p.meta.k.toFixed(2) : "-",
-        tension: Math.round((spring?.tension || 0) * 100),
-        beta: null,
-        conditions: [],
-        active: null,
+        color: p.meta.color || "#21A7D8",
+        role: conds.length
+          ? "Cada fuerza jala este proyecto hacia un borde; la fuerza azul lo devuelve al centro. Se recalcula con la ultima informacion cargada."
+          : "Sin datos suficientes: el proyecto esta en el centro. Al cargar tareas o feedback se movera segun sus fuerzas.",
+        proximity,
+        netForce: Math.round((p.meta.netForce || 0) * 100) / 100,
+        conditions: conds.slice(0, 8),
+        missing: missing.slice(0, 6),
       };
     }
 
     function hitParticle(event) {
       const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      // Mapea el clic (px mostrados) al espacio de dibujo (width/height logicos).
+      const x = (event.clientX - rect.left) * (width / (rect.width || width));
+      const y = (event.clientY - rect.top) * (height / (rect.height || height));
       for (const p of [...centers].reverse()) {
         const s = toScreen(p.position.x, p.position.y);
-        if (Math.hypot(x - s.x, y - s.y) <= 13) return p;
+        if (Math.hypot(x - s.x, y - s.y) <= 15) return p;
       }
       return null;
     }
 
     // ---- Dibujo ----
     function draw() {
+      // Escala estable (fijada al redimensionar) × zoom manual. NO se recalcula desde
+      // width/height cada frame → nada tiembla aunque el contenedor micro-cambie.
+      scale = fitScale * (zoomRef.current || 1);
       context.clearRect(0, 0, width, height);
       context.fillStyle = "#FFFFFF";
       context.fillRect(0, 0, width, height);
 
+      // 1) Circulos COMPLETOS pero muy atenuados: se ven tenues fuera de la zona de
+      //    interaccion sin ensuciar. 2) Encima, los arcos claros SOLO del borde de la
+      //    interseccion de los tres circulos (zona de interaccion real).
+      // -- capa tenue (circulos completos) --
       for (const c of cir) {
         const s = toScreen(c.x, c.y);
-        const isViolated = violated.cir.has(c.id);
+        context.save();
+        context.globalAlpha = 0.12;
         context.beginPath();
         context.arc(s.x, s.y, c.r * scale, 0, Math.PI * 2);
-        context.strokeStyle = isViolated ? "#B42318" : c.color;
-        context.lineWidth = isViolated ? 4.4 : 3.4;
+        context.strokeStyle = c.color;
+        context.lineWidth = 1.4;
         context.stroke();
+        context.restore();
       }
       for (const c of cirm) {
         const s = toScreen(c.x, c.y);
-        const isViolated = violated.cirm.has(c.id);
+        context.save();
+        context.globalAlpha = 0.18;
         context.beginPath();
         context.setLineDash([5, 4]);
         context.arc(s.x, s.y, c.r * scale, 0, Math.PI * 2);
-        context.strokeStyle = isViolated ? "#E8751A" : "#FFB35F";
-        context.lineWidth = isViolated ? 2.4 : 1.4;
+        context.strokeStyle = c.color;
+        context.lineWidth = 1;
         context.stroke();
         context.setLineDash([]);
+        context.restore();
       }
+      // -- capa clara: SOLO el borde de la interseccion de los 3 circulos. Para cada
+      //    circulo se recorta a la interseccion de los OTROS DOS antes de trazarlo, asi
+      //    unicamente queda el arco que forma la zona donde los tres coinciden.
+      function strokeBoundary(list, styleFor) {
+        for (const a of list) {
+          context.save();
+          for (const b of list) {
+            if (b === a) continue;
+            const sb = toScreen(b.x, b.y);
+            context.beginPath();
+            context.arc(sb.x, sb.y, b.r * scale, 0, Math.PI * 2);
+            context.clip();
+          }
+          const sa = toScreen(a.x, a.y);
+          styleFor(a);
+          context.beginPath();
+          context.arc(sa.x, sa.y, a.r * scale, 0, Math.PI * 2);
+          context.stroke();
+          context.setLineDash([]);
+          context.restore();
+        }
+      }
+      strokeBoundary(cir, (a) => {
+        context.strokeStyle = violated.cir.has(a.id) ? "#B42318" : a.color;
+        context.lineWidth = violated.cir.has(a.id) ? 4.4 : 3.4;
+      });
+      strokeBoundary(cirm, (a) => {
+        context.setLineDash([5, 4]);
+        context.globalAlpha = violated.cirm.has(a.id) ? 1 : 0.55;
+        context.strokeStyle = violated.cirm.has(a.id) ? "#E8751A" : a.color;
+        context.lineWidth = violated.cirm.has(a.id) ? 2.4 : 1.6;
+      });
+      context.globalAlpha = 1;
 
-      // Etiquetas de los 3 ejes
+      // Etiquetas de los 3 ejes. Fuente ADAPTABLE al ancho (en movil se achican para no
+      // cortarse) y siempre en dos lineas para ocupar menos horizontal.
+      const centerScreen = toScreen(feasible.x, feasible.y);
+      const labelPx = Math.max(9, Math.min(13, Math.round(width / 30)));
+      const lineH = labelPx + 3;
       for (const c of cir) {
         const reach = c.r - Math.hypot(c.x, c.y);
-        const lx = Math.cos(c.labelAngle) * (reach + 0.85);
-        const ly = Math.sin(c.labelAngle) * (reach + 0.85);
-        const s = toScreen(lx, ly);
-        context.font = "700 14px Poppins, Segoe UI, sans-serif";
-        const label = c.risk > 0 ? `${c.name} (riesgo ${Math.round(c.risk * 100)}%)` : c.name;
-        const w = context.measureText(label).width;
-        context.fillStyle = "rgba(255,255,255,.9)";
-        roundRect(context, s.x - w / 2 - 6, s.y - 16, w + 12, 21, 5);
+        const bx0 = Math.cos(c.labelAngle) * (reach + 0.35);
+        const by0 = Math.sin(c.labelAngle) * (reach + 0.35);
+        const s = toScreen(bx0, by0);
+        context.font = `700 ${labelPx}px Poppins, Segoe UI, sans-serif`;
+        const lines = splitTwoLines(c.name);
+        const w = Math.max(...lines.map((l) => context.measureText(l).width));
+        const boxW = w + 10;
+        const boxH = (lines[1] ? lineH * 2 : lineH) + 6;
+        // Empuja la caja hacia AFUERA (evita cruzar el borde): segun la direccion en pantalla.
+        let sdx = s.x - centerScreen.x;
+        let sdy = s.y - centerScreen.y;
+        const slen = Math.hypot(sdx, sdy) || 1;
+        sdx /= slen; sdy /= slen;
+        let bx = s.x + sdx * (boxW / 2 + 2) - boxW / 2;
+        let by = s.y + sdy * (boxH / 2 + 2) - boxH / 2;
+        bx = Math.max(3, Math.min(width - boxW - 3, bx));
+        by = Math.max(3, Math.min(height - boxH - 3, by));
+        context.fillStyle = "rgba(255,255,255,.92)";
+        roundRect(context, bx, by, boxW, boxH, 5);
         context.fill();
-        context.fillStyle = "#1D2939";
-        context.fillText(label, s.x - w / 2, s.y);
+        context.fillStyle = c.color; // etiqueta al color de su eje
+        lines.forEach((line, i) => {
+          if (!line) return;
+          const lw = context.measureText(line).width;
+          context.fillText(line, bx + boxW / 2 - lw / 2, by + labelPx + 2 + i * lineH);
+        });
       }
 
       if (infeasible) return;
@@ -1341,44 +1559,79 @@ function ParticleSimulation({ project, signals, clients }) {
       context.fillStyle = "#667085";
       context.fillText("Punto ideal", anchorS.x + 8, anchorS.y - 4);
 
-      // Fuerzas activas: flechas visibles pero que NO tapan la particula (nacen desde su
-      // borde) y con el NOMBRE de la condicion que las genera, para saber de donde salen.
+      // TODAS las fuerzas de cada particula como flechas. Se abren en abanico (offset
+      // perpendicular) para que las que van al mismo borde no se solapen. Naranja solida =
+      // empuja al riesgo (afuera); verde punteada = salud (jala al centro, adentro). SIN
+      // texto en el mapa — el nombre y peso de cada fuerza estan en el panel al hacer click.
       for (const p of centers) {
-        const mag = Math.hypot(p.persistent.x, p.persistent.y);
-        if (mag < 0.02) continue;
+        const conds = (p.meta.conditions || []).filter((c) => c.intensity * c.weight > 0.01);
         const s = toScreen(p.position.x, p.position.y);
-        const ux = p.persistent.x / mag;
-        const uy = p.persistent.y / mag;
-        const start = 20; // separada del borde: la flecha NO toca la particula
-        const len = 16 + mag * 7;
-        context.strokeStyle = "rgba(232,117,26,.45)";
-        context.fillStyle = "rgba(232,117,26,.45)";
-        context.lineWidth = 1.1;
-        context.beginPath();
-        context.moveTo(s.x + ux * start, s.y + uy * start);
-        context.lineTo(s.x + ux * (start + len), s.y + uy * (start + len));
-        context.stroke();
-        const tipX = s.x + ux * (start + len);
-        const tipY = s.y + uy * (start + len);
-        const angle = Math.atan2(uy, ux);
-        context.beginPath();
-        context.moveTo(tipX, tipY);
-        context.lineTo(tipX - Math.cos(angle - 0.5) * 6, tipY - Math.sin(angle - 0.5) * 6);
-        context.lineTo(tipX - Math.cos(angle + 0.5) * 6, tipY - Math.sin(angle + 0.5) * 6);
-        context.closePath();
-        context.fill();
-        // Nombre corto de la condicion junto a la flecha (de donde sale la fuerza)
-        const source = p.meta.activeCondition?.source || "";
-        if (source) {
-          const short = source.length > 34 ? `${source.slice(0, 32)}…` : source;
-          context.font = "600 10px Lato, Segoe UI, sans-serif";
-          const w = context.measureText(short).width;
-          const lx = tipX + ux * 6 - (ux < 0 ? w : 0);
-          context.fillStyle = "rgba(255,255,255,.85)";
-          roundRect(context, lx - 3, tipY - 10, w + 6, 13, 3);
+
+        // Flechita reutilizable.
+        const arrow = (ux, uy, start, len, color, lw, dash, headLen, alpha) => {
+          context.save();
+          context.globalAlpha = alpha;
+          context.strokeStyle = color;
+          context.fillStyle = color;
+          context.lineWidth = lw;
+          if (dash) context.setLineDash(dash);
+          const ex = s.x + ux * (start + len);
+          const ey = s.y + uy * (start + len);
+          context.beginPath();
+          context.moveTo(s.x + ux * start, s.y + uy * start);
+          context.lineTo(ex, ey);
+          context.stroke();
+          context.setLineDash([]);
+          const angle = Math.atan2(uy, ux);
+          context.beginPath();
+          context.moveTo(ex, ey);
+          context.lineTo(ex - Math.cos(angle - 0.45) * headLen, ey - Math.sin(angle - 0.45) * headLen);
+          context.lineTo(ex - Math.cos(angle + 0.45) * headLen, ey - Math.sin(angle + 0.45) * headLen);
+          context.closePath();
           context.fill();
-          context.fillStyle = "rgba(154,75,8,.9)";
-          context.fillText(short, lx, tipY);
+          context.restore();
+        };
+
+        // COMBINAR por direccion: las fuerzas que empujan al MISMO eje se suman en UN vector.
+        // Quedan hasta 3 vectores de borde (economica/rendimiento/carga) + salud (adentro).
+        const byAxis = {};
+        for (const cond of conds) {
+          byAxis[cond.axis] = (byAxis[cond.axis] || 0) + cond.intensity * cond.weight;
+        }
+
+        // 1) RESULTANTE detras (negro PUNTEADO, mas largo): suma de las fuerzas de las
+        //    condiciones = rumbo de la tarea.
+        const rl = Math.hypot(p.persistent.x, p.persistent.y);
+        if (rl > 0.03) {
+          const ux = p.persistent.x / rl;
+          const uy = p.persistent.y / rl;
+          arrow(ux, uy, 14, 34 + Math.min(1.6, rl / (FORCE_GAIN || 1)) * 40, "#151B23", 1.8, [6, 4], 9, 1);
+        }
+
+        // 2) Retorno al centro (azul, tenue).
+        const dcx = feasible.x - p.position.x;
+        const dcy = feasible.y - p.position.y;
+        const dcl = Math.hypot(dcx, dcy);
+        if (dcl > 0.12) {
+          const mag = Math.min(1, (CENTER_K * dcl) / (feasible.r || 1));
+          arrow(dcx / dcl, dcy / dcl, 14, 12 + mag * 18, RETURN_COLOR, 1.1, null, 6, 0.6);
+        }
+
+        // 3) Los TRES vectores de eje ENCIMA (siempre los 3: cada tarea esta influenciada
+        //    por los tres bordes). Cada eje su COLOR (igual al de su borde). Grosor UNIFORME
+        //    y visible; solo el LARGO cambia con la fuerza (stub minimo si no hay datos).
+        for (const axis of ["economica", "rendimiento", "carga"]) {
+          const dir = axisDir[axis];
+          if (!dir) continue;
+          const mag = byAxis[axis] || 0;
+          arrow(dir.x, dir.y, 14, 14 + Math.min(1.4, mag) * 30, AXIS_COLORS[axis], 1.6, null, 8, 1);
+        }
+        // Salud (adentro) si el producto esta bien calificado.
+        if (byAxis.centro) {
+          const dx = feasible.x - p.position.x;
+          const dy = feasible.y - p.position.y;
+          const l = Math.hypot(dx, dy) || 1;
+          arrow(dx / l, dy / l, 14, 14 + Math.min(1.4, byAxis.centro) * 30, HEALTH_COLOR, 1.6, [5, 3], 8, 1);
         }
       }
 
@@ -1398,57 +1651,96 @@ function ParticleSimulation({ project, signals, clients }) {
           context.lineWidth = 2.4;
           context.stroke();
         }
+        const pColor = center.meta.color || "#21A7D8";
         context.beginPath();
         context.arc(s.x, s.y, 9.5, 0, Math.PI * 2);
-        context.fillStyle = "#21A7D8";
+        context.fillStyle = pColor;
         context.fill();
         context.strokeStyle = "#1D2939";
         context.lineWidth = 1.6;
         context.stroke();
-        context.font = "700 13px Poppins, Segoe UI, sans-serif";
+        // Etiqueta del nombre a la IZQUIERDA (no hay eje hacia la izquierda, no tapa vectores).
+        const namePx = Math.max(9, Math.min(11, Math.round(width / 36)));
+        context.font = `500 ${namePx}px Poppins, Segoe UI, sans-serif`;
         const w = context.measureText(center.meta.name).width;
+        let lblX = s.x - 14 - (w + 10); // caja a la izquierda de la particula
+        if (lblX < 3) lblX = s.x + 14;   // si no cabe, va a la derecha
         context.fillStyle = "rgba(255,255,255,.92)";
-        roundRect(context, s.x + 13, s.y - 18, w + 12, 20, 4);
+        roundRect(context, lblX, s.y - 9, w + 10, 18, 4);
         context.fill();
-        context.fillStyle = "#0B69B7";
-        context.fillText(center.meta.name, s.x + 19, s.y - 3);
+        context.fillStyle = pColor;
+        context.fillText(center.meta.name, lblX + 5, s.y + namePx / 2 - 1);
+      }
+
+      // Particula ENFOCADA (hover o seleccion): se redibuja ENCIMA de todo con su nombre
+      // iluminado, para que nunca quede tapada por otras particulas/flechas. Al salir el
+      // mouse vuelve a su estado normal (este realce solo dura mientras esta enfocada).
+      const focusKey = hoverKeyRef.current || selectedKeyRef.current;
+      const focusCenter = focusKey && centers.find((c) => c.meta.key === focusKey);
+      if (focusCenter) {
+        const s = toScreen(focusCenter.position.x, focusCenter.position.y);
+        const pColor = focusCenter.meta.color || "#21A7D8";
+        // halo + punto por encima
+        context.beginPath();
+        context.arc(s.x, s.y, 16, 0, Math.PI * 2);
+        context.fillStyle = "rgba(255,255,255,.95)";
+        context.fill();
+        context.strokeStyle = "#151B23";
+        context.lineWidth = 2.4;
+        context.stroke();
+        context.beginPath();
+        context.arc(s.x, s.y, 9.5, 0, Math.PI * 2);
+        context.fillStyle = pColor;
+        context.fill();
+        context.strokeStyle = "#1D2939";
+        context.lineWidth = 1.6;
+        context.stroke();
+        // nombre resaltado (mas grande, fondo del color de la particula)
+        const fpx = Math.max(11, Math.min(14, Math.round(width / 28)));
+        context.font = `700 ${fpx}px Poppins, Segoe UI, sans-serif`;
+        const fw = context.measureText(focusCenter.meta.name).width;
+        let fx = s.x - 16 - (fw + 14);
+        if (fx < 4) fx = s.x + 16;
+        context.fillStyle = pColor;
+        roundRect(context, fx, s.y - 12, fw + 14, 24, 6);
+        context.fill();
+        context.fillStyle = "#fff";
+        context.fillText(focusCenter.meta.name, fx + 7, s.y + fpx / 2 - 2);
       }
     }
 
     // ---- Bucle ----
+    const startTime = performance.now();
     function frame() {
-      if (!stopped && !infeasible) {
+      if (!infeasible) {
+        // Fuerzas VIVAS cada frame: respiran con el tiempo (hacia afuera y adentro).
+        applyForces((performance.now() - startTime) / 1000);
         sys.tick(DT);
-        const difx = ref.position.x - prevRef.x;
-        const dify = ref.position.y - prevRef.y;
-        if (difx !== 0 || dify !== 0) {
-          for (const p of sys.particles) {
-            if (p === ref) continue;
-            p.position.x += difx;
-            p.position.y += dify;
-          }
-        }
-        prevRef = { x: ref.position.x, y: ref.position.y };
-        // Saturacion: un proyecto (o actor) NO "sale volando" del mapa. Si cruza un limite
-        // queda retenido justo afuera del borde (la falla se marca igual) + tope de velocidad.
+        // Solo un tope de seguridad alto (evita explosiones); la lentitud la da el DT
+        // pequeno. La particula no sale del mapa: si cruza un borde queda justo afuera
+        // y ademas se le frena la velocidad para que NO rebote (evita el temblor).
         for (const p of centers) {
           const v = Math.hypot(p.velocity.x, p.velocity.y);
-          if (v > 0.5) { p.velocity.x *= 0.5 / v; p.velocity.y *= 0.5 / v; }
+          if (v > 0.6) { p.velocity.x *= 0.6 / v; p.velocity.y *= 0.6 / v; }
           for (const c of cir) {
             const dx = p.position.x - c.x;
             const dy = p.position.y - c.y;
             const d = Math.hypot(dx, dy);
-            const max = c.r + 0.55;
+            const max = c.r + 0.4;
             if (d > max) {
               p.position.x = c.x + (dx / d) * max;
               p.position.y = c.y + (dy / d) * max;
+              // frena la velocidad hacia afuera para que no rebote contra el borde
+              const nx = dx / d;
+              const ny = dy / d;
+              const vn = p.velocity.x * nx + p.velocity.y * ny;
+              if (vn > 0) { p.velocity.x -= vn * nx; p.velocity.y -= vn * ny; }
             }
           }
         }
         frames += 1;
-        if (frames % OP_CYCLE === 0) applyOperationForces(Math.floor(frames / OP_CYCLE));
         if (frames > WARMUP_FRAMES) evaluate();
-        else pushStatus("corriendo", "Simulando: el sistema busca su punto de operacion...");
+        else pushStatus("corriendo", "Analizando la salud de los proyectos...");
       }
       draw();
       animation = requestAnimationFrame(frame);
@@ -1498,40 +1790,38 @@ function ParticleSimulation({ project, signals, clients }) {
   const sc = statusColors[status.kind] || statusColors.corriendo;
 
   return (
+    <div className="particle-sim">
     <div className="particle-wrap" ref={wrapRef}>
       <canvas ref={canvasRef} />
       <div
         role="status"
         aria-live="polite"
         style={{
-          position: "absolute", top: 10, left: 10, right: 10, display: "flex", alignItems: "center",
-          justifyContent: "space-between", gap: 8, padding: "7px 10px", borderRadius: 8,
-          background: sc.bg, border: `1px solid ${sc.border}`, fontSize: 13, fontWeight: 700, color: sc.text,
+          position: "absolute", top: 8, left: 8, right: 8, display: "flex", alignItems: "center",
+          justifyContent: "space-between", gap: 6, padding: "6px 9px", borderRadius: 8,
+          background: sc.bg, border: `1px solid ${sc.border}`, fontSize: 12, fontWeight: 700, color: sc.text,
         }}
       >
-        <span>{status.text}</span>
+        <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status.text}</span>
         <button
           type="button"
           onClick={() => setRunId((v) => v + 1)}
+          title="Reiniciar simulacion"
+          aria-label="Reiniciar simulacion"
           style={{
-            border: `1px solid ${sc.border}`, background: "#fff", color: sc.text, borderRadius: 6,
-            padding: "3px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+            flex: "0 0 auto", border: `1px solid ${sc.border}`, background: "#fff", color: sc.text, borderRadius: 6,
+            padding: "3px 9px", fontSize: 12, fontWeight: 700, cursor: "pointer",
           }}
         >
-          Reiniciar simulacion
+          ↻
         </button>
       </div>
-      {violations.length > 0 && (
-        <div className="boundary-alerts" aria-live="polite">
-          {violations.map((alert) => (
-            <div key={alert.key} style={{ borderColor: `${alert.color}66` }}>
-              <b style={{ color: alert.color }}>{alert.limit}</b>
-              <span>{alert.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="particle-help">Haz click en un centro (proyecto) o actor para ver de donde salen sus fuerzas.</div>
+      <div className="particle-zoom">
+        <button type="button" onClick={zoomIn} aria-label="Acercar" title="Acercar">+</button>
+        <button type="button" onClick={zoomOut} aria-label="Alejar" title="Alejar">−</button>
+        <button type="button" onClick={() => setZoom(1)} aria-label="Zoom original" title="Zoom original">⤢</button>
+      </div>
+      {!selected && <div className="particle-help">Haz click en un proyecto para ver sus fuerzas</div>}
       {selected && (
         <aside className="particle-detail" style={{ borderColor: `${selected.color}66` }}>
           <button type="button" onClick={() => setSelected(null)} aria-label="Cerrar detalle">x</button>
@@ -1539,36 +1829,180 @@ function ParticleSimulation({ project, signals, clients }) {
           <h4>{selected.name}</h4>
           <p>{selected.role}</p>
           <dl>
-            <div><dt>k cuerda</dt><dd>{selected.kCentro}</dd></div>
-            <div><dt>Tension</dt><dd>{selected.tension}%</dd></div>
-            {selected.beta != null && <div><dt>β eventos adversos</dt><dd>{selected.beta}%</dd></div>}
+            <div><dt>Cercania al borde</dt><dd>{selected.proximity}%</dd></div>
+            <div><dt>Fuerza neta</dt><dd>{selected.netForce}</dd></div>
           </dl>
-          {selected.active && (
-            <p style={{ fontSize: 11, marginTop: 6 }}>
-              <b style={{ color: "#E8751A" }}>Fuerza activa:</b> {selected.active.source} → empuja hacia <b>{selected.active.axis}</b>
-            </p>
-          )}
-          {selected.conditions?.length > 0 && (
+          {selected.conditions?.length > 0 ? (
             <div style={{ marginTop: 6 }}>
-              <b style={{ fontSize: 11 }}>Condiciones que generan fuerza:</b>
-              <ul style={{ margin: "4px 0 0", paddingLeft: 16, fontSize: 11 }}>
+              <b style={{ fontSize: 11 }}>Fuerzas (efecto = dato × peso):</b>
+              <div style={{ marginTop: 4 }}>
                 {selected.conditions.map((cond, i) => (
-                  <li key={i}>{cond.source} <span style={{ color: "#667085" }}>(riesgo {Math.round(cond.r * 100)}% → {cond.axis})</span></li>
+                  <details key={i} className="force-acc">
+                    <summary>
+                      <i style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: cond.color || "#E8751A", marginRight: 6 }} />
+                      <span style={{ color: cond.color || (cond.axis === "centro" ? "#0D7A4F" : "#9A4B08"), fontWeight: 700 }}>
+                        {cond.axis === "centro" ? "↺ " : "→ "}{cond.source}
+                      </span>
+                      <span style={{ float: "right", color: "#667085", fontWeight: 700 }}>{Math.round(cond.effect * 100)}%</span>
+                    </summary>
+                    <div className="force-acc-body">
+                      empuja a <b>{cond.axisName}</b> · dato {Math.round(cond.intensity * 100)}% × peso {Math.round(cond.weight * 100)}%
+                      {cond.why && <><br /><span style={{ color: "#98928A", fontStyle: "italic" }}>{cond.why}</span></>}
+                    </div>
+                  </details>
                 ))}
-              </ul>
+              </div>
             </div>
+          ) : (
+            <p style={{ fontSize: 11, marginTop: 6, color: "#0D7A4F" }}>Sin fuerzas negativas: el proyecto esta saludable, en el centro.</p>
+          )}
+          {selected.missing?.length > 0 && (
+            <details className="force-acc" style={{ marginTop: 8 }}>
+              <summary style={{ color: "#667085" }}>Para afinar (capturar por proyecto)</summary>
+              <ul style={{ margin: "3px 0 0", paddingLeft: 16, fontSize: 11, color: "#98928A" }}>
+                {selected.missing.map((m, i) => <li key={i}>{m}</li>)}
+              </ul>
+            </details>
           )}
         </aside>
       )}
+      </div>
       <div className="particle-legend">
-        <span><i className="dot var" style={{ background: "#21A7D8" }} /> Particula = proyecto de la empresa (centro de masas)</span>
-        <span><i className="line center-spring" /> Cuerda al punto ideal (lo trae al centro)</span>
-        <span><i className="line force" /> Fuerza con su condicion (tarea/senal de origen)</span>
-        <span><i className="line marginal" /> Limites marginales</span>
-        <span><i className="line outer" /> Limites extremos (3 ejes)</span>
+        <span><i className="line marginal" style={{ background: "#151B23" }} /> <b>Vector resultante</b> (negro punteado): rumbo de la tarea</span>
+        <span><i className="line force" style={{ background: "#C2410C" }} /> Falla economica</span>
+        <span><i className="line force" style={{ background: "#6D28D9" }} /> Rendimiento</span>
+        <span><i className="line force" style={{ background: "#0E7490" }} /> Alta carga</span>
+        <span><i className="line force" style={{ background: "#2D9A5A" }} /> Salud (adentro)</span>
+        <span><i className="line center-spring" style={{ background: "#1570EF" }} /> Retorno al centro</span>
       </div>
     </div>
   );
+}
+
+// Formulario para capturar A MANO una medicion de producto (variables que NO salen de las
+// tareas: bugs, satisfaccion del equipo, presupuesto, mercado...). Escribe en product_signals.
+// Panel unico con TABS: Como leer · Medicion · Resortes.
+function InfoPanel({ companyId, clients, onSaved, canSave }) {
+  const [tab, setTab] = React.useState("leer");
+  const [force, setForce] = React.useState("bugs");
+  const [client, setClient] = React.useState("");
+  const [intensity, setIntensity] = React.useState(0.5);
+  const [title, setTitle] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!companyId) { setMsg("Selecciona una empresa con datos reales."); return; }
+    setSaving(true);
+    setMsg("");
+    const ok = await saveProductSignal({
+      companyId, client: client || null, force, intensity: Number(intensity),
+      title: title || FORCE_CATALOG[force]?.label,
+    }).catch(() => false);
+    setSaving(false);
+    if (ok) {
+      setMsg("Guardado. Actualizando mapa…");
+      setTitle("");
+      onSaved?.();
+      setTimeout(() => setMsg(""), 2500);
+    } else {
+      setMsg("No se pudo guardar (revisa sesion / corre setup.sql).");
+    }
+  }
+
+  const TABS = [["leer", "Como leer"], ["medicion", "Medicion"], ["resortes", "Resortes"]];
+
+  return (
+    <article className="panel info-panel">
+      <div className="info-tabs" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id}
+            className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "leer" && (
+        <div className="research-grid">
+          {[
+            ["Particulas", "Cada particula es un subproyecto. Es lo mas importante del mapa."],
+            ["Vectores", "Los 3 vectores de color empujan a cada borde (economica, rendimiento, carga); el negro punteado es el resultante (rumbo). Verde = salud (adentro), azul = retorno al centro."],
+            ["Cuerdas", "Cada proyecto es independiente: su cuerda al punto ideal lo trae de vuelta cuando las fuerzas lo empujan."],
+            ["Limites", "Amarillo = riesgo (marginal). Borde de color = falla del eje: la simulacion lo senala."],
+          ].map(([t, text]) => (
+            <div key={t}><b>{t}</b><p>{text}</p></div>
+          ))}
+        </div>
+      )}
+
+      {tab === "medicion" && (
+        <>
+          <p className="note" style={{ marginTop: 0 }}>
+            Captura variables que no vienen de las tareas (bugs, satisfaccion del equipo,
+            presupuesto, tecnologia, mercado…). Mueven la particula del subproyecto.
+          </p>
+          {!canSave && <p style={{ fontSize: 12, color: "#B54708" }}>Inicia sesion en la app principal para guardar mediciones reales.</p>}
+          <form onSubmit={submit} style={{ display: "grid", gap: 8 }}>
+            <label style={{ fontSize: 12, fontWeight: 700 }}>
+              Fuerza
+              <select value={force} onChange={(e) => setForce(e.target.value)} style={{ width: "100%", marginTop: 3, padding: "6px 8px" }}>
+                {Object.entries(FORCE_CATALOG).map(([k, spec]) => <option key={k} value={k}>{spec.label}</option>)}
+              </select>
+            </label>
+            {clients.length > 0 && (
+              <label style={{ fontSize: 12, fontWeight: 700 }}>
+                Subproyecto
+                <select value={client} onChange={(e) => setClient(e.target.value)} style={{ width: "100%", marginTop: 3, padding: "6px 8px" }}>
+                  <option value="">Toda la empresa</option>
+                  {clients.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+            )}
+            <label style={{ fontSize: 12, fontWeight: 700 }}>
+              Intensidad: {Math.round(intensity * 100)}% (que tan fuerte es la evidencia)
+              <input type="range" min="0" max="1" step="0.05" value={intensity} onChange={(e) => setIntensity(e.target.value)} style={{ width: "100%" }} />
+            </label>
+            <label style={{ fontSize: 12, fontWeight: 700 }}>
+              Nota (opcional)
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={FORCE_CATALOG[force]?.label} style={{ width: "100%", marginTop: 3, padding: "6px 8px" }} />
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button type="submit" disabled={saving || !canSave} style={{ padding: "6px 14px", fontWeight: 700, borderRadius: 6, border: "1px solid #17727A", background: "#17727A", color: "#fff", cursor: "pointer" }}>
+                {saving ? "Guardando…" : "Guardar medicion"}
+              </button>
+              {msg && <span style={{ fontSize: 12, color: "#0D7A4F" }}>{msg}</span>}
+            </div>
+          </form>
+        </>
+      )}
+
+      {tab === "resortes" && (
+        <div className="spring-meaning">
+          <p><b>Rigidez</b> = que tan dificil es deformar una relacion del sistema.</p>
+          <p><b>Longitud de reposo</b> = distancia esperada para que la relacion este alineada.</p>
+          <p><b>Amortiguacion</b> = perdida por friccion, retrabajo, espera o ruido organizacional.</p>
+          <p><b>Estiramiento</b> = tension: cuanto mas se alarga, mas cerca esta de accion, alarma o fracaso.</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+// Parte un rotulo en dos lineas balanceadas por palabras (para que no se corte).
+function splitTwoLines(text) {
+  const words = String(text).split(" ");
+  if (words.length < 2) return [text, ""];
+  let best = 1;
+  let bestDiff = Infinity;
+  for (let i = 1; i < words.length; i += 1) {
+    const a = words.slice(0, i).join(" ");
+    const b = words.slice(i).join(" ");
+    const diff = Math.abs(a.length - b.length);
+    if (diff < bestDiff) { bestDiff = diff; best = i; }
+  }
+  return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
 }
 
 function roundRect(context, x, y, width, height, radius) {
@@ -1657,6 +2091,20 @@ function Style() {
       button, input, select, textarea { font: inherit; }
       button { cursor: pointer; }
       .mdssp-app { min-height: 100vh; }
+      .mdssp-embed { min-height: 0; background: transparent; overflow: hidden; }
+      .mdssp-embed-inner { padding: 4px; }
+      /* Embed: alto fijo (comodo) y ancho fluido que llena el panel. */
+      .mdssp-embed .particle-wrap { height: 440px; max-width: 100%; }
+      /* Leyenda como carrusel horizontal (no ocupa varias filas). */
+      .mdssp-embed .particle-legend { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+      .mdssp-embed .particle-legend span { flex: 0 0 auto; }
+      /* Panel de info colapsable. */
+      .pm-collapse { margin-top: 12px; border: 1px solid #E4DED6; border-radius: 8px; background: #FFFCF7; }
+      .pm-collapse > summary { cursor: pointer; list-style: none; padding: 12px 14px; font-weight: 800; color: #17727A; font-size: 13px; }
+      .pm-collapse > summary::-webkit-details-marker { display: none; }
+      .pm-collapse > summary::after { content: "▸"; float: right; color: #98A2B3; }
+      .pm-collapse[open] > summary::after { content: "▾"; }
+      .pm-collapse .panel, .pm-collapse .info-panel { border: none; padding: 0 14px 14px; background: transparent; }
       .topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 22px; background: #FFFCF7; border-bottom: 1px solid #E7E0D5; }
       .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
       .brand img { width: 36px; height: 36px; object-fit: contain; }
@@ -1692,14 +2140,27 @@ function Style() {
       .panel.wide { grid-column: span 1; }
       .panel-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: #17727A; }
       .panel-title h3, .dimension h3, .signal h4 { margin: 0; font-size: 15px; }
-      .particle-wrap { position: relative; height: clamp(560px, 72vh, 760px); overflow: hidden; border: 1px solid #E4DED6; border-radius: 6px; background: #fff; }
-      .particle-wrap canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-      .boundary-alerts { position: absolute; top: 10px; right: 10px; z-index: 2; display: grid; gap: 6px; width: min(310px, calc(100% - 20px)); pointer-events: none; }
+      .particle-sim { display: block; }
+      /* Canvas de ALTO FIJO y ANCHO fluido (se dibuja al tamano real → siempre nitido).
+         El triangulo se ajusta al lado menor y queda centrado. */
+      .particle-wrap { position: relative; overflow: hidden; border: 1px solid #E4DED6; border-radius: 6px; background: #fff; height: clamp(420px, 60vh, 560px); }
+      .particle-wrap canvas { display: block; width: 100%; height: 100%; }
+      .particle-zoom { position: absolute; top: 46px; right: 8px; z-index: 3; display: flex; flex-direction: column; gap: 4px; }
+      .particle-zoom button { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #D9D2C7; border-radius: 6px; background: rgba(255,252,247,.96); color: #344054; font-size: 17px; font-weight: 800; line-height: 1; cursor: pointer; box-shadow: 0 2px 6px rgba(21,27,35,.1); }
+      .particle-zoom button:hover { background: #fff; border-color: #17727A; color: #17727A; }
+      .boundary-alerts { position: absolute; top: 54px; right: 10px; z-index: 2; display: grid; gap: 6px; width: min(280px, calc(100% - 20px)); pointer-events: none; }
       .boundary-alerts div { border: 1px solid; border-radius: 6px; background: rgba(255,252,247,.96); box-shadow: 0 8px 22px rgba(21,27,35,.12); padding: 8px 10px; }
       .boundary-alerts b { display: block; font-family: Poppins, Segoe UI Semibold, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
       .boundary-alerts span { display: block; margin-top: 2px; color: #344054; font-size: 12px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .particle-help { position: absolute; top: 10px; left: 10px; z-index: 2; border: 1px solid #E4DED6; border-radius: 999px; background: rgba(255,252,247,.94); color: #475467; padding: 6px 10px; font-size: 11px; font-weight: 900; pointer-events: none; }
-      .particle-detail { position: absolute; top: 46px; left: 10px; z-index: 3; width: min(310px, calc(100% - 20px)); border: 1px solid; border-radius: 7px; background: rgba(255,252,247,.98); box-shadow: 0 14px 34px rgba(21,27,35,.18); padding: 12px; }
+      .particle-help { position: absolute; bottom: 10px; left: 10px; z-index: 2; border: 1px solid #E4DED6; border-radius: 999px; background: rgba(255,252,247,.94); color: #475467; padding: 6px 10px; font-size: 11px; font-weight: 900; pointer-events: none; }
+      .particle-detail { position: absolute; top: 54px; left: 10px; z-index: 3; width: min(310px, calc(100% - 20px)); max-height: calc(100% - 120px); overflow-y: auto; border: 1px solid; border-radius: 7px; background: rgba(255,252,247,.98); box-shadow: 0 14px 34px rgba(21,27,35,.18); padding: 12px; }
+      .force-acc { border: 1px solid #E4DED6; border-radius: 6px; background: #fff; margin-bottom: 5px; }
+      .force-acc > summary { cursor: pointer; list-style: none; padding: 6px 8px; font-size: 11px; }
+      .force-acc > summary::-webkit-details-marker { display: none; }
+      .force-acc-body { padding: 0 8px 8px; font-size: 11px; color: #667085; }
+      .info-panel .info-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid #E4DED6; }
+      .info-panel .info-tabs button { flex: 1; border: none; background: transparent; padding: 8px 6px; font-size: 12px; font-weight: 800; color: #667085; border-bottom: 2px solid transparent; cursor: pointer; }
+      .info-panel .info-tabs button.active { color: #17727A; border-bottom-color: #17727A; }
       .particle-detail button { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid #D9D2C7; border-radius: 999px; background: #fff; color: #344054; font-weight: 900; line-height: 1; }
       .particle-detail b { display: block; padding-right: 30px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
       .particle-detail h4 { margin: 3px 28px 4px 0; color: #1D2939; font-size: 16px; }
@@ -1708,8 +2169,8 @@ function Style() {
       .particle-detail dl div { min-width: 0; border: 1px solid #E4DED6; border-radius: 6px; background: #fff; padding: 7px; }
       .particle-detail dt { color: #667085; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
       .particle-detail dd { margin: 2px 0 0; color: #1D2939; font-size: 12px; font-weight: 900; overflow-wrap: anywhere; }
-      .particle-legend { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; pointer-events: none; }
-      .particle-legend span { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; border: 1px solid #E4DED6; border-radius: 999px; background: rgba(255,252,247,.94); color: #475467; padding: 0 9px; font-size: 11px; font-weight: 800; }
+      .particle-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+      .particle-legend span { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; border: 1px solid #E4DED6; border-radius: 999px; background: #FFFCF7; color: #475467; padding: 4px 9px; font-size: 11px; font-weight: 800; }
       .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
       .dot.var { background: #17727A; }
       .dot.signal { background: #B42318; }
@@ -1764,13 +2225,18 @@ function Style() {
         .workspace, .project-head, .panel-grid, .dimension-grid, .system-layout { grid-template-columns: 1fr; }
         .sidebar { position: static; }
         .project-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .particle-wrap { height: 520px; }
       }
       @media (max-width: 640px) {
         .topbar { align-items: flex-start; flex-direction: column; padding: 12px; }
         .workspace { padding: 12px; }
         .project-list, .meta-grid, .requirements, .limit-strip { grid-template-columns: 1fr; }
         .signal { grid-template-columns: 1fr; }
+        /* La grafica ya se escala sola (canvas cuadrado con zoom por ancho). */
+        /* Indicadores como CARRUSEL horizontal (no se apilan) */
+        .particle-legend { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+        .particle-legend span { flex: 0 0 auto; font-size: 10px; padding: 4px 8px; }
+        .particle-detail { width: calc(100% - 20px); max-height: calc(100% - 90px); }
+        .particle-help { font-size: 10px; }
       }
     `}</style>
   );

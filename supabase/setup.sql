@@ -45,6 +45,27 @@ create table if not exists vacantes (
 );
 create index if not exists vacantes_estado_idx on vacantes (estado, score desc);
 
+-- 2c) Señales de producto para el modelo MDSSP (/mdssp.html) -----------------------
+-- Mediciones de salud del producto que NO vienen de tareas: se extraen de documentos/
+-- feedback/contexto (el run diario las analiza) o se capturan a mano. Cada una es una
+-- FUERZA del catálogo (bugs, calidad, usabilidad, satisfaccion_equipo, presupuesto,
+-- tecnologia, dependencias, mercado, salud...) que mueve la partícula del subproyecto.
+create table if not exists product_signals (
+  id uuid primary key default gen_random_uuid(),
+  company_id text not null,
+  client text,                               -- subproyecto (null = toda la empresa)
+  force text not null,                       -- clave del catálogo de fuerzas
+  intensity numeric not null default 0.4,    -- 0..1 qué tan fuerte según la evidencia
+  weight numeric,                            -- 0..1 override del peso (opcional)
+  title text not null,
+  evidence text,
+  source text,                               -- documento/insumo de origen
+  status text not null default 'activa',     -- activa | archivada
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists product_signals_company_idx on product_signals (company_id, status);
+
 -- 3) Método de conexión por persona ---------------------------------------------
 alter table people add column if not exists contact_method text default 'auto';
 -- Empresa/organización de la persona (obligatoria cuando el tipo es "Externo").
@@ -60,6 +81,10 @@ alter table tasks add column if not exists worked_hours numeric;
 -- 3d) Categorización: alcance del contrato por empresa + tipo de cada tarea --------
 alter table companies add column if not exists scope jsonb not null default '[]'::jsonb;
 alter table tasks add column if not exists category text;
+
+-- 3d-bis) Codigo de referencia fijo por tarea (ej. AR01). El sistema lo asigna una vez
+-- y NO cambia aunque se borren/reordenen tareas. Sirve para citar una tarea en cualquier lado.
+alter table tasks add column if not exists task_ref text;
 
 -- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
 alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
@@ -88,7 +113,7 @@ create or replace view satisfaccion_por_empresa as
 do $$
 declare t text;
 begin
-  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes']
+  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes','product_signals']
   loop
     execute format('alter table %I enable row level security;', t);
     execute format('drop policy if exists "auth_all_%1$s" on %1$I;', t);

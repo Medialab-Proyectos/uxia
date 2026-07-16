@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Send, Star, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 
@@ -560,7 +560,7 @@ const defaultCompanies = [
 
 const defaultTasks = [];
 
-export default function OperationsHub({ token = "", theme = "light" } = {}) {
+export default function OperationsHub({ token = "", theme = "light", onAuthError } = {}) {
   const [companies, setCompanies] = useState(defaultCompanies);
   const [tasks, setTasks] = useState(defaultTasks);
   const [sourceRecords, setSourceRecords] = useState([]);
@@ -653,6 +653,13 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
           ? `⚠ ${saved.warning}`
           : `Supabase: ${new Date(saved.updatedAt).toLocaleString()}`);
       } catch (e) {
+        // Sesion caida/expirada: avisar arriba para que el CEO NO siga trabajando al aire.
+        // El token se intenta refrescar; si funciona, este efecto se reintenta (token en deps).
+        if (opsData.isAuthError(e)) {
+          setSaveStatus("⚠ Sesión caída: tus cambios NO se guardaron. Reconectando…");
+          onAuthError?.();
+          return;
+        }
         // Hacer VISIBLE el error real: si falta una columna nueva (scope, project_images,
         // category, completed_at, worked_hours) el guardado falla entero. Hay que correr
         // supabase/setup.sql. Antes esto se tragaba en silencio y "todo desaparecía".
@@ -663,7 +670,15 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
       }
     }, 600);
     return () => clearTimeout(timer);
-  }, [companies, tasks, sourceRecords, people, activeCompany, loadedState]);
+  }, [companies, tasks, sourceRecords, people, activeCompany, loadedState, token]);
+
+  // Asigna el codigo de referencia FIJO (AR01…) a las tareas que no lo tienen y lo persiste.
+  // Se congela: una vez asignado no cambia aunque se borren o reordenen otras tareas.
+  useEffect(() => {
+    if (!loadedState || !tasks.length) return;
+    const { tasks: withRefs, changed } = withAssignedRefs(tasks, companies);
+    if (changed) setTasks(withRefs);
+  }, [loadedState, tasks, companies]);
 
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
   const activeCompanyClients = activeClients(company);
@@ -1395,6 +1410,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           {[
             ["companies", "Empresas y proyectos"],
             ["tasks", "Todas las tareas"],
+            ["priority", "Prioridad"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1615,7 +1631,217 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onDeleteAttachment={deleteTaskAttachment}
           />
         )}
+
+        {activeView === "priority" && (
+          <PriorityView tasks={tasks} companies={companies} />
+        )}
       </main>
+    </div>
+  );
+}
+
+// Priorizacion de TODAS las tareas segun los marcos del daily-run (Pareto 80/20,
+// Theory of Constraints, Covey/Eisenhower, 12-Week-Year). Puntaje 0-100 por tarea:
+// importancia (prioridad) + urgencia (fecha) + destrabar cuello de botella (bloqueada).
+function scoreTask(task) {
+  let score = 0;
+  const reasons = [];
+  // Importancia (Covey/Drucker): la prioridad marcada.
+  const imp = task.priority === "alta" ? 40 : task.priority === "baja" ? 8 : 20;
+  score += imp;
+  if (task.priority === "alta") reasons.push("Prioridad alta");
+  // Urgencia (fecha): vencida > hoy/pronto > esta semana.
+  const today = todayIso();
+  if (task.dueDate) {
+    if (task.status !== "review" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
+    else {
+      const days = Math.round((new Date(task.dueDate) - new Date(today)) / 86400000);
+      if (days <= 2) { score += 25; reasons.push("Vence pronto"); }
+      else if (days <= 7) { score += 15; reasons.push("Esta semana"); }
+      else score += 5;
+    }
+  } else {
+    score += 6;
+  }
+  // Cuello de botella (Goldratt): las bloqueadas frenan al resto → destrabar primero.
+  if (task.status === "blocked") { score += 25; reasons.push("Cuello de botella"); }
+  // En proceso avanzado tiene un pequeno empuje para cerrarlo (Gap and Gain).
+  if (task.status === "doing") { score += 6; reasons.push("En proceso"); }
+  return { score: Math.min(100, score), reasons };
+}
+
+// Candidatos de prefijo para una empresa, en orden de preferencia (2-3 letras).
+function prefixCandidates(name) {
+  const clean = String(name || "XX").toUpperCase().replace(/[^A-Z0-9 ]/g, "");
+  const words = clean.split(/\s+/).filter(Boolean);
+  const letters = clean.replace(/\s/g, "");
+  const out = [];
+  const push = (v) => { if (v && v.length >= 2 && !out.includes(v)) out.push(v); };
+  if (words.length >= 2) push(words[0][0] + words[1][0]);            // iniciales de 2 palabras
+  push(letters.slice(0, 2));                                          // primeras 2 letras
+  if (letters[0] && letters[2]) push(letters[0] + letters[2]);        // 1a + 3a
+  push(letters.slice(0, 3));                                          // primeras 3 letras
+  for (let i = 1; i < letters.length; i += 1) push(letters[0] + letters[i]); // 1a + cada otra
+  return out.length ? out : ["XX"];
+}
+
+// Asigna un prefijo UNICO a cada empresa (el sistema resuelve colisiones de iniciales),
+// de forma determinista (orden por id) para que sea estable.
+function assignCompanyPrefixes(companies) {
+  const used = new Set();
+  const map = {};
+  const ordered = [...companies].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  for (const c of ordered) {
+    const cands = prefixCandidates(c.name || c.id);
+    let chosen = cands.find((p) => !used.has(p));
+    if (!chosen) {
+      // Ultimo recurso: primera letra + digito incremental.
+      const base = (cands[0] || "X")[0];
+      let n = 2;
+      while (used.has(`${base}${n}`)) n += 1;
+      chosen = `${base}${n}`;
+    }
+    used.add(chosen);
+    map[c.id] = chosen;
+  }
+  return map;
+}
+
+// Devuelve las tareas con un `ref` FIJO asignado: respeta los refs ya guardados (no
+// cambian nunca) y solo asigna nuevos a las tareas que no tienen, continuando la
+// numeracion de su empresa (ej. si existe AR03, la nueva sera AR04). El sistema resuelve
+// prefijos unicos por empresa. Retorna { tasks, changed } para persistir si hubo cambios.
+function withAssignedRefs(tasks, companies) {
+  const usedPrefixes = new Set();
+  const prefixByCompany = {};
+  const maxNum = {};
+  for (const t of tasks) {
+    if (!t.ref) continue;
+    const pfx = t.ref.replace(/\d+$/, "");
+    prefixByCompany[t.companyId] = pfx;
+    usedPrefixes.add(pfx);
+    const m = t.ref.match(/(\d+)$/);
+    if (m) maxNum[pfx] = Math.max(maxNum[pfx] || 0, parseInt(m[1], 10));
+  }
+  // Prefijo unico para empresas que aun no tienen ninguno (determinista por id).
+  const ordered = [...companies].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  for (const c of ordered) {
+    if (prefixByCompany[c.id]) continue;
+    const cands = prefixCandidates(c.name || c.id);
+    let chosen = cands.find((p) => !usedPrefixes.has(p));
+    if (!chosen) { const base = (cands[0] || "X")[0]; let n = 2; while (usedPrefixes.has(`${base}${n}`)) n += 1; chosen = `${base}${n}`; }
+    usedPrefixes.add(chosen);
+    prefixByCompany[c.id] = chosen;
+  }
+  const missingByCompany = {};
+  for (const t of tasks) if (!t.ref) (missingByCompany[t.companyId || "sin"] ||= []).push(t);
+  const newRef = {};
+  let changed = false;
+  for (const [cid, list] of Object.entries(missingByCompany)) {
+    const pfx = prefixByCompany[cid] || "XX";
+    list
+      .slice()
+      .sort((a, b) => `${a.createdAt || ""}${a.id}`.localeCompare(`${b.createdAt || ""}${b.id}`))
+      .forEach((t) => { maxNum[pfx] = (maxNum[pfx] || 0) + 1; newRef[t.id] = `${pfx}${String(maxNum[pfx]).padStart(2, "0")}`; changed = true; });
+  }
+  if (!changed) return { tasks, changed: false };
+  return { tasks: tasks.map((t) => (t.ref ? t : { ...t, ref: newRef[t.id] })), changed: true };
+}
+
+// Fallback de solo lectura (por si el ref aun no se persistio): calcula refs frescos.
+function buildTaskRefs(tasks, companies) {
+  return withAssignedRefs(tasks.map((t) => ({ ...t, ref: t.ref || "" })), companies)
+    .tasks.reduce((acc, t) => { acc[t.id] = t.ref; return acc; }, {});
+}
+
+function PriorityView({ tasks, companies }) {
+  const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
+  const refs = buildTaskRefs(tasks, companies);
+  const ranked = tasks
+    .filter((t) => t.status !== "done")
+    .map((t) => ({ ...t, ...scoreTask(t), ref: t.ref || refs[t.id] }))
+    .sort((a, b) => b.score - a.score);
+
+  const bottlenecks = ranked.filter((t) => t.status === "blocked");
+
+  // Foco para HOY (vence hoy o vencidas) y ESTA SEMANA (proximos 7 dias), por prioridad.
+  const today = todayIso();
+  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review");
+  const semana = ranked.filter((t) => {
+    if (!t.dueDate || t.dueDate <= today) return false;
+    const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);
+    return d <= 7;
+  });
+
+  if (!ranked.length) {
+    return <p className="mt-6 text-sm text-[#667085]">No hay tareas activas para priorizar.</p>;
+  }
+
+  const scoreColor = (s) => (s >= 70 ? "#B42318" : s >= 45 ? "#B76E00" : "#1570EF");
+
+  const TaskRow = ({ t, rank }) => (
+    <div className="flex items-start gap-3 rounded-md border border-[#E4DED6] bg-white p-3">
+      {rank != null && <span className="mt-0.5 w-5 shrink-0 text-sm font-bold text-[#98A2B3]">{rank}</span>}
+      <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: scoreColor(t.score) }}>{t.score}</span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-[#1D2939]">
+          {t.ref && <span className="mr-2 rounded border border-[#D9D2C7] bg-[#F7F4EF] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#475467]">{t.ref}</span>}
+          {t.title}
+        </p>
+        <p className="truncate text-xs text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""} · {STATUS[t.status] || t.status}{t.dueDate ? ` · vence ${displayDate(t.dueDate)}` : ""}</p>
+        {t.reasons.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {t.reasons.map((r, i) => (
+              <span key={i} className="rounded-full border border-[#E4DED6] px-2 py-0.5 text-[10px] font-bold text-[#475467]">{r}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-5 space-y-5">
+      <p className="text-sm text-[#667085]">
+        Prioridad de <b>todas las tareas activas</b> ({ranked.length}), calculada con Pareto 80/20,
+        Teoria de Restricciones (cuellos de botella) y urgencia. El puntaje 0-100 combina
+        importancia, fecha y bloqueos. <b>Todas las secciones</b> —incluidas Hoy y Esta semana—
+        van ordenadas por ese puntaje (el poco vital primero, Pareto).
+      </p>
+
+      <section>
+        <h3 className="flex items-center gap-1.5 text-sm font-bold text-[#17727A]"><Target size={16} /> Foco para hoy</h3>
+        <p className="mb-2 text-xs text-[#98A2B3]">Lo mas importante que atender hoy (Pareto: el poco que mas mueve).</p>
+        <div className="space-y-2">
+          {hoy.length ? hoy.slice(0, 5).map((t) => <TaskRow key={t.id} t={t} />) : <p className="text-xs text-[#98A2B3]">Nada vence hoy.</p>}
+          {hoy.length > 5 && <p className="text-xs text-[#98A2B3]">+{hoy.length - 5} mas para hoy (ver lista completa abajo).</p>}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="flex items-center gap-1.5 text-sm font-bold text-[#B76E00]"><CalendarDays size={16} /> Importante para esta semana</h3>
+        <p className="mb-2 text-xs text-[#98A2B3]">Lo prioritario de los proximos 7 dias, para preparar con tiempo.</p>
+        <div className="space-y-2">
+          {semana.length ? semana.slice(0, 5).map((t) => <TaskRow key={t.id} t={t} />) : <p className="text-xs text-[#98A2B3]">Sin tareas con fecha en los proximos 7 dias.</p>}
+          {semana.length > 5 && <p className="text-xs text-[#98A2B3]">+{semana.length - 5} mas esta semana (ver lista completa abajo).</p>}
+        </div>
+      </section>
+
+      {bottlenecks.length > 0 && (
+        <section>
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-[#B42318]"><Construction size={16} /> Cuellos de botella (destrabar primero)</h3>
+          <div className="space-y-2">
+            {bottlenecks.map((t) => <TaskRow key={t.id} t={t} />)}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-[#344054]"><ListOrdered size={16} /> Todas, ordenadas por prioridad</h3>
+        <div className="space-y-2">
+          {ranked.map((t, i) => <TaskRow key={t.id} t={t} rank={i + 1} />)}
+        </div>
+      </section>
     </div>
   );
 }
@@ -2544,6 +2770,7 @@ function CompanyPanel({
           })}
         </div>
       </details>
+
       <div className={sideOpen ? "mt-4 grid gap-4 xl:grid-cols-[300px_1fr]" : "mt-4"}>
         {sideOpen && (
         <div className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
@@ -2929,6 +3156,7 @@ function CompanyPanel({
 // satisfacción (rating de tareas) y curva de crecimiento por periodo.
 function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
   const [period, setPeriod] = useState("trimestre");
+  const [fbPage, setFbPage] = useState(0); // paginacion del feedback (10 por pagina)
   const companyTasks = tasks.filter((t) => t.companyId === company.id);
   const now = new Date();
   const cutoff = new Date(now);
@@ -3009,6 +3237,9 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
         </div>
       </div>
 
+      {/* Mapa dinámico MDSSP: solo dentro de los indicadores de la empresa. */}
+      <CompanyMdsspMap company={company} />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-md border border-[#E4DED6] bg-white p-3">
           <p className="text-xs text-[#667085]">Tareas cumplidas</p>
@@ -3081,20 +3312,75 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
 
       <div className="rounded-md border border-[#E4DED6] bg-white p-3">
         <p className="mb-2 text-xs font-semibold text-[#344054]">Feedback tras entrega ({feedback.length})</p>
-        {feedback.length ? (
-          <ul className="space-y-2">
-            {feedback.map((t) => (
-              <li key={t.id} className="rounded-md border border-[#E4DED6] p-2">
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={12} fill={n <= (t.rating || 0) ? "#F2A93B" : "none"} style={{ color: "#F2A93B" }} />)}
-                  <span className="ml-1 truncate text-xs font-semibold text-[#344054]">{t.title}</span>
+        {feedback.length ? (() => {
+          const perPage = 10;
+          const pages = Math.max(1, Math.ceil(feedback.length / perPage));
+          const page = Math.min(fbPage, pages - 1);
+          const shown = feedback.slice(page * perPage, page * perPage + perPage);
+          return (
+            <>
+              <ul className="space-y-2">
+                {shown.map((t) => (
+                  <li key={t.id} className="rounded-md border border-[#E4DED6] p-2">
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => <Star key={n} size={12} fill={n <= (t.rating || 0) ? "#F2A93B" : "none"} style={{ color: "#F2A93B" }} />)}
+                      <span className="ml-1 truncate text-xs font-semibold text-[#344054]">{t.title}</span>
+                    </div>
+                    {t.ratingComment && <p className="mt-0.5 text-xs text-[#667085]">«{t.ratingComment}»</p>}
+                  </li>
+                ))}
+              </ul>
+              {pages > 1 && (
+                <div className="mt-2 flex items-center justify-between gap-2 print:hidden">
+                  <button type="button" onClick={() => setFbPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+                    className="inline-flex items-center gap-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs font-semibold text-[#344054] disabled:opacity-40">
+                    <ChevronLeft size={14} /> Anterior
+                  </button>
+                  <span className="text-xs text-[#667085]">Página {page + 1} de {pages}</span>
+                  <button type="button" onClick={() => setFbPage((p) => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1}
+                    className="inline-flex items-center gap-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs font-semibold text-[#344054] disabled:opacity-40">
+                    Siguiente <ChevronRight size={14} />
+                  </button>
                 </div>
-                {t.ratingComment && <p className="mt-0.5 text-xs text-[#667085]">«{t.ratingComment}»</p>}
-              </li>
-            ))}
-          </ul>
-        ) : <p className="text-xs text-[#8b8272]">Aún no hay calificaciones. Al finalizar una tarea puedes darle estrellas.</p>}
+              )}
+            </>
+          );
+        })() : <p className="text-xs text-[#8b8272]">Aún no hay calificaciones. Al finalizar una tarea puedes darle estrellas.</p>}
       </div>
+    </div>
+  );
+}
+
+// Mapa dinamico MDSSP embebido (parametrico por empresa). Reusa /mdssp.html en modo embed;
+// mapea los subproyectos de ESTA empresa como particulas. El iframe crece con su contenido
+// (sin scroll). Un cambio en el core del mapa afecta a todas las empresas.
+function CompanyMdsspMap({ company }) {
+  const mapRef = useRef(null);
+  const [mapHeight, setMapHeight] = useState(520);
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type !== "mdssp-height" || !e.data.height) return;
+      if (mapRef.current && e.source !== mapRef.current.contentWindow) return;
+      setMapHeight(Math.max(420, Math.min(2200, Math.ceil(e.data.height) + 6)));
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+  return (
+    <div className="mt-3 rounded-md border border-[#E4DED6] bg-white p-3 print:hidden">
+      <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[#344054]">
+        <BarChart3 size={14} /> Mapa dinámico de proyectos (MDSSP)
+      </p>
+      <p className="mb-2 text-xs text-[#667085]">Cada subproyecto es una partícula; las fuerzas (tareas, bloqueos, satisfacción, mediciones) lo mueven hacia los bordes de riesgo.</p>
+      <iframe
+        ref={mapRef}
+        title={`Mapa MDSSP de ${company.name}`}
+        src={`/mdssp.html?embed=1&company=${encodeURIComponent(company.id)}`}
+        loading="lazy"
+        scrolling="no"
+        className="block rounded-md border border-[#E4DED6]"
+        style={{ height: mapHeight, width: "100%", background: "#fff", overflow: "hidden" }}
+      />
     </div>
   );
 }

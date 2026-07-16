@@ -100,7 +100,31 @@ function AppShell() {
   }, [esCEO, module]);
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
+  // Sesion con la base caida: null = ok; "refrescando" = intentando recuperar en silencio;
+  // "expirada" = hay que volver a entrar (los cambios locales NO se han guardado).
+  const [sessionState, setSessionState] = React.useState(null);
   const token = session?.access_token;
+
+  // Cuando un guardado falla por sesion caida (401/JWT vencido): intenta refrescar el token
+  // en silencio con el refresh_token; si funciona, el nuevo token baja como prop y el
+  // guardado se reintenta solo. Si no, se avisa con un banner para no seguir trabajando al aire.
+  const recoverSession = React.useCallback(async () => {
+    setSessionState("refrescando");
+    try {
+      const stored = readStoredSession();
+      const refreshed = stored?.refresh_token ? await refreshSession(stored) : null;
+      if (refreshed?.access_token) {
+        const user = await authRequest("user", { token: refreshed.access_token }).catch(() => session?.user);
+        setSession({ ...refreshed, user: user || session?.user });
+        setSessionState(null);
+        return true;
+      }
+    } catch {
+      // cae al estado expirada
+    }
+    setSessionState("expirada");
+    return false;
+  }, [session]);
   React.useEffect(() => {
     if (!token || !opsData.opsDataReady()) return;
     (async () => {
@@ -303,7 +327,38 @@ function AppShell() {
           aria-hidden="true"
         />
       )}
-      {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} /> : <RadarUXIA token={session.access_token} theme={theme} />}
+      {sessionState && (
+        <div
+          role="alert"
+          className="sticky top-0 z-[60] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-center text-sm font-semibold"
+          style={{ background: sessionState === "expirada" ? "#B42318" : "#9A4B08", color: "#fff" }}
+        >
+          {sessionState === "refrescando" ? (
+            <span>Reconectando con la base… no cierres la página.</span>
+          ) : (
+            <>
+              <span>⚠ Tu sesión con la base expiró. Los últimos cambios NO se guardaron.</span>
+              <button
+                type="button"
+                onClick={recoverSession}
+                className="rounded-md px-3 py-1 text-xs font-bold"
+                style={{ background: "#fff", color: "#B42318" }}
+              >
+                Reconectar
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-md border px-3 py-1 text-xs font-bold"
+                style={{ borderColor: "#fff", color: "#fff" }}
+              >
+                Volver a iniciar sesión
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
     </div>
   );
 }
