@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Download, ExternalLink, Link2, ListChecks, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Send, Star, Trash2, UserRound, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Send, Star, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 
@@ -433,7 +434,8 @@ function attachmentUrl(attachment) {
 }
 
 function taskIsOverdue(task) {
-  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done");
+  // "En revisión" no cuenta como vencida: está esperando feedback, no atrasada.
+  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review");
 }
 
 function isValidPhone(value) {
@@ -1133,6 +1135,26 @@ export default function OperationsHub({ token = "", theme = "light" } = {}) {
     }
   }
 
+  // Fondo del logo de la empresa: el usuario elige negro o blanco (se guarda en logo.bg).
+  function toggleLogoBg() {
+    if (!company) return;
+    setCompanies((current) => current.map((item) => (
+      item.id === company.id
+        ? { ...item, logo: { ...(item.logo || {}), bg: (item.logo?.bg === "white" ? "black" : "white") } }
+        : item
+    )));
+  }
+
+  // Fondo de la imagen de un subproyecto (se guarda en projectImages[client].bg).
+  function toggleProjectImageBg(client) {
+    if (!company) return;
+    setCompanies((current) => current.map((item) => {
+      if (item.id !== company.id) return item;
+      const cur = item.projectImages?.[client] || {};
+      return { ...item, projectImages: { ...(item.projectImages || {}), [client]: { ...cur, bg: cur.bg === "white" ? "black" : "white" } } };
+    }));
+  }
+
   async function uploadProjectImage(client, file) {
     if (!file || !company) return;
     if (!isTaskImageFile(file)) { setNotice("La imagen del subproyecto debe ser una imagen (jpg, png, webp…)."); return; }
@@ -1426,8 +1448,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             <div>
             {!asideOpen && (
             <div className="min-w-0">
-            {/* Carrusel de empresas: cambia de empresa sin abrir el panel de empresas/personas. */}
-            <div className="mb-3 flex items-center gap-2">
+            {/* Carrusel de empresas (tarjetas cuadradas). Naranja = seleccionada. */}
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start">
               <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
                 {companies.filter((c) => c.status !== "inactiva").map((c) => {
                   const on = c.id === activeCompany;
@@ -1436,13 +1458,13 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                       key={c.id}
                       type="button"
                       onClick={() => setActiveCompany(c.id)}
-                      className="flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold"
-                      style={on ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", background: "#fff", color: "#667085" }}
+                      className="flex w-20 shrink-0 flex-col items-center gap-1 rounded-md p-2 text-center"
+                      style={{ border: `${on ? 2 : 1}px solid ${on ? "#E8751A" : "#E4DED6"}`, background: "#fff" }}
                     >
                       {c.logo?.url
-                        ? <img src={c.logo.url} alt="" className="h-5 w-5 shrink-0 rounded-full bg-white object-contain" />
-                        : <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: on ? "#17727A" : "#E4DED6", color: on ? "#fff" : "#667085" }}>{projectInitials(c.name)}</span>}
-                      {c.name}
+                        ? <img src={c.logo.url} alt="" className="h-9 w-9 rounded object-contain" style={{ background: c.logo?.bg === "white" ? "#fff" : "#000" }} />
+                        : <span className="flex h-9 w-9 items-center justify-center rounded text-xs font-bold" style={{ background: on ? "#E8751A" : "#000", color: "#fff" }}>{projectInitials(c.name)}</span>}
+                      <span className="w-full truncate text-[10px] font-semibold" style={{ color: on ? "#E8751A" : "#667085" }}>{c.name}</span>
                     </button>
                   );
                 })}
@@ -1451,7 +1473,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 <button
                   type="button"
                   onClick={() => setAsideOpen(true)}
-                  className="inline-flex min-h-[40px] shrink-0 items-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]"
+                  className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold text-[#344054] sm:w-auto"
                 >
                   Empresas y personas <ChevronRight size={16} />
                 </button>
@@ -1477,6 +1499,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onChangeTask={updateTask}
             onDeleteTask={deleteTask}
             onUploadLogo={uploadCompanyLogo}
+            onToggleLogoBg={toggleLogoBg}
+            onToggleProjectImageBg={toggleProjectImageBg}
             onUploadProjectImage={uploadProjectImage}
             onRenameCompany={renameCompany}
             onRenameClient={renameClient}
@@ -1541,7 +1565,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   >
                     <div className="flex items-start gap-3">
                       {item.logo?.url ? (
-                        <img src={item.logo.url} alt={item.name} className="h-9 w-9 shrink-0 rounded-md border border-[#E4DED6] object-contain" />
+                        <img src={item.logo.url} alt={item.name} className="h-9 w-9 shrink-0 rounded-md border border-[#E4DED6] object-contain" style={{ background: item.logo?.bg === "white" ? "#fff" : "#000" }} />
                       ) : (
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-dashed border-[#C8BFB3] text-xs font-semibold text-[#8b8272]">
                           {item.name?.[0]?.toUpperCase() || "?"}
@@ -1920,6 +1944,13 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [openInternal, setOpenInternal] = useState(false);
+  // Popup al finalizar: satisfacción (1-5) + recomendaciones + % de IA usada.
+  const [doneModal, setDoneModal] = useState(false);
+  const [mRating, setMRating] = useState(0);
+  const [mFeedback, setMFeedback] = useState("");
+  const [mAi, setMAi] = useState(0);
+  const openDoneModal = () => { setMRating(task.rating || 0); setMFeedback(task.ratingComment || ""); setMAi(task.aiUsage || 0); setDoneModal(true); };
+  const saveDone = () => { onChangeTask(task.id, { status: "done", rating: mRating || null, ratingComment: mFeedback || "", aiUsage: mAi || null }); setDoneModal(false); };
   // Acordeón controlado por la lista (solo una tarea abierta a la vez) o autónomo si no.
   const controlled = typeof onOpenChange === "function";
   const open = controlled ? Boolean(openProp) : openInternal;
@@ -1950,6 +1981,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const stateOptions = [
     ["ready", "Pendiente", Circle],
     ["doing", "En proceso", LoaderCircle],
+    ["review", "En revisión", Clock],
     ["blocked", "Bloqueada", AlertTriangle],
     ["done", "Finalizada", CheckCircle2],
   ];
@@ -2146,7 +2178,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             {locationOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1.5 sm:grid-cols-[minmax(110px,1fr)_auto] sm:items-center">
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[minmax(110px,1fr)_auto] sm:items-center">
           <div className="relative min-w-0">
             <UserRound className="pointer-events-none absolute left-2 top-1.5 text-[#667085]" size={13} />
             <select
@@ -2172,7 +2204,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               <button
                 key={key}
                 type="button"
-                onClick={() => onChangeTask(task.id, { status: key })}
+                onClick={() => { if (key === "done" && task.status !== "done") openDoneModal(); else onChangeTask(task.id, { status: key }); }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded"
                 style={task.status === key
                   ? { background: statusTone(key).text, color: "#fff" }
@@ -2308,9 +2340,42 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               placeholder="Comentario del cliente (opcional)"
               className="mt-2 w-full rounded-md border border-[#A6D9C4] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#0D7A4F]"
             />
+            {task.aiUsage != null && <p className="mt-1 text-xs text-[#6941C6]">IA usada: {task.aiUsage}%</p>}
           </div>
         )}
       </div>
+      {doneModal && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setDoneModal(false); }}>
+          <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-xl">
+            <h3 className="text-sm font-semibold text-[#1D2939]">¿Cómo fue esta tarea?</h3>
+            <p className="mt-0.5 text-xs text-[#667085]">Antes de finalizar, cuéntanos tu experiencia (opcional).</p>
+            <div className="mt-3">
+              <span className="text-xs font-semibold text-[#667085]">Experiencia (1–5)</span>
+              <div className="mt-1 flex gap-0.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} type="button" onClick={() => setMRating(n === mRating ? 0 : n)} className="p-0.5">
+                    <Star size={24} style={{ color: "#F2A93B" }} fill={n <= mRating ? "#F2A93B" : "none"} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="mt-3 block">
+              <span className="text-xs font-semibold text-[#667085]">Recomendaciones de mejora / feedback</span>
+              <textarea value={mFeedback} onChange={(e) => setMFeedback(e.target.value)} rows={3} placeholder="¿Qué se puede mejorar en tareas de este tipo?" className="mt-1 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm text-[#344054] outline-none focus:border-[#17727A]" />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-xs font-semibold text-[#667085]">¿Cuánta IA se usó? <b className="text-[#6941C6]">{mAi}%</b></span>
+              <input type="range" min="0" max="100" step="5" value={mAi} onChange={(e) => setMAi(Number(e.target.value))} className="mt-1 w-full" style={{ accentColor: "#6941C6" }} />
+            </label>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button type="button" onClick={saveDone} className="flex-1 rounded-md bg-[#0D7A4F] px-3 py-2 text-sm font-semibold text-white">Guardar y finalizar</button>
+              <button type="button" onClick={() => { onChangeTask(task.id, { status: "done" }); setDoneModal(false); }} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Solo finalizar</button>
+            </div>
+            <button type="button" onClick={() => setDoneModal(false)} className="mt-2 w-full rounded-md px-3 py-2 text-sm font-semibold text-[#667085] hover:bg-[#F2F4F7]">Cancelar — no finalizar</button>
+          </div>
+        </div>,
+        document.body,
+      )}
     </details>
   );
 }
@@ -2334,6 +2399,8 @@ function CompanyPanel({
   onChangeTask,
   onDeleteTask,
   onUploadLogo,
+  onToggleLogoBg,
+  onToggleProjectImageBg,
   onUploadProjectImage,
   onRenameCompany,
   onRenameClient,
@@ -2369,13 +2436,15 @@ function CompanyPanel({
     <section className="rounded-md border border-[#D9D2C7] bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          {company.logo?.url ? (
-            <img src={company.logo.url} alt={company.name} className="h-14 w-14 rounded-md border border-[#E4DED6] object-contain" />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-md border border-dashed border-[#C8BFB3] bg-[#FFFCF7] text-xs font-semibold text-[#667085]">
-              Logo
-            </div>
-          )}
+          {(() => { const logoBg = company.logo?.bg === "white" ? "#fff" : "#000"; const logoFg = company.logo?.bg === "white" ? "#667085" : "rgba(255,255,255,0.7)"; return (
+          <label className="group relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-md border border-[#E4DED6]" style={{ background: logoBg }} title="Subir o cambiar el logo">
+            {company.logo?.url
+              ? <img src={company.logo.url} alt={company.name} className="h-full w-full object-contain" />
+              : <span className="flex h-full w-full items-center justify-center text-[10px] font-semibold" style={{ color: logoFg }}>Logo</span>}
+            <span className="absolute inset-x-0 bottom-0 bg-black/60 py-0.5 text-center text-[9px] font-semibold text-white opacity-0 group-hover:opacity-100">Cambiar</span>
+            <input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onUploadLogo(file); event.target.value = ""; }} />
+          </label>
+          ); })()}
           <div className="min-w-0">
           {editCompanyName !== null ? (
             <div className="flex items-center gap-1">
@@ -2402,41 +2471,58 @@ function CompanyPanel({
           <p className="mt-1 text-sm text-[#667085]">
             {active.length ? `Subproyectos activos: ${active.join(", ")}` : "Sin subproyectos activos"}
           </p>
-          <label className="mt-2 inline-flex cursor-pointer items-center rounded-md border border-[#D0D5DD] px-2.5 py-1.5 text-xs font-semibold text-[#344054]">
-            Subir logo
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onUploadLogo(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[#FFF2CC] px-3 py-1 text-sm font-semibold text-[#8A5700]">{company.owner}</span>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleLogoBg}
+            title="Fondo del logo (negro / blanco)"
+            aria-label="Cambiar fondo del logo"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
+          >
+            <Contrast size={16} />
+          </button>
+          {!showKpi && !sideOpen && (
+            <button
+              type="button"
+              onClick={() => setSideOpen(true)}
+              title="Subproyecto y contexto"
+              aria-label="Subproyecto y contexto"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
+            >
+              <FileText size={16} />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowKpi((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-semibold"
+            title={showKpi ? "Ver proyectos" : "Ver indicadores"}
+            aria-label={showKpi ? "Ver proyectos" : "Ver indicadores"}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border"
             style={showKpi ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#344054" }}
           >
-            <BarChart3 size={15} /> {showKpi ? "Ver proyectos" : "Indicadores"}
+            <BarChart3 size={16} />
           </button>
-          <button onClick={onToggleStatus} className="rounded-md border border-[#D0D5DD] px-3 py-1.5 text-sm font-semibold text-[#344054]">
-            {company.status === "inactiva" ? "Activar empresa" : "Desactivar empresa"}
+          <button
+            type="button"
+            onClick={onToggleStatus}
+            title={company.status === "inactiva" ? "Activar empresa" : "Desactivar empresa"}
+            aria-label={company.status === "inactiva" ? "Activar empresa" : "Desactivar empresa"}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border"
+            style={company.status === "inactiva" ? { borderColor: "#0D7A4F", color: "#0D7A4F", background: "#E5F5EE" } : { borderColor: "#D0D5DD", color: "#B42318" }}
+          >
+            <Power size={16} />
           </button>
         </div>
       </div>
 
-      {/* Alcance del contrato: qué tipo de tareas hace MediaLab para esta empresa. */}
-      <div className="mt-3 rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">Alcance del contrato</p>
-        <p className="mt-0.5 text-xs text-[#8b8272]">Marca qué tipo de trabajo hace MediaLab aquí. Guía al MD al crear tareas y las etiqueta por tipo.</p>
+      {/* Alcance del contrato: acordeón (oculto por defecto). */}
+      <details className="mt-3 rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
+          <ChevronRight size={14} className="ops-caret" /> Alcance del contrato
+        </summary>
+        <p className="mt-1 text-xs text-[#8b8272]">Marca qué tipo de trabajo hace MediaLab aquí. Guía al MD al crear tareas y las etiqueta por tipo.</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {TASK_CATEGORIES.map((cat) => {
             const on = (company.scope || []).includes(cat);
@@ -2457,7 +2543,7 @@ function CompanyPanel({
             );
           })}
         </div>
-      </div>
+      </details>
       <div className={sideOpen ? "mt-4 grid gap-4 xl:grid-cols-[300px_1fr]" : "mt-4"}>
         {sideOpen && (
         <div className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
@@ -2476,7 +2562,7 @@ function CompanyPanel({
             type="button"
             onClick={() => setNewProjectOpen((value) => !value)}
             aria-expanded={newProjectOpen}
-            className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-md bg-[#C7532C] px-3 text-sm font-semibold text-white"
+            className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-md border border-[#C7532C] bg-white px-3 text-sm font-semibold text-[#C7532C]"
           >
             <span className="inline-flex items-center gap-2"><Plus size={16} /> Nuevo subproyecto</span>
             <ChevronRight size={16} style={{ transform: newProjectOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
@@ -2569,15 +2655,6 @@ function CompanyPanel({
           <CompanyKpiPanel company={company} tasks={tasks} clients={active} />
         ) : (
         <div className="min-w-0">
-          {!sideOpen && (
-            <button
-              type="button"
-              onClick={() => setSideOpen(true)}
-              className="mb-3 inline-flex min-h-[36px] items-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-1.5 text-sm font-semibold text-[#344054]"
-            >
-              <ChevronLeft size={16} /> Subproyecto y contexto
-            </button>
-          )}
           <div className="mb-2 flex items-center gap-1.5">
             <h3 className="text-sm font-semibold text-[#1D2939]">Proyectos y documentación</h3>
             <span
@@ -2611,13 +2688,13 @@ function CompanyPanel({
                 <div className="flex items-start gap-3 border-b border-[#E4DED6] p-3" style={{ background: `${accent}14` }}>
                   <label
                     className="relative h-14 w-14 shrink-0 cursor-pointer overflow-hidden rounded-md border"
-                    style={{ borderColor: `${accent}55`, background: `${accent}22` }}
+                    style={{ borderColor: `${accent}55`, background: projectImage?.bg === "white" ? "#fff" : "#000" }}
                     title="Subir o cambiar la imagen del subproyecto"
                   >
                     {projectImage?.url ? (
-                      <img src={projectImage.url} alt={client} className="h-full w-full bg-white object-contain p-0.5" />
+                      <img src={projectImage.url} alt={client} className="h-full w-full object-contain" />
                     ) : (
-                      <span className="flex h-full w-full items-center justify-center text-base font-bold" style={{ color: accent }}>{projectInitials(client)}</span>
+                      <span className="flex h-full w-full items-center justify-center text-base font-bold" style={{ color: projectImage?.bg === "white" ? accent : "#fff" }}>{projectInitials(client)}</span>
                     )}
                     <input
                       type="file"
@@ -2659,13 +2736,24 @@ function CompanyPanel({
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onArchiveClient(client)}
-                    className="shrink-0 rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
-                  >
-                    Archivar
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onToggleProjectImageBg(client)}
+                      title="Fondo de la imagen (negro / blanco)"
+                      aria-label="Cambiar fondo de la imagen"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
+                    >
+                      <Contrast size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onArchiveClient(client)}
+                      className="rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
+                    >
+                      Archivar
+                    </button>
+                  </div>
                 </div>
                 <div className="p-3 space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -2771,7 +2859,7 @@ function CompanyPanel({
                     </div>
                   </details>
 
-                  <details open className="border-t pt-2" style={{ borderTopColor: `${accent}66` }}>
+                  <details className="border-t pt-2" style={{ borderTopColor: `${accent}66` }}>
                     <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5">
                         <ChevronRight size={16} className="ops-caret" style={{ color: accent }} />
@@ -2854,6 +2942,28 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
   const pctDone = total ? Math.round((done.length / total) * 100) : 0;
   const ratedAll = done.filter((t) => t.rating);
   const avg = ratedAll.length ? ratedAll.reduce((s, t) => s + Number(t.rating), 0) / ratedAll.length : null;
+  const activas = companyTasks.filter((t) => t.status !== "done");
+  const enProgreso = companyTasks.filter((t) => t.status === "doing").length;
+  const enRevision = companyTasks.filter((t) => t.status === "review").length;
+  const bloqueadas = companyTasks.filter((t) => t.status === "blocked").length;
+  const pendientes = companyTasks.filter((t) => t.status === "ready" || t.status === "backlog").length;
+  const vencidas = companyTasks.filter(taskIsOverdue).length;
+  // Índice de cumplimiento (periodo) = cumplidas a tiempo ÷ (cumplidas + vencidas sin hacer).
+  // "A tiempo" = cumplida sin fecha (no hay plazo que incumplir) o cerrada <= su fecha.
+  // Las cumplidas tarde y las vencidas sin hacer bajan el índice.
+  const overdueActive = companyTasks.filter((t) => t.status !== "done" && taskIsOverdue(t));
+  const doneOnTime = doneInPeriod.filter((t) => !t.dueDate || (t.completedAt && t.completedAt.slice(0, 10) <= t.dueDate)).length;
+  const cumplDenom = doneInPeriod.length + overdueActive.length;
+  const onTimePct = cumplDenom ? Math.round((doneOnTime / cumplDenom) * 100) : null;
+  const seg = [
+    ["Entregadas", done.length, "#0D7A4F"],
+    ["En revisión", enRevision, "#17727A"],
+    ["En progreso", enProgreso, "#1570EF"],
+    ["Bloqueadas", bloqueadas, "#B42318"],
+    ["Pendientes", pendientes, "#B76E00"],
+  ].filter(([, v]) => v > 0);
+  const aiTasks = companyTasks.filter((t) => t.aiUsage != null);
+  const avgAi = aiTasks.length ? Math.round(aiTasks.reduce((s, t) => s + Number(t.aiUsage), 0) / aiTasks.length) : null;
 
   const bySub = clients.map((cl) => {
     const ts = companyTasks.filter((t) => t.client === cl);
@@ -2863,7 +2973,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
     const donePct = ts.length ? d / ts.length : 0;
     const health = Math.max(0, Math.min(100, Math.round(donePct * 100 - overdue * 15 - blocked * 10)));
     return { cl, total: ts.length, done: d, overdue, blocked, health };
-  });
+  }).sort((a, b) => a.health - b.health); // peor salud (más deuda) primero
 
   const months = [];
   for (let i = 5; i >= 0; i -= 1) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
@@ -2880,25 +2990,35 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
   const healthColor = (hh) => (hh >= 70 ? "#0D7A4F" : hh >= 40 ? "#B76E00" : "#B42318");
 
   return (
-    <div className="mt-3 space-y-4">
+    <div id="kpi-report" className="mt-3 space-y-4">
+      {/* Cabecera solo para impresión (reporte entregable con logo). */}
+      <div className="mb-2 hidden items-center gap-3 border-b border-[#E4DED6] pb-2 print:flex">
+        <img src={company.logo?.url || logoUrl} alt="" className="h-10 w-auto" />
+        <div>
+          <p className="text-base font-semibold text-[#1D2939]">Reporte de indicadores — {company.name}</p>
+          <p className="text-xs text-[#667085]">Generado el {new Date().toLocaleDateString("es-CO")} · MediaLab Ingeniería</p>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[#1D2939]">Indicadores de {company.name}</h3>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {[["mes", "Mes"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["año", "Año"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
           ))}
+          <button type="button" onClick={() => window.print()} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#344054]" title="Imprimir o exportar a PDF"><Download size={12} /> Imprimir</button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-md border border-[#E4DED6] bg-white p-3">
-          <p className="text-xs text-[#667085]">Cumplidas / total</p>
-          <p className="mt-1 font-metrics text-2xl font-semibold text-[#0D7A4F]">{done.length}<span className="text-base text-[#98A2B3]">/{total}</span></p>
+          <p className="text-xs text-[#667085]">Tareas cumplidas</p>
+          <p className="mt-1 font-metrics text-2xl font-semibold text-[#0D7A4F]">{done.length}<span className="text-base text-[#98A2B3]"> de {total}</span></p>
           <div className="mt-1 h-1.5 w-full rounded-full bg-[#F2F4F7]"><div className="h-1.5 rounded-full bg-[#0D7A4F]" style={{ width: `${pctDone}%` }} /></div>
         </div>
         <div className="rounded-md border border-[#E4DED6] bg-white p-3">
-          <p className="text-xs text-[#667085]">Cumplidas ({period})</p>
-          <p className="mt-1 font-metrics text-2xl font-semibold text-[#17727A]">{doneInPeriod.length}</p>
+          <p className="text-xs text-[#667085]">Índice de cumplimiento ({period})</p>
+          <p className="mt-1 font-metrics text-2xl font-semibold text-[#17727A]">{onTimePct === null ? "—" : `${onTimePct}%`}</p>
+          <p className="text-[10px] text-[#98A2B3]">{doneOnTime} a tiempo · {overdueActive.length} vencida(s) sin hacer</p>
         </div>
         <div className="rounded-md border border-[#E4DED6] bg-white p-3">
           <p className="text-xs text-[#667085]">Satisfacción</p>
@@ -2906,9 +3026,35 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
           <p className="text-[10px] text-[#98A2B3]">{ratedAll.length} calificada(s)</p>
         </div>
         <div className="rounded-md border border-[#E4DED6] bg-white p-3">
-          <p className="text-xs text-[#667085]">Subproyectos</p>
-          <p className="mt-1 font-metrics text-2xl font-semibold text-[#344054]">{clients.length}</p>
+          <p className="text-xs text-[#667085]">Vencidas · activas</p>
+          <p className="mt-1 font-metrics text-2xl font-semibold"><span className="text-[#B42318]">{vencidas}</span> <span className="text-base text-[#98A2B3]">· {activas.length}</span></p>
+          <p className="text-[10px] text-[#98A2B3]">{bloqueadas} bloqueada(s)</p>
         </div>
+      </div>
+
+      {/* Distribución de tareas por estado */}
+      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <p className="mb-2 text-xs font-semibold text-[#344054]">Distribución de tareas ({total})</p>
+        {total ? (
+          <>
+            <div className="flex h-3 w-full overflow-hidden rounded-full bg-[#F2F4F7]">
+              {seg.map(([l, v, c]) => <div key={l} title={`${l}: ${v}`} style={{ width: `${(v / total) * 100}%`, background: c }} />)}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[#667085]">
+              {seg.map(([l, v, c]) => <span key={l} className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ background: c }} />{l} {v}</span>)}
+            </div>
+          </>
+        ) : <p className="text-xs text-[#8b8272]">Sin tareas.</p>}
+      </div>
+
+      {/* Consumo de IA (promedio de las tareas con dato) */}
+      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-[#344054]">Consumo de IA (promedio)</span>
+          <span className="font-semibold text-[#6941C6]">{avgAi === null ? "—" : `${avgAi}%`}</span>
+        </div>
+        <div className="mt-1 h-2 w-full rounded-full bg-[#F2F4F7]"><div className="h-2 rounded-full" style={{ width: `${avgAi || 0}%`, background: "#6941C6" }} /></div>
+        <p className="mt-1 text-[10px] text-[#98A2B3]">{aiTasks.length} tarea(s) con dato de IA</p>
       </div>
 
       <div className="rounded-md border border-[#E4DED6] bg-white p-3">
@@ -2917,7 +3063,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
       </div>
 
       <div className="rounded-md border border-[#E4DED6] bg-white p-3">
-        <p className="mb-2 text-xs font-semibold text-[#344054]">Salud por subproyecto</p>
+        <p className="mb-2 text-xs font-semibold text-[#344054]">Salud por subproyecto <span className="font-normal text-[#98A2B3]">(más deuda primero)</span></p>
         {bySub.length ? (
           <div className="space-y-2">
             {bySub.map((s) => (

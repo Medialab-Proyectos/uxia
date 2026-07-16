@@ -67,6 +67,15 @@
         border-radius: 4px;
       }
 
+      /* Impresión del reporte de indicadores: solo se imprime #kpi-report. */
+      @media print {
+        body * { visibility: hidden !important; }
+        #kpi-report, #kpi-report * { visibility: visible !important; }
+        #kpi-report { position: absolute; left: 0; top: 0; width: 100%; }
+        .no-print { display: none !important; }
+        details[id], details { display: block !important; }
+      }
+
       /* Chevron de acordeones (details): rota al abrir para indicar que se despliega. */
       .ops-caret { transition: transform .15s ease; flex-shrink: 0; }
       details[open] > summary .ops-caret { transform: rotate(90deg); }

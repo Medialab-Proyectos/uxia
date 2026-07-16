@@ -1162,8 +1162,8 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
           <Upload size={16} /> Subir propuesta
         </button>
 
-        {/* Menú estilo Centro (pestañas subrayadas) */}
-        <nav className="mb-6 flex gap-2 overflow-x-auto" style={{ borderBottom: `1px solid ${C.border}` }}>
+        {/* Menú estilo Centro (pestañas subrayadas) — 3 columnas iguales, sin scroll en responsive */}
+        <nav className="mb-6 grid grid-cols-3" style={{ borderBottom: `1px solid ${C.border}` }}>
           {[
             ["oportunidades", "Oportunidades"],
             ["tablero", `Vacantes${jobs.length ? ` · ${jobs.length}` : ""}`],
@@ -1172,7 +1172,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             <button
               key={key}
               onClick={() => setTab(key)}
-              className="flex-shrink-0 whitespace-nowrap px-3 py-2 text-sm font-semibold transition-colors"
+              className="whitespace-nowrap px-1 py-2 text-center text-xs font-semibold transition-colors sm:text-sm"
               style={{
                 borderBottom: `2px solid ${tab === key ? C.amber : "transparent"}`,
                 color: tab === key ? C.amber : C.dim,

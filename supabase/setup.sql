@@ -47,6 +47,8 @@ create index if not exists vacantes_estado_idx on vacantes (estado, score desc);
 
 -- 3) Método de conexión por persona ---------------------------------------------
 alter table people add column if not exists contact_method text default 'auto';
+-- Empresa/organización de la persona (obligatoria cuando el tipo es "Externo").
+alter table people add column if not exists org text;
 
 -- 3b) Imagen por subproyecto (jsonb en la empresa) -------------------------------
 alter table companies add column if not exists project_images jsonb not null default '{}'::jsonb;
@@ -62,6 +64,25 @@ alter table tasks add column if not exists category text;
 -- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
 alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
 alter table tasks add column if not exists rating_comment text;
+alter table tasks add column if not exists ai_usage numeric;       -- % de IA usada (0..100)
+
+-- 3f) Endpoints para el portal de empleados (satisfacción general) -----------------
+-- PostgREST expone estas vistas como /rest/v1/satisfaccion_general y /satisfaccion_por_empresa.
+create or replace view satisfaccion_general as
+  select
+    count(*) filter (where rating is not null)                as tareas_calificadas,
+    round(avg(rating) filter (where rating is not null), 2)   as satisfaccion_promedio,
+    round(avg(ai_usage) filter (where ai_usage is not null), 1) as ia_promedio
+  from tasks;
+create or replace view satisfaccion_por_empresa as
+  select
+    t.company_id,
+    c.name as empresa,
+    count(*) filter (where t.rating is not null)              as tareas_calificadas,
+    round(avg(t.rating) filter (where t.rating is not null), 2) as satisfaccion_promedio,
+    round(avg(t.ai_usage) filter (where t.ai_usage is not null), 1) as ia_promedio
+  from tasks t left join companies c on c.id = t.company_id
+  group by t.company_id, c.name;
 
 -- 4) Políticas RLS: usuario autenticado gestiona todo (herramienta interna) -------
 do $$

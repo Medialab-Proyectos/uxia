@@ -69,6 +69,7 @@ create table if not exists tasks (
   category text,
   rating numeric,
   rating_comment text,
+  ai_usage numeric,
   created_at timestamptz not null default now()
 );
 

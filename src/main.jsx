@@ -237,11 +237,8 @@ function AppShell() {
         <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-8 w-auto shrink-0" />
-              <div className="min-w-0">
-                <span className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: navDim }}>MediaLab Ingeniería</span>
-                {authNotice && <p className="mt-1 text-xs font-semibold text-[#17727A]">{authNotice}</p>}
-              </div>
+              <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-6 w-auto shrink-0 sm:h-7" />
+              {authNotice && <p className="text-xs font-semibold text-[#17727A]">{authNotice}</p>}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <div className="relative">
@@ -334,7 +331,7 @@ function LoginScreen({ notice, onLogin }) {
     <main className="flex min-h-screen items-center justify-center px-5 text-[#E8EDF3]" style={{ background: "#0E1116" }}>
       <form onSubmit={submit} className="w-full max-w-sm rounded-md border p-6 shadow-lg" style={{ background: "#151B23", borderColor: "#28313E" }}>
         <div className="mb-5 flex flex-col items-center text-center">
-          <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-16 w-auto" />
+          <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-10 w-auto" />
           <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "#8B97A6" }}>MediaLab Ingeniería</p>
           <h1 className="mt-1 text-2xl font-semibold">Centro operativo</h1>
         </div>

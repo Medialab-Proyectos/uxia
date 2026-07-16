@@ -1,5 +1,83 @@
 {
-  "tasks": [],
-  "processedInsumoIds": ["3669a9dd-4c5a-4f32-a3db-0d78de2d2524"],
+  "tasks": [
+    {
+      "id": "daily-20260715-phoenix-entregar-apk",
+      "title": "Entregar APK Phoenix",
+      "companyId": "megalogic-phoenix",
+      "client": "Phoenix Mobile",
+      "description": "Anthony debe terminar las pruebas en iPhone, generar el APK el 16 de julio de 2026 y compartirlo con el equipo. Si Hernan no asigna QA, el equipo interno debe recibir acceso, instrucciones de ingreso y un documento breve de pruebas esperadas para validar que funciona y mapear errores.",
+      "status": "ready",
+      "priority": "alta",
+      "dueDate": "2026-07-16",
+      "role": "Desarrollo de software",
+      "source": "Run diario - phoenix7152026",
+      "audience": "Interno MediaLab",
+      "syncMode": "Manual",
+      "evidence": "Anthony queda con tarea para manana 16: entregar APK, acceso y documento de pruebas."
+    },
+    {
+      "id": "daily-20260715-corvus-video-plataforma",
+      "title": "Grabar video Corvus",
+      "companyId": "megalogic-phoenix",
+      "client": "Corvus",
+      "description": "Jairo debe grabar y compartir un video completo de como funciona actualmente la plataforma Corvus. El objetivo es que Christian pueda revisar el flujo real y redisenar la interaccion completa sin depender de tener la plataforma desplegada localmente.",
+      "status": "ready",
+      "priority": "alta",
+      "dueDate": "2026-07-16",
+      "role": "Diseno UX/UI",
+      "source": "Run diario - phoenix7152026",
+      "audience": "Interno MediaLab",
+      "syncMode": "Manual",
+      "evidence": "Se pidio un videito de como funciona toda la plataforma para poder hacer el rediseno de interaccion."
+    },
+    {
+      "id": "daily-20260715-backoffice-pedir-caso",
+      "title": "Pedir caso a Isabella",
+      "companyId": "megalogic-phoenix",
+      "client": "Backoffice",
+      "description": "Enviar a Isabella la auditoria de vistas faltantes y pedirle un caso de estudio/datos de ejemplo para validar pantallas que hoy aparecen vacias: costos estimados, registros de costos comunes y archivos. Sin esa informacion no se puede validar el funcionamiento real de esas vistas.",
+      "status": "ready",
+      "priority": "alta",
+      "dueDate": "2026-07-16",
+      "role": "Gestion de proyecto",
+      "source": "Run diario - phoenix7152026",
+      "audience": "Externo cliente",
+      "syncMode": "Manual",
+      "evidence": "Daniel debe enviar la auditoria y pedir a Isabella que regale un caso de estudio."
+    },
+    {
+      "id": "daily-20260715-backoffice-montar-vistas",
+      "title": "Montar vistas Backoffice",
+      "companyId": "megalogic-phoenix",
+      "client": "Backoffice",
+      "description": "Crear y montar en desarrollo las vistas ya auditadas/disenadas: datos de ticket, configuracion y la pestana de identificador dentro de proceso. Estas vistas ya estan definidas; falta crear la tarea tecnica y pasarlas a desarrollo.",
+      "status": "ready",
+      "priority": "media",
+      "dueDate": "2026-07-18",
+      "role": "Desarrollo de software",
+      "source": "Run diario - phoenix7152026",
+      "audience": "Interno MediaLab",
+      "syncMode": "Manual",
+      "evidence": "Se identificaron vistas ya listas que faltan montar en desarrollo: datos de ticket, configuracion e identificador."
+    },
+    {
+      "id": "daily-20260715-backoffice-conectar-proceso",
+      "title": "Conectar diagrama proceso",
+      "companyId": "megalogic-phoenix",
+      "client": "Backoffice",
+      "description": "Conectar el diagrama de proceso del frontend con el backend para la demo del viernes. El componente visual y las librerias ya existen, pero hoy el diagrama funciona como maqueta/fallback y falta integrarlo con datos reales.",
+      "status": "ready",
+      "priority": "alta",
+      "dueDate": "2026-07-17",
+      "role": "Desarrollo de software",
+      "source": "Run diario - phoenix7152026",
+      "audience": "Interno MediaLab",
+      "syncMode": "Manual",
+      "evidence": "Para la demo del viernes se apunto a conectar backend en la parte de proceso, principalmente el diagrama."
+    }
+  ],
+  "processedInsumoIds": [
+    "34271d00-d84a-4610-b8df-c846efd067fd"
+  ],
   "keepFileInsumoIds": []
 }
