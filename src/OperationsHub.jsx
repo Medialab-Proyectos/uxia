@@ -1636,6 +1636,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   onAddPerson={addPerson}
                   onUpdatePerson={updatePerson}
                   onDeletePerson={deletePerson}
+                  onGrantAccess={grantAccess}
                 />
               </aside>
             )}
@@ -2122,7 +2123,42 @@ function TasksTable({
   );
 }
 
-function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePerson, onDeletePerson }) {
+// Control de acceso por persona: fija/resetea la contraseña del portal (email + password).
+function AccessControl({ person, onGrantAccess }) {
+  const [pwd, setPwd] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const email = (person.email || "").trim();
+  return (
+    <div className="mt-2 rounded-md border border-[#E4DED6] bg-white p-2">
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-[#667085]">Acceso al portal</p>
+      {!email ? (
+        <p className="text-[11px] text-[#8b8272]">Primero pon un correo arriba para dar acceso.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            placeholder="Contraseña (mín. 6)"
+            type="password"
+            autoComplete="new-password"
+            className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
+          />
+          <button
+            type="button"
+            disabled={saving || pwd.trim().length < 6}
+            onClick={async () => { setSaving(true); await onGrantAccess?.(email, pwd.trim()); setSaving(false); setPwd(""); }}
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+            style={{ background: "#17727A" }}
+          >
+            {saving ? "Guardando…" : "Dar / resetear acceso"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePerson, onDeletePerson, onGrantAccess }) {
   return (
     <div className="rounded-md border border-[#E4DED6] bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-[#1D2939]">Personas e integrantes</h3>
@@ -2239,6 +2275,7 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
                 placeholder="Link de Google Chat"
                 className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
               />
+              <AccessControl person={person} onGrantAccess={onGrantAccess} />
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {person.email && <a href={`mailto:${person.email}`} className="text-xs font-semibold text-[#17727A]">Correo</a>}
