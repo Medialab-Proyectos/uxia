@@ -1020,6 +1020,36 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     )));
   }
 
+  // Borrar un subproyecto por completo. Solo se permite en la bandeja temporal
+  // "Por asignar": las empresas reales solo archivan, no borran (conservan histórico).
+  function deleteClient(client) {
+    if (!company || company.id !== "por-asignar") return;
+    const projectTasks = (tasks || []).filter((t) => t.companyId === company.id && t.client === client);
+    const drop = (obj) => {
+      if (!obj || typeof obj !== "object" || !(client in obj)) return obj;
+      const { [client]: _omit, ...rest } = obj;
+      return rest;
+    };
+    setCompanies((current) => current.map((item) => {
+      if (item.id !== company.id) return item;
+      return {
+        ...item,
+        clients: (item.clients || []).filter((c) => c !== client),
+        archivedClients: drop(item.archivedClients),
+        projectLinks: drop(item.projectLinks),
+        projectDescriptions: drop(item.projectDescriptions),
+        projectImages: drop(item.projectImages),
+        contextDocuments: drop(item.contextDocuments),
+      };
+    }));
+    setTasks((current) => current.filter((t) => !(t.companyId === company.id && t.client === client)));
+    if (opsData.opsDataReady()) {
+      for (const t of projectTasks) opsData.deleteTask(token, t.id).catch(() => {});
+      opsData.deleteProject(token, company.id, client).catch(() => {});
+    }
+    setNotice(`Subproyecto "${client}" borrado de la bandeja.`);
+  }
+
   function updateProjectBoard(client, patch) {
     if (!company) return;
     setCompanies((current) => current.map((item) => {
@@ -1563,6 +1593,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               contextPreview={contextPreview}
               onArchiveClient={(client) => setClientArchived(client, true)}
               onRestoreClient={(client) => setClientArchived(client, false)}
+              onDeleteClient={deleteClient}
               onToggleStatus={() => {
                 setCompanies((current) => current.map((item) => (
                   item.id === company.id
@@ -1674,6 +1705,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           <PriorityView
             tasks={tasks}
             companies={companies}
+            people={people}
             onOpenTask={(t) => {
               setCompanyFilter("all");
               setAssignFilter("all");
@@ -1803,8 +1835,12 @@ function buildTaskRefs(tasks, companies) {
     .tasks.reduce((acc, t) => { acc[t.id] = t.ref; return acc; }, {});
 }
 
-function PriorityView({ tasks, companies, onOpenTask }) {
+function PriorityView({ tasks, companies, people = [], onOpenTask }) {
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
+  const assigneeOf = (t) => {
+    if (!t.assigneeId) return "Sin responsable";
+    return (people.find((p) => p.id === t.assigneeId)?.name) || "Sin responsable";
+  };
   const refs = buildTaskRefs(tasks, companies);
   const ranked = tasks
     .filter((t) => t.status !== "done")
@@ -1845,6 +1881,10 @@ function PriorityView({ tasks, companies, onOpenTask }) {
           {t.title}
         </p>
         <p className="truncate text-xs text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""} · {STATUS[t.status] || t.status}{t.dueDate ? ` · vence ${displayDate(t.dueDate)}` : ""}</p>
+        <p className="mt-0.5 flex items-center gap-1 truncate text-xs">
+          <UserRound size={12} className={t.assigneeId ? "text-[#17727A]" : "text-[#B76E00]"} />
+          <span className={t.assigneeId ? "font-semibold text-[#17727A]" : "font-semibold text-[#B76E00]"}>{assigneeOf(t)}</span>
+        </p>
         {t.reasons.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {t.reasons.map((r, i) => (
@@ -2831,6 +2871,7 @@ function CompanyPanel({
   onReadContextDocuments,
   contextPreview,
   onArchiveClient,
+  onDeleteClient,
   onRestoreClient,
   onToggleStatus,
 }) {
@@ -2841,9 +2882,16 @@ function CompanyPanel({
   const [editCompanyName, setEditCompanyName] = useState(null); // string en edición o null
   const [editClient, setEditClient] = useState(null); // { old, value } o null
   const [showKpi, setShowKpi] = useState(false);
+  // Subproyecto pendiente de confirmar borrado (bandeja). Sin window.confirm.
+  const [confirmDeleteClient, setConfirmDeleteClient] = useState(null);
   // "Subproyecto y contexto" siempre oculto al abrir/cambiar de empresa.
   useEffect(() => { setSideOpen(false); }, [company?.id]);
+  useEffect(() => { setConfirmDeleteClient(null); }, [company?.id]);
   if (!company) return null;
+  // "Por asignar" es una bandeja temporal, no una empresa activa: sin
+  // indicadores MDSSP y sus subproyectos sí se pueden borrar (los de empresas
+  // reales no, para no perder histórico).
+  const isBandeja = company.id === "por-asignar";
   const active = activeClients(company);
   const archived = archivedClients(company);
   const companyPeople = (people || []).filter((person) => personBelongsToCompany(person, company.id));
@@ -2912,6 +2960,7 @@ function CompanyPanel({
               <FileText size={16} />
             </button>
           )}
+          {!isBandeja && (
           <button
             type="button"
             onClick={() => setShowKpi((v) => !v)}
@@ -2922,6 +2971,7 @@ function CompanyPanel({
           >
             <BarChart3 size={16} />
           </button>
+          )}
           <button
             type="button"
             onClick={onToggleStatus}
@@ -3070,7 +3120,7 @@ function CompanyPanel({
           </div>
         </div>
         )}
-        {showKpi ? (
+        {showKpi && !isBandeja ? (
           <CompanyKpiPanel company={company} tasks={tasks} clients={active} />
         ) : (
         <div className="min-w-0">
@@ -3165,13 +3215,47 @@ function CompanyPanel({
                     >
                       <Contrast size={14} />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onArchiveClient(client)}
-                      className="rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
-                    >
-                      Archivar
-                    </button>
+                    {isBandeja ? (
+                      confirmDeleteClient === client ? (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-[#B42318] bg-[#FEF3F2] px-1.5 py-0.5">
+                          <span className="text-xs font-semibold text-[#B42318]">¿Borrar?</span>
+                          <button
+                            type="button"
+                            onClick={() => { onDeleteClient(client); setConfirmDeleteClient(null); }}
+                            className="inline-flex h-7 items-center rounded bg-[#B42318] px-2 text-xs font-semibold text-white"
+                            title="Confirmar borrado"
+                          >
+                            Sí
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteClient(null)}
+                            className="inline-flex h-7 items-center rounded border border-[#D0D5DD] bg-white px-2 text-xs font-semibold text-[#344054]"
+                            title="Cancelar"
+                          >
+                            No
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteClient(client)}
+                          title="Borrar subproyecto de la bandeja"
+                          aria-label="Borrar subproyecto de la bandeja"
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-[#F2B8B0] px-2 py-1 text-xs font-semibold text-[#B42318]"
+                        >
+                          <Trash2 size={14} /> Borrar
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onArchiveClient(client)}
+                        className="rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
+                      >
+                        Archivar
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="p-3 space-y-3">
@@ -3329,9 +3413,41 @@ function CompanyPanel({
                       <p className="text-sm font-semibold text-[#667085]">{client}</p>
                       <span className="text-xs text-[#98A2B3]">Historial conservado</span>
                     </div>
-                    <button onClick={() => onRestoreClient(client)} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
-                      Reactivar
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => onRestoreClient(client)} className="rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A]">
+                        Reactivar
+                      </button>
+                      {isBandeja && (
+                        confirmDeleteClient === client ? (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-[#B42318] bg-[#FEF3F2] px-1.5 py-0.5">
+                            <span className="text-xs font-semibold text-[#B42318]">¿Borrar?</span>
+                            <button
+                              onClick={() => { onDeleteClient(client); setConfirmDeleteClient(null); }}
+                              className="inline-flex h-7 items-center rounded bg-[#B42318] px-2 text-xs font-semibold text-white"
+                              title="Confirmar borrado"
+                            >
+                              Sí
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteClient(null)}
+                              className="inline-flex h-7 items-center rounded border border-[#D0D5DD] bg-white px-2 text-xs font-semibold text-[#344054]"
+                              title="Cancelar"
+                            >
+                              No
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteClient(client)}
+                            title="Borrar subproyecto de la bandeja"
+                            aria-label="Borrar subproyecto de la bandeja"
+                            className="inline-flex h-[30px] items-center gap-1 rounded-md border border-[#F2B8B0] px-2 py-1 text-xs font-semibold text-[#B42318]"
+                          >
+                            <Trash2 size={14} /> Borrar
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

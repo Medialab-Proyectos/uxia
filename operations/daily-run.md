@@ -92,6 +92,26 @@ de tareas, agrega al `tasks.json` un arreglo `productSignals` con una entrada po
 
 Si el mismo tema se vuelve a medir, reusa el `id` para actualizar (upsert) en vez de duplicar.
 
+## Si NO hay insumos pendientes, el run NO termina
+
+Cuando no queda nada por procesar, el run diario igual DEBE hacer estas dos pasadas:
+
+1. **Repriorizar todas las tareas activas** con los marcos de la sección siguiente
+   (Pareto 80/20, Teoria de Restricciones, Covey, 12-Week-Year, GTD, OKR, Deep Work,
+   Grove, Atomic Habits, Gap and Gain, Drucker/Lencioni): revisar que la `priority`
+   siga siendo correcta (lo vencido/bloqueado sube, lo trivial baja), que cada tarea
+   tenga `category` y siguiente accion clara, y reportar el FOCO del dia y el cuello
+   de botella.
+2. **Validar la cobertura de señales del MDSSP por empresa**: revisar si alguna
+   empresa/subproyecto activo se quedo SIN señales de producto (`product_signals`) o
+   con señales desactualizadas. Si falta cobertura, decirlo explicitamente y proponer
+   que variables capturar (bugs, calidad, usabilidad, satisfaccion del equipo,
+   presupuesto, tecnologia, dependencias, mercado). Las que no se puedan derivar de
+   tareas se capturan a mano en /mdssp.html → Medicion.
+
+El resultado del run sin insumos es: tareas repriorizadas + un reporte de que señales
+faltan por adaptar en cada empresa.
+
 ## Priorizacion de tareas (SIEMPRE, despues de analizar)
 
 Cada vez que se analizan tareas o documentos nuevos y ya estan depuradas/asignadas, el MD
