@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
+import { openDesignOpsReport } from "./designopsReport.js";
 
 const STATUS = {
   backlog: "Pendiente",
@@ -28,6 +29,9 @@ const STATUS_TONE = {
 function statusTone(status) {
   return STATUS_TONE[status] || STATUS_TONE.backlog;
 }
+
+// Herramientas frecuentes (diseño + IA) para registrar el uso/consumo por tarea.
+const TOOL_OPTIONS = ["Figma", "Claude", "ChatGPT", "Cursor", "Notion", "Midjourney", "v0", "Trello"];
 
 // Acento diferencial por subproyecto: color saturado y estable derivado del nombre.
 // Se usa como franja/borde e identificador para distinguir cada tarjeta y desplegable
@@ -1768,6 +1772,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             tasks={tasks}
             companies={companies}
             people={people}
+            onChangeStatus={(id, status) => updateTask(id, { status })}
             onOpenTask={(t) => {
               setCompanyFilter("all");
               setAssignFilter("all");
@@ -1897,7 +1902,11 @@ function buildTaskRefs(tasks, companies) {
     .tasks.reduce((acc, t) => { acc[t.id] = t.ref; return acc; }, {});
 }
 
-function PriorityView({ tasks, companies, people = [], onOpenTask }) {
+// Estados que el admin puede fijar rápido desde la vista de prioridad.
+const QUICK_STATUSES = [["ready", "Pendiente"], ["doing", "En proceso"], ["review", "En revisión"], ["blocked", "Bloqueada"], ["done", "Finalizada"]];
+
+function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatus }) {
+  const [openId, setOpenId] = useState(null);
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
   const assigneeOf = (t) => {
     if (!t.assigneeId) return "Sin responsable";
@@ -1926,37 +1935,71 @@ function PriorityView({ tasks, companies, people = [], onOpenTask }) {
 
   const scoreColor = (s) => (s >= 70 ? "#B42318" : s >= 45 ? "#B76E00" : "#1570EF");
 
-  const TaskRow = ({ t, rank }) => (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpenTask?.(t)}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenTask?.(t); } }}
-      title="Abrir la tarea"
-      className="flex cursor-pointer items-start gap-3 rounded-md border border-[#E4DED6] bg-white p-3 hover:border-[#17727A] hover:bg-[#F7FAFA]"
-    >
-      {rank != null && <span className="mt-0.5 w-5 shrink-0 text-sm font-bold text-[#98A2B3]">{rank}</span>}
-      <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: scoreColor(t.score) }}>{t.score}</span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[#1D2939]">
-          {t.ref && <span className="mr-2 rounded border border-[#D9D2C7] bg-[#F7F4EF] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#475467]">{t.ref}</span>}
-          {t.title}
-        </p>
-        <p className="truncate text-xs text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""} · {STATUS[t.status] || t.status}{t.dueDate ? ` · vence ${displayDate(t.dueDate)}` : ""}</p>
-        <p className="mt-0.5 flex items-center gap-1 truncate text-xs">
-          <UserRound size={12} className={t.assigneeId ? "text-[#17727A]" : "text-[#B76E00]"} />
-          <span className={t.assigneeId ? "font-semibold text-[#17727A]" : "font-semibold text-[#B76E00]"}>{assigneeOf(t)}</span>
-        </p>
-        {t.reasons.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {t.reasons.map((r, i) => (
-              <span key={i} className="rounded-full border border-[#E4DED6] px-2 py-0.5 text-[10px] font-bold text-[#475467]">{r}</span>
-            ))}
-          </div>
-        )}
+  const TaskRow = ({ t, rank }) => {
+    const open = openId === t.id;
+    return (
+    <div className={`rounded-md border bg-white ${open ? "border-[#17727A]" : "border-[#E4DED6]"}`}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpenId(open ? null : t.id)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenId(open ? null : t.id); } }}
+        title={open ? "Cerrar" : "Ver la tarea aquí mismo"}
+        className="flex cursor-pointer items-start gap-3 p-3 hover:bg-[#F7FAFA]"
+      >
+        {rank != null && <span className="mt-0.5 w-5 shrink-0 text-sm font-bold text-[#98A2B3]">{rank}</span>}
+        <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: scoreColor(t.score) }}>{t.score}</span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[#1D2939]">
+            {t.ref && <span className="mr-2 rounded border border-[#D9D2C7] bg-[#F7F4EF] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#475467]">{t.ref}</span>}
+            {t.title}
+          </p>
+          <p className="truncate text-xs text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""} · {STATUS[t.status] || t.status}{t.dueDate ? ` · vence ${displayDate(t.dueDate)}` : ""}</p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs">
+            <UserRound size={12} className={t.assigneeId ? "text-[#17727A]" : "text-[#B76E00]"} />
+            <span className={t.assigneeId ? "font-semibold text-[#17727A]" : "font-semibold text-[#B76E00]"}>{assigneeOf(t)}</span>
+          </p>
+          {t.reasons.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {t.reasons.map((r, i) => (
+                <span key={i} className="rounded-full border border-[#E4DED6] px-2 py-0.5 text-[10px] font-bold text-[#475467]">{r}</span>
+              ))}
+            </div>
+          )}
+        </div>
+        <ChevronRight size={16} className={`mt-0.5 shrink-0 text-[#98A2B3] transition-transform ${open ? "rotate-90" : ""}`} />
       </div>
+      {open && (
+        <div className="border-t border-[#E4DED6] px-3 py-3">
+          {t.description
+            ? <p className="whitespace-pre-line text-sm text-[#475467]">{t.description}</p>
+            : <p className="text-xs italic text-[#98A2B3]">Sin descripción.</p>}
+          {/* Cambio rápido de estado (sin salir de Prioridad). */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[#667085]">Estado:</span>
+            {QUICK_STATUSES.map(([k, label]) => {
+              const on = t.status === k;
+              const tone = statusTone(k);
+              return (
+                <button key={k} type="button"
+                  onClick={(e) => { e.stopPropagation(); onChangeStatus?.(t.id, k); }}
+                  className="rounded-md border px-2.5 py-1 text-xs font-semibold"
+                  style={on ? { borderColor: tone.text, background: tone.bg, color: tone.text } : { borderColor: "#D0D5DD", color: "#475467" }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Para cambiar responsable, fecha o el detalle: abrir el editor completo. */}
+          <button type="button" onClick={(e) => { e.stopPropagation(); onOpenTask?.(t); }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-[#D0D5DD] px-3 py-1.5 text-xs font-semibold text-[#344054] hover:border-[#17727A] hover:text-[#17727A]">
+            <Pencil size={13} /> Abrir para editar (responsable, fecha, detalle)
+          </button>
+        </div>
+      )}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="mt-5 space-y-5">
@@ -2696,6 +2739,62 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </div>
         </div>
+        {/* Instrumentación DesignOps: puntos de diseño, defectos QA y Change Request.
+            Alimentan velocidad, utilización, calidad y eficiencia del tablero/reporte. */}
+        <div>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">DesignOps</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1">
+              <span className="text-xs text-[#667085]">Puntos:</span>
+              {[[1, "Simple"], [2, "Media"], [4, "Compleja"]].map(([p, label]) => {
+                const on = Number(task.designPoints) === p;
+                return (
+                  <button key={p} type="button" title={`${label} (${p} pt${p > 1 ? "s" : ""})`}
+                    onClick={() => onChangeTask(task.id, { designPoints: on ? null : p })}
+                    className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-md border px-1.5 text-xs font-bold"
+                    style={on ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#475467" }}>
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+            <label className="inline-flex items-center gap-1 text-xs text-[#667085]">
+              Defectos QA:
+              <input type="number" min="0" step="1" value={task.qaDefects ?? ""}
+                onChange={(e) => onChangeTask(task.id, { qaDefects: e.target.value === "" ? null : Number(e.target.value) })}
+                className="h-7 w-14 rounded-md border border-[#D0D5DD] px-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]" placeholder="—" />
+            </label>
+            <button type="button"
+              onClick={() => onChangeTask(task.id, { changeRequest: !task.changeRequest })}
+              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold"
+              style={task.changeRequest ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#667085" }}
+              title="Cambio pedido por el cliente después de aprobar el diseño">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: task.changeRequest ? "#B54708" : "#D0D5DD" }} />
+              Change Request
+            </button>
+            <label className="inline-flex items-center gap-1 text-xs text-[#667085]">
+              % IA:
+              <input type="number" min="0" max="100" step="5" value={task.aiUsage ?? ""}
+                onChange={(e) => onChangeTask(task.id, { aiUsage: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value))) })}
+                className="h-7 w-14 rounded-md border border-[#D0D5DD] px-1.5 text-xs text-[#344054] outline-none focus:border-[#6941C6]" placeholder="—" />
+            </label>
+          </div>
+          {/* Herramientas usadas (uso/consumo de IA y tooling por tarea). */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span className="mr-0.5 text-xs text-[#667085]">Herramientas:</span>
+            {TOOL_OPTIONS.map((tool) => {
+              const on = Array.isArray(task.tools) && task.tools.includes(tool);
+              return (
+                <button key={tool} type="button"
+                  onClick={() => { const cur = Array.isArray(task.tools) ? task.tools : []; onChangeTask(task.id, { tools: on ? cur.filter((x) => x !== tool) : [...cur, tool] }); }}
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                  style={on ? { borderColor: "#6941C6", background: "#F4F1FD", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#667085" }}>
+                  {tool}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
           <select
@@ -3195,7 +3294,7 @@ function CompanyPanel({
         </div>
         )}
         {showKpi && !isBandeja ? (
-          <CompanyKpiPanel company={company} tasks={tasks} clients={active} />
+          <CompanyKpiPanel company={company} tasks={tasks} clients={active} people={companyPeople} />
         ) : (
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-1.5">
@@ -3536,7 +3635,7 @@ function CompanyPanel({
 
 // Panel de indicadores (KPI) por empresa: cumplidas vs total, por subproyecto, salud,
 // satisfacción (rating de tareas) y curva de crecimiento por periodo.
-function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
+function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
   const [period, setPeriod] = useState("trimestre");
   const [fbPage, setFbPage] = useState(0); // paginacion del feedback (10 por pagina)
   const companyTasks = tasks.filter((t) => t.companyId === company.id);
@@ -3615,7 +3714,8 @@ function CompanyKpiPanel({ company, tasks = [], clients = [] }) {
           {[["mes", "Mes"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["año", "Año"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
           ))}
-          <button type="button" onClick={() => window.print()} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#344054]" title="Imprimir o exportar a PDF"><Download size={12} /> Imprimir</button>
+          <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title="Genera y descarga el reporte semanal DesignOps de esta empresa (PDF)"><Download size={12} /> Reporte DesignOps</button>
+          <button type="button" onClick={() => window.print()} className="no-print inline-flex items-center gap-1 rounded-full border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#344054]" title="Imprimir el panel actual"><Download size={12} /> Imprimir</button>
         </div>
       </div>
 

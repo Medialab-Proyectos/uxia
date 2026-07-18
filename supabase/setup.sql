@@ -100,6 +100,18 @@ alter table tasks add column if not exists employee_touched_at timestamptz;
 alter table tasks add column if not exists assignee_seen_at timestamptz;
 alter table tasks add column if not exists admin_touched_at timestamptz;
 
+-- 3d-quinquies) Instrumentación DesignOps: puntos de diseño (estimación por complejidad
+-- 1=simple / 2=media / 4=compleja), defectos detectados en QA y marca de Change Request
+-- (cambio pedido por el cliente DESPUÉS de aprobar el diseño). Alimentan velocidad,
+-- utilización, calidad y eficiencia del tablero DesignOps. Las estima/valida el admin o el
+-- MD diario; el empleado NO las puede tocar (las protege el trigger).
+alter table tasks add column if not exists design_points numeric;   -- 1 | 2 | 4
+alter table tasks add column if not exists qa_defects numeric;      -- defectos UX/UI hallados
+alter table tasks add column if not exists change_request boolean not null default false;
+alter table tasks add column if not exists tools jsonb not null default '[]'::jsonb; -- herramientas usadas
+-- ai_usage (ya existe en 3e) = % de IA usada en la tarea (0..100). Con `tools` da la
+-- visibilidad de "uso y consumo de IA + herramientas" por tarea que pide negocio.
+
 -- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
 alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
 alter table tasks add column if not exists rating_comment text;
@@ -213,6 +225,9 @@ begin
     -- El empleado NO puede alterar el sello del admin (evita apagarse su propia campanita).
     -- Sí puede escribir assignee_seen_at (marcar la tarea como vista) — no se revierte.
     new.admin_touched_at := old.admin_touched_at;
+    -- Instrumentación DesignOps: solo la fija el admin/MD, el empleado no.
+    new.design_points := old.design_points; new.qa_defects := old.qa_defects;
+    new.change_request := old.change_request; new.tools := old.tools; new.ai_usage := old.ai_usage;
     if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then
       new.status := old.status;
     end if;

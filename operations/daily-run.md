@@ -157,6 +157,38 @@ foco de la semana. La priorizacion se apoya en marcos probados de eficiencia y e
 La priorizacion tambien retroalimenta el modelo MDSSP: tareas vitales sin avanzar o el
 cuello de botella se reflejan como fuerzas mas fuertes hacia los bordes de riesgo.
 
+## Instrumentacion DesignOps (SIEMPRE, en cada run — automatico)
+
+MediaLab se posiciona como **DesignOps**: el tablero de indicadores (solo del admin) y el
+**reporte semanal DesignOps** (boton "Reporte DesignOps" en la vista de indicadores) se
+alimentan de datos que el MD debe **capturar y validar en CADA corrida, sin preguntar**.
+Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE:
+
+1. **Estimar los puntos de diseño** (`designPoints`) de cada tarea de diseño segun su
+   complejidad funcional, con el modelo de la propuesta: **1 = simple** (una interaccion:
+   login, error, splash), **2 = media** (formulario, listado, filtros), **4 = compleja**
+   (dashboard, multi-step, validaciones encadenadas). Si una tarea no es de diseño (gestion,
+   comercial, apoyo) se deja sin puntos. Alimenta velocidad (pts/sem) y utilizacion.
+2. **Marcar Change Requests** (`changeRequest: true`) cuando el insumo indica que el cliente
+   pidio un cambio DESPUES de aprobar el diseño (no es alcance original). Alimenta eficiencia.
+3. **Registrar defectos de QA** (`qaDefects`, entero) cuando el insumo trae defectos UX/UI
+   hallados en revision/QA de una tarea. Alimenta calidad.
+4. **Registrar uso de IA y herramientas** cuando el insumo lo evidencia: `aiUsage` (0..100,
+   % de IA usada en la tarea) y `tools` (arreglo, ej. `["Figma","Claude"]`). Da la visibilidad
+   de "uso y consumo de IA + herramientas" que pide negocio. Si no hay señal clara, se deja vacio.
+5. **Validar la cobertura**: reportar explicitamente cuantas tareas de diseño quedaron SIN
+   puntos estimados, y que empresas no tienen datos suficientes para los indicadores del
+   reporte (velocidad, utilizacion, defectos, consumo de IA). No inventar numeros.
+
+**Honestidad (obligatoria):** el MD solo pone datos que puede sustentar en el insumo o en una
+estimacion de complejidad razonable. Lo que no se puede derivar se deja vacio y se reporta como
+"por instrumentar" — NUNCA se rellena con cifras inventadas. Las metricas que ya salen solas de
+los datos (predictibilidad de fecha, cycle time, throughput, WIP, satisfaccion) no se tocan.
+
+Estos campos se escriben en el `tasks.json` del run (`designPoints`, `qaDefects`,
+`changeRequest`) y el `daily-push.mjs` los sube. El empleado NO puede alterarlos (los protege
+el trigger de la base); solo el admin o el MD.
+
 ## Como debe verse una tarea
 
 Las tareas viven debajo de `Contexto del subproyecto`.

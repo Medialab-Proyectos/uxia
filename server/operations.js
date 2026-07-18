@@ -326,6 +326,11 @@ function taskToRow(task) {
     email_to: task.emailTo || "",
     email_subject: task.emailSubject || "",
     category: task.category || null,
+    design_points: task.designPoints ?? null,
+    qa_defects: task.qaDefects ?? null,
+    change_request: !!task.changeRequest,
+    tools: asArray(task.tools),
+    ai_usage: task.aiUsage ?? null,
     created_at: task.createdAt || new Date().toISOString(),
   };
 }
