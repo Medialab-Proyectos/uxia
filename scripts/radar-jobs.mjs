@@ -4,8 +4,16 @@
 //
 // Uso:  node --env-file=.env scripts/radar-fetch.mjs [ruta/vacantes.json]
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+
+// Ids ya archivados (caducados hace >5d): no se vuelven a insertar (dedup anti-reaparición).
+function idsArchivados() {
+  const p = resolve(process.cwd(), "operations", "_run", "archivo-radar.json");
+  if (!existsSync(p)) return new Set();
+  try { const a = JSON.parse(readFileSync(p, "utf8")); return new Set(a.ids || (a.items || []).map((x) => x.id)); }
+  catch { return new Set(); }
+}
 
 const URL = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -43,7 +51,8 @@ async function sb(path, init = {}) {
 
 const existing = await sb("vacantes?select=id");
 const have = new Set((existing || []).map((r) => r.id));
-const nuevos = rows.filter((r) => !have.has(r.id));
+const archivados = idsArchivados();
+const nuevos = rows.filter((r) => !have.has(r.id) && !archivados.has(r.id));
 if (nuevos.length) {
   await sb("vacantes", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(nuevos) });
 }

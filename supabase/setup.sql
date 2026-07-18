@@ -32,6 +32,7 @@ create table if not exists oportunidades (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table oportunidades add column if not exists postulado boolean not null default false;
 create index if not exists oportunidades_estado_idx on oportunidades (estado, score desc);
 
 -- 2b) Vacantes de empleo del Radar (las llena Claude Code; la app solo lee/sigue) --
@@ -43,6 +44,7 @@ create table if not exists vacantes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table vacantes add column if not exists postulado boolean not null default false;
 create index if not exists vacantes_estado_idx on vacantes (estado, score desc);
 
 -- 2c) Señales de producto para el modelo MDSSP (/mdssp.html) -----------------------

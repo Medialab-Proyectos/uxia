@@ -384,7 +384,7 @@ export async function deleteInsumo(token, id, { keepFile = false } = {}) {
 }
 
 // ---------- oportunidades (Radar) — la app SOLO lee y da seguimiento ----------
-const mapOportunidad = (row) => ({ ...(row.data || {}), id: row.id, score: row.score, estado: row.estado, createdAt: row.created_at });
+const mapOportunidad = (row) => ({ ...(row.data || {}), id: row.id, score: row.score, estado: row.estado, postulado: !!row.postulado, createdAt: row.created_at });
 
 export async function listOportunidades(token) {
   const rows = await rest(token, "oportunidades", { query: "?select=*&order=score.desc" });
@@ -394,13 +394,17 @@ export async function listOportunidades(token) {
 export async function updateOportunidad(token, id, patch) {
   await rest(token, `oportunidades?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: { ...(patch.estado ? { estado: patch.estado } : {}), updated_at: new Date().toISOString() },
+    body: {
+      ...(patch.estado ? { estado: patch.estado } : {}),
+      ...(patch.postulado !== undefined ? { postulado: !!patch.postulado } : {}),
+      updated_at: new Date().toISOString(),
+    },
     prefer: "return=minimal",
   });
 }
 
 // ---------- vacantes (Radar empleos) — la app SOLO lee y da seguimiento ----------
-const mapVacante = (row) => ({ ...(row.data || {}), id: row.id, score: row.score, estado: row.estado, createdAt: row.created_at });
+const mapVacante = (row) => ({ ...(row.data || {}), id: row.id, score: row.score, estado: row.estado, postulado: !!row.postulado, createdAt: row.created_at });
 
 export async function listVacantes(token) {
   const rows = await rest(token, "vacantes", { query: "?select=*&order=score.desc" });
@@ -410,7 +414,11 @@ export async function listVacantes(token) {
 export async function updateVacante(token, id, patch) {
   await rest(token, `vacantes?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: { ...(patch.estado ? { estado: patch.estado } : {}), updated_at: new Date().toISOString() },
+    body: {
+      ...(patch.estado ? { estado: patch.estado } : {}),
+      ...(patch.postulado !== undefined ? { postulado: !!patch.postulado } : {}),
+      updated_at: new Date().toISOString(),
+    },
     prefer: "return=minimal",
   });
 }

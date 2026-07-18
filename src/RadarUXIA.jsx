@@ -124,6 +124,28 @@ function diasDesde(createdAt) {
   return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000);
 }
 
+// Probabilidad de recordación según cuándo se capturó (created_at). Las empresas suelen
+// contratar en las primeras 48h; después de 3 días baja rápido; a los 5 se archiva.
+function frescura(createdAt) {
+  const d = diasDesde(createdAt);
+  if (d == null) return null;
+  if (d <= 2) return { label: "A tiempo", detail: "dentro de 48h", tone: "green" };
+  if (d <= 3) return { label: "Poco probable", detail: "3 días", tone: "amber" };
+  if (d <= 5) return { label: "Baja probabilidad", detail: `${d} días`, tone: "coral" };
+  return { label: "Vencida", detail: `${d} días`, tone: "coral" };
+}
+
+// Un "listado" es un enlace de búsqueda de una plataforma (no una oferta específica). Se
+// separan de los empleos: se acceden por los botones de plataforma (pestaña Radar), no en
+// la lista de ofertas.
+function esListado(j) {
+  if (!j) return false;
+  if (j.esListado || j.tipo === "listado") return true;
+  const e = String(j.empresa || "").toLowerCase();
+  const t = String(j.titulo || "").toLowerCase();
+  return /\(listado/.test(e) || /\bofertas\b|resultados de b|ver ofertas|listado de/.test(t);
+}
+
 // Filtro por periodicidad (cuándo se capturó, según created_at de Supabase).
 function withinPeriod(createdAt, periodo) {
   if (periodo === "todas" || !createdAt) return true;
@@ -873,6 +895,16 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     if (opsData.opsDataReady()) opsData.updateVacante(token, id, { estado }).catch(() => {});
   };
 
+  // "Postulado": tag dentro de Me gusta (no cambia el estado). Marca que ya te postulaste.
+  const updateJobPostulado = (id, postulado) => {
+    persist(jobs.map((j) => (j.id === id ? { ...j, postulado } : j)));
+    if (opsData.opsDataReady()) opsData.updateVacante(token, id, { postulado }).catch(() => {});
+  };
+  const updateOppPostulado = (id, postulado) => {
+    setOppResults((current) => current.map((o) => (o.id === id ? { ...o, postulado } : o)));
+    if (opsData.opsDataReady()) opsData.updateOportunidad(token, id, { postulado }).catch(() => {});
+  };
+
   const removeJob = async (id) => {
     const prev = jobs;
     persist(jobs.filter((j) => j.id !== id)); // optimista
@@ -986,11 +1018,15 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
   useEffect(() => { loadRadarInsumos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const visible = jobs
+    // Los "listados" (enlaces de búsqueda de plataforma) NO son ofertas: se acceden por
+    // los botones de plataforma (pestaña Radar), no en la lista de empleos.
+    .filter((j) => !esListado(j))
     .filter((j) => {
       if (filter === "todas") return true;
       if (filter === "remotas") return j.remoto === "remoto";
       if (filter === "español") return j.idioma === "español";
       if (filter === "megusta") return j.estado === "me_interesa";
+      if (filter === "postuladas") return j.postulado;
       return true;
     })
     .filter((j) => withinPeriod(j.createdAt, periodo))
@@ -1563,8 +1599,22 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>
                             {o.persona} · {o.fuente}
                           </p>
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {(() => { const f = frescura(o.createdAt); if (!f) return null; const col = f.tone === "green" ? C.green : f.tone === "amber" ? C.amber : C.coral; return <Badge color={col} bg={`${col}14`}>{f.label} · {f.detail}</Badge>; })()}
+                            {o.postulado && <Badge color={C.green} bg={`${C.green}14`}>✓ Postulado</Badge>}
+                          </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
+                          {o.estado === "me_interesa" && (
+                            <button
+                              onClick={(e) => { e.preventDefault(); updateOppPostulado(o.id, !o.postulado); }}
+                              title={o.postulado ? "Quitar 'postulado'" : "Marcar que ya te postulaste"}
+                              className="inline-flex items-center justify-center rounded-md text-[11px] font-semibold px-2"
+                              style={{ height: 34, backgroundColor: o.postulado ? C.green : `${C.green}14`, color: o.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}
+                            >
+                              {o.postulado ? "Postulado ✓" : "Postulado"}
+                            </button>
+                          )}
                           <button
                             onClick={(e) => { e.preventDefault(); updateOppEstado(o.id, o.estado === "me_interesa" ? "nueva" : "me_interesa"); }}
                             title={o.estado === "me_interesa" ? "Quitar me gusta" : "Me gusta"}
@@ -1739,6 +1789,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 ["remotas", "Solo remotas"],
                 ["español", "En español"],
                 ["megusta", "Me gusta"],
+                ["postuladas", "Postuladas"],
               ].map(([key, label]) => (
                 <button
                   key={key}
@@ -1816,8 +1867,22 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                         <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>
                           {j.empresa} · {j.fuente}{j.ubicacion ? ` · ${j.ubicacion}` : ""}
                         </p>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          {(() => { const f = frescura(j.createdAt); if (!f) return null; const col = f.tone === "green" ? C.green : f.tone === "amber" ? C.amber : C.coral; return <Badge color={col} bg={`${col}14`}>{f.label} · {f.detail}</Badge>; })()}
+                          {j.postulado && <Badge color={C.green} bg={`${C.green}14`}>✓ Postulado</Badge>}
+                        </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
+                        {j.estado === "me_interesa" && (
+                          <button
+                            onClick={(e) => { e.preventDefault(); updateJobPostulado(j.id, !j.postulado); }}
+                            title={j.postulado ? "Quitar 'postulado'" : "Marcar que ya te postulaste"}
+                            className="inline-flex items-center justify-center rounded-md text-[11px] font-semibold px-2"
+                            style={{ height: 34, backgroundColor: j.postulado ? C.green : `${C.green}14`, color: j.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}
+                          >
+                            {j.postulado ? "Postulado ✓" : "Postulado"}
+                          </button>
+                        )}
                         <button
                           onClick={(e) => { e.preventDefault(); updateEstado(j.id, j.estado === "me_interesa" ? "nueva" : "me_interesa"); }}
                           title={j.estado === "me_interesa" ? "Quitar me gusta" : "Me gusta"}
