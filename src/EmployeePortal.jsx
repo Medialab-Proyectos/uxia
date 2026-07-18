@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, CheckCircle2, LoaderCircle, MessageCircle, Send } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send } from "lucide-react";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -36,9 +36,11 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [tasks, setTasks] = React.useState([]);
   const [openId, setOpenId] = React.useState(null);
   const [draft, setDraft] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
+  const [pending, setPending] = React.useState({}); // { [taskId]: { status } } cambios locales sin guardar
+  const [saveState, setSaveState] = React.useState({}); // { [taskId]: { kind, at, msg } }
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("active");
+  const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
 
@@ -55,7 +57,15 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
       setMe(person);
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
-        const tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref&order=due_date.asc`, { headers });
+        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref";
+        // Intenta con las columnas de novedad; si la base aún no está migrada, carga sin ellas.
+        let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base},assignee_seen_at,admin_touched_at&order=due_date.asc`, { headers });
+        if (!tRes.ok) {
+          setNoveltyReady(false);
+          tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base}&order=due_date.asc`, { headers });
+        } else {
+          setNoveltyReady(true);
+        }
         setTasks(tRes.ok ? await tRes.json() : []);
       } else {
         setTasks([]);
@@ -71,6 +81,30 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
 
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "";
 
+  // Novedades por persona: "Nueva" = nunca vista; "Actualizada" = el admin la cambió
+  // después de la última vez que la vi. Al abrirla se marca vista y el tag desaparece.
+  const isNew = (t) => noveltyReady && !t.assignee_seen_at;
+  const isUpdatedByAdmin = (t) => Boolean(
+    noveltyReady && t.assignee_seen_at && t.admin_touched_at && new Date(t.admin_touched_at) > new Date(t.assignee_seen_at)
+  );
+  const hasNovelty = (t) => isNew(t) || isUpdatedByAdmin(t);
+  const noveltyCount = tasks.filter((t) => t.status !== "done" && hasNovelty(t)).length;
+
+  // Marca la tarea como vista (solo assignee_seen_at; NO toca employee_touched_at, así que
+  // NO la marca "actualizada" para el admin). Optimista + persistente.
+  async function markSeen(task) {
+    if (!hasNovelty(task)) return;
+    const now = new Date().toISOString();
+    setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, assignee_seen_at: now } : t)));
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${task.id}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ assignee_seen_at: now }),
+      });
+    } catch { /* no crítico: si falla, se reintenta al volver a abrir */ }
+  }
+
   const active = tasks.filter((t) => t.status !== "done");
   const done = tasks.filter((t) => t.status === "done");
   const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review").length;
@@ -81,6 +115,7 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   // Filtros por empresa y estado → lista ordenada por prioridad.
   const filtered = tasks.filter((t) => {
     if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
+    if (statusFilter === "new") return hasNovelty(t) && t.status !== "done";
     if (statusFilter === "active") return t.status !== "done";
     if (statusFilter === "all") return true;
     return t.status === statusFilter;
@@ -88,34 +123,52 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const ranked = [...filtered].map((t) => ({ ...t, dueDate: t.due_date, score: scoreTask({ ...t, dueDate: t.due_date }) }))
     .sort((a, b) => b.score - a.score);
 
-  async function patch(taskId, patch) {
-    setBusy(true);
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${taskId}`, {
-        method: "PATCH",
-        headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify({ ...patch, employee_touched_at: new Date().toISOString() }),
-      });
-      if (!res.ok) throw new Error();
-      await load();
-    } catch {
-      setError("No se pudo guardar. Intenta de nuevo.");
-    } finally {
-      setBusy(false);
-    }
+  // El empleado ELIGE (estado y/o comentario) y luego GUARDA explícitamente. Nada se envía
+  // a Supabase hasta pulsar "Guardar", y el resultado se confirma en la tarjeta (guardado ✓
+  // / error). Así no vuelve a pasar el caso de "creí que guardé y nunca llegó".
+  function setPendingStatus(task, status) {
+    setPending((p) => ({ ...p, [task.id]: { ...(p[task.id] || {}), status } }));
+    setSaveState((s) => { const n = { ...s }; delete n[task.id]; return n; }); // vuelve a "sin guardar"
   }
 
-  function changeStatus(task, status) { patch(task.id, { status }); }
+  // ¿La tarea tiene cambios locales sin guardar? (estado distinto o comentario escrito)
+  function isDirty(task) {
+    const pStatus = pending[task.id]?.status;
+    const statusChanged = pStatus && pStatus !== task.status;
+    const hasComment = openId === task.id && draft.trim().length > 0;
+    return Boolean(statusChanged || hasComment);
+  }
 
-  function addComment(task) {
-    const text = draft.trim();
-    if (!text) return;
-    const comments = Array.isArray(task.comments) ? task.comments : [];
-    patch(task.id, {
-      comments: [...comments, { author: me?.name || email, role: "employee", text, at: new Date().toISOString() }],
-      status: task.status === "done" ? task.status : "actualizada",
-    });
-    setDraft("");
+  async function save(task) {
+    const p = pending[task.id] || {};
+    const text = openId === task.id ? draft.trim() : "";
+    const statusChanged = p.status && p.status !== task.status;
+    if (!statusChanged && !text) return;
+    const body = {};
+    if (statusChanged) body.status = p.status;
+    if (text) {
+      const comments = Array.isArray(task.comments) ? task.comments : [];
+      body.comments = [...comments, { author: me?.name || email, role: "employee", text, at: new Date().toISOString() }];
+      // Comentar marca la tarea como "actualizada" para el admin, salvo que ya se haya
+      // elegido explícitamente un estado (en progreso / en revisión) o esté finalizada.
+      if (!statusChanged && task.status !== "done") body.status = "actualizada";
+    }
+    setSaveState((s) => ({ ...s, [task.id]: { kind: "saving" } }));
+    setError("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${task.id}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ ...body, employee_touched_at: new Date().toISOString() }),
+      });
+      if (!res.ok) throw new Error(`No se guardó (código ${res.status}).`);
+      setSaveState((s) => ({ ...s, [task.id]: { kind: "saved", at: Date.now() } }));
+      setPending((p2) => { const n = { ...p2 }; delete n[task.id]; return n; });
+      setDraft("");
+      await load();
+    } catch (e) {
+      setSaveState((s) => ({ ...s, [task.id]: { kind: "error", msg: String(e?.message || "Error") } }));
+    }
   }
 
   const dark = theme === "dark";
@@ -140,14 +193,26 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   return (
     <div style={{ minHeight: "100vh", background: bg, color: text }}>
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-        <div className="mb-4">
-          <h1 className="text-xl font-semibold">Hola, {me.name.split(" ")[0]}</h1>
-          <p className="text-sm" style={{ color: dim }}>Estas son tus tareas y su prioridad.</p>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold">Hola, {me.name.split(" ")[0]}</h1>
+            <p className="text-sm" style={{ color: dim }}>Estas son tus tareas y su prioridad.</p>
+          </div>
+          {/* Campanita: cuántas tareas tienen novedades (nuevas o actualizadas por el admin) */}
+          <button type="button" onClick={() => setStatusFilter("new")}
+            className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
+            style={{ borderColor: noveltyCount ? "#6D28D9" : border, background: noveltyCount ? "#F5F3FF" : card, color: noveltyCount ? "#6D28D9" : dim }}
+            title={noveltyCount ? `${noveltyCount} tarea(s) con novedades` : "Sin novedades"}>
+            <Bell size={18} />
+            {noveltyCount > 0 && (
+              <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[11px] font-bold text-white" style={{ background: "#6D28D9" }}>{noveltyCount}</span>
+            )}
+          </button>
         </div>
 
         {/* Indicadores del empleado */}
-        <div className="mb-5 grid grid-cols-3 gap-3">
-          {[["Activas", active.length, "#17727A"], ["Vencidas", overdue, "#B42318"], ["Finalizadas", done.length, "#0D7A4F"]].map(([l, v, col]) => (
+        <div className="mb-5 grid grid-cols-4 gap-3">
+          {[["Novedades", noveltyCount, "#6D28D9"], ["Activas", active.length, "#17727A"], ["Vencidas", overdue, "#B42318"], ["Finalizadas", done.length, "#0D7A4F"]].map(([l, v, col]) => (
             <div key={l} className="rounded-md border p-3" style={{ borderColor: border, background: card }}>
               <p className="text-xs" style={{ color: dim }}>{l}</p>
               <p className="mt-1 text-2xl font-semibold" style={{ color: col }}>{v}</p>
@@ -166,13 +231,19 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
               {myCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          {[["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => (
+          {[["new", "Novedades"], ["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
+            const on = statusFilter === k;
+            const isNov = k === "new";
+            return (
             <button key={k} type="button" onClick={() => setStatusFilter(k)}
-              className="rounded-full border px-3 py-1 text-xs font-semibold"
-              style={statusFilter === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: dim }}>
-              {l}
+              className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
+              style={on
+                ? (isNov ? { borderColor: "#6D28D9", background: "#F5F3FF", color: "#6D28D9" } : { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" })
+                : { borderColor: border, color: dim }}>
+              {l}{isNov && noveltyCount > 0 ? ` (${noveltyCount})` : ""}
             </button>
-          ))}
+            );
+          })}
         </div>
 
         <div className="space-y-2">
@@ -180,11 +251,13 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
             const isOpen = openId === t.id;
             return (
               <div key={t.id} className="rounded-md border" style={{ borderColor: border, background: card }}>
-                <button type="button" onClick={() => { setOpenId(isOpen ? null : t.id); setDraft(""); }} className="flex w-full items-start gap-3 p-3 text-left">
+                <button type="button" onClick={() => { const opening = !isOpen; setOpenId(isOpen ? null : t.id); setDraft(""); if (opening) markSeen(t); }} className="flex w-full items-start gap-3 p-3 text-left">
                   <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: t.score >= 70 ? "#B42318" : t.score >= 45 ? "#B76E00" : "#1570EF" }}>{t.score}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">
                       {t.task_ref && <span className="mr-2 rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold" style={{ borderColor: border, color: dim }}>{t.task_ref}</span>}
+                      {isNew(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#0D7A4F" }}>NUEVA</span>}
+                      {!isNew(t) && isUpdatedByAdmin(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#6D28D9" }}>ACTUALIZADA</span>}
                       {t.title}
                     </span>
                     <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
@@ -198,16 +271,23 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                   <div className="border-t px-3 py-3" style={{ borderColor: border }}>
                     {t.description && <p className="mb-3 whitespace-pre-line text-sm" style={{ color: dim }}>{t.description}</p>}
 
-                    {/* Estado (solo en progreso / en revisión) */}
+                    {(() => {
+                      const st = saveState[t.id];
+                      const pStatus = pending[t.id]?.status ?? t.status; // estado elegido (aún sin guardar)
+                      const dirtyHere = isDirty(t);
+                      const saving = st?.kind === "saving";
+                      return (
+                    <>
+                    {/* Estado (solo en progreso / en revisión) — marca la elección, no guarda aún */}
                     <div className="mb-3 flex flex-wrap gap-2">
-                      <button type="button" disabled={busy} onClick={() => changeStatus(t, "doing")}
+                      <button type="button" disabled={saving} onClick={() => setPendingStatus(t, "doing")}
                         className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold"
-                        style={t.status === "doing" ? { borderColor: "#1570EF", background: "#EAF2FB", color: "#1D5A99" } : { borderColor: border, color: text }}>
+                        style={pStatus === "doing" ? { borderColor: "#1570EF", background: "#EAF2FB", color: "#1D5A99" } : { borderColor: border, color: text }}>
                         <Clock size={13} /> En progreso
                       </button>
-                      <button type="button" disabled={busy} onClick={() => changeStatus(t, "review")}
+                      <button type="button" disabled={saving} onClick={() => setPendingStatus(t, "review")}
                         className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold"
-                        style={t.status === "review" ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: text }}>
+                        style={pStatus === "review" ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: text }}>
                         <CheckCircle2 size={13} /> Finalizada (en revisión)
                       </button>
                     </div>
@@ -223,17 +303,33 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                         ))}
                       </ul>
                     )}
-                    <div className="flex items-center gap-2">
-                      <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Dejar un comentario…"
-                        onKeyDown={(e) => { if (e.key === "Enter") addComment(t); }}
-                        className="min-w-0 flex-1 rounded-md border px-3 py-1.5 text-sm outline-none"
-                        style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
-                      <button type="button" disabled={busy || !draft.trim()} onClick={() => addComment(t)}
-                        className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
-                        <Send size={13} /> Enviar
+                    <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Dejar un comentario (opcional)…"
+                      className="w-full rounded-md border px-3 py-1.5 text-sm outline-none"
+                      style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
+
+                    {/* Guardar EXPLÍCITO + confirmación */}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <button type="button" disabled={saving || !dirtyHere} onClick={() => save(t)}
+                        className="inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold text-white"
+                        style={dirtyHere && !saving ? { background: "#17727A" } : { background: "#C7CDD4", cursor: "default" }}>
+                        {saving ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />}
+                        {saving ? "Guardando…" : "Guardar cambios"}
                       </button>
+                      {st?.kind === "saved" && !dirtyHere && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: "#0D7A4F" }}>
+                          <CheckCircle2 size={14} /> Guardado {new Date(st.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                      {st?.kind === "error" && (
+                        <span className="text-xs font-semibold" style={{ color: "#B42318" }}>⚠ {st.msg} Reintenta.</span>
+                      )}
+                      {dirtyHere && st?.kind !== "saving" && (
+                        <span className="text-xs font-semibold" style={{ color: "#B54708" }}>● Cambios sin guardar</span>
+                      )}
                     </div>
-                    <p className="mt-2 text-[11px]" style={{ color: dim }}><MessageCircle size={11} className="mr-1 inline align-[-1px]" /> Solo puedes cambiar el estado y comentar; el resto lo gestiona el administrador.</p>
+                    <p className="mt-2 text-[11px]" style={{ color: dim }}><MessageCircle size={11} className="mr-1 inline align-[-1px]" /> Elige el estado y/o escribe un comentario, luego pulsa <b>Guardar</b>. Solo puedes cambiar el estado y comentar; el resto lo gestiona el administrador.</p>
+                    </>
+                    ); })()}
                   </div>
                 )}
               </div>

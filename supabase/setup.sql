@@ -92,6 +92,14 @@ alter table tasks add column if not exists task_ref text;
 alter table tasks add column if not exists comments jsonb not null default '[]'::jsonb;
 alter table tasks add column if not exists employee_touched_at timestamptz;
 
+-- 3d-quater) Rastreo "Nueva / Actualizada" POR PERSONA.
+-- assignee_seen_at = última vez que el EMPLEADO vio la tarea (tag "Nueva" si es null;
+--   "Actualizada" si admin_touched_at es posterior). Al abrirla, el empleado la marca vista.
+-- admin_touched_at = última vez que el ADMIN (CEO) cambió la tarea → dispara "Actualizada"
+--   y la campanita del empleado. El empleado NO puede tocarla (la protege el trigger).
+alter table tasks add column if not exists assignee_seen_at timestamptz;
+alter table tasks add column if not exists admin_touched_at timestamptz;
+
 -- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
 alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
 alter table tasks add column if not exists rating_comment text;
@@ -202,6 +210,9 @@ begin
     new.category := old.category; new.rating := old.rating;
     new.rating_comment := old.rating_comment; new.ai_usage := old.ai_usage;
     new.task_ref := old.task_ref; new.created_at := old.created_at;
+    -- El empleado NO puede alterar el sello del admin (evita apagarse su propia campanita).
+    -- Sí puede escribir assignee_seen_at (marcar la tarea como vista) — no se revierte.
+    new.admin_touched_at := old.admin_touched_at;
     if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then
       new.status := old.status;
     end if;

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 
@@ -591,7 +591,10 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "" });
   const [contextPreview, setContextPreview] = useState({});
   const [loadedState, setLoadedState] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Sin guardar");
+  const [saveStatus, setSaveStatus] = useState("Sin cambios");
+  const [dirty, setDirty] = useState(false);      // hay cambios sin guardar
+  const [saving, setSaving] = useState(false);
+  const dirtyArmed = useRef(false);               // se arma tras la primera carga
 
   useEffect(() => {
     async function loadState() {
@@ -642,39 +645,63 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     loadState();
   }, []);
 
+  // Cache LOCAL inmediato (respaldo en el navegador). El guardado a Supabase ya NO es
+  // automático: es explícito con el botón "Guardar" (saveNow). Así el CEO sabe con certeza
+  // cuándo quedó guardado y no vive cerrando/abriendo para verificar.
   useEffect(() => {
     if (!loadedState) return;
     localStorage.setItem(STORE_KEY, JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany }));
+  }, [companies, tasks, sourceRecords, people, activeCompany, loadedState]);
+
+  // Marca "cambios sin guardar" cuando cambian los DATOS (no la navegación). Se arma
+  // después de la primera carga para no marcar el estado inicial como pendiente.
+  useEffect(() => {
+    if (!loadedState) return;
+    if (!dirtyArmed.current) { dirtyArmed.current = true; return; }
+    setDirty(true);
+    setSaveStatus("● Cambios sin guardar");
+  }, [companies, tasks, sourceRecords, people, loadedState]);
+
+  // Aviso del navegador si intenta salir con cambios sin guardar.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const handler = (event) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  // Guardado EXPLÍCITO a Supabase (botón). Devuelve estado claro: guardado ✓ / error.
+  async function saveNow() {
     if (!opsData.opsDataReady()) {
       setSaveStatus("Guardado solo en este navegador");
+      setDirty(false);
       return;
     }
-    const timer = setTimeout(async () => {
-      try {
-        setSaveStatus("Guardando…");
-        const saved = await opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany });
-        setSaveStatus(saved.warning
-          ? `⚠ ${saved.warning}`
-          : `Supabase: ${new Date(saved.updatedAt).toLocaleString()}`);
-      } catch (e) {
-        // Sesion caida/expirada: avisar arriba para que el CEO NO siga trabajando al aire.
-        // El token se intenta refrescar; si funciona, este efecto se reintenta (token en deps).
-        if (opsData.isAuthError(e)) {
-          setSaveStatus("⚠ Sesión caída: tus cambios NO se guardaron. Reconectando…");
-          onAuthError?.();
-          return;
-        }
-        // Hacer VISIBLE el error real: si falta una columna nueva (scope, project_images,
-        // category, completed_at, worked_hours) el guardado falla entero. Hay que correr
-        // supabase/setup.sql. Antes esto se tragaba en silencio y "todo desaparecía".
-        const msg = String(e?.message || "");
-        setSaveStatus(/column|does not exist|PGRST/i.test(msg)
-          ? `⚠ Falta migrar la base (corre supabase/setup.sql): ${msg}`
-          : `⚠ No se guardó en Supabase: ${msg || "error desconocido"}`);
+    setSaving(true);
+    setSaveStatus("Guardando…");
+    try {
+      const saved = await opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany });
+      if (saved.warning) {
+        setSaveStatus(`⚠ ${saved.warning}`);
+      } else {
+        setSaveStatus(`Guardado ✓ ${new Date(saved.updatedAt).toLocaleTimeString()}`);
+        setDirty(false);
       }
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [companies, tasks, sourceRecords, people, activeCompany, loadedState, token]);
+    } catch (e) {
+      if (opsData.isAuthError(e)) {
+        setSaveStatus("⚠ Sesión caída: NO se guardó. Reconectando…");
+        onAuthError?.();
+        return;
+      }
+      // Hacer VISIBLE el error real: si falta una columna nueva el guardado falla entero.
+      const msg = String(e?.message || "");
+      setSaveStatus(/column|does not exist|PGRST/i.test(msg)
+        ? `⚠ Falta migrar la base (corre supabase/setup.sql): ${msg}`
+        : `⚠ No se guardó en Supabase: ${msg || "error desconocido"}`);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Asigna el codigo de referencia FIJO (AR01…) a las tareas que no lo tienen y lo persiste.
   // Se congela: una vez asignado no cambia aunque se borren o reordenen otras tareas.
@@ -706,6 +733,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     }
     if (activeStatus === "open") return task.status !== "done";
     if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done";
+    // "updated" = tocadas por un empleado y aún sin revisar por el admin.
+    if (activeStatus === "updated") return Boolean(task.employeeTouchedAt);
     return task.status === activeStatus;
   });
 
@@ -716,6 +745,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       dueToday: open.filter((task) => task.dueDate <= todayIso()).length,
       blocked: open.filter((task) => task.status === "blocked").length,
       companies: companies.length,
+      // Actualizadas por un empleado y aún sin revisar (employeeTouchedAt presente).
+      updatedPending: tasks.filter((task) => task.employeeTouchedAt).length,
     };
   }, [companies.length, tasks]);
 
@@ -852,6 +883,12 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         next.completedAt = "";
         next.workedHours = null;
       }
+      // Sello de "el admin tocó esta tarea" → el empleado la verá "Actualizada" y le
+      // sonará la campanita. Excepción: marcar revisada (solo limpia employeeTouchedAt)
+      // NO es una novedad para el empleado, así que no actualiza el sello.
+      const keys = Object.keys(patch);
+      const onlyMarkReviewed = keys.length === 1 && keys[0] === "employeeTouchedAt";
+      if (!onlyMarkReviewed) next.adminTouchedAt = new Date().toISOString();
       return next;
     }));
   }
@@ -1397,7 +1434,22 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             >
               <Plus size={16} /> Subir insumo global
             </button>
-            <p className="text-xs text-[#667085]">{saveStatus}</p>
+            <div className="flex w-full flex-col gap-1 sm:w-auto sm:items-end">
+              <button
+                type="button"
+                onClick={saveNow}
+                disabled={saving || !dirty}
+                title={dirty ? "Guardar los cambios en Supabase" : "No hay cambios sin guardar"}
+                className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold sm:w-auto"
+                style={dirty
+                  ? { background: "#17727A", color: "#fff" }
+                  : { background: "#EAECF0", color: "#98A2B3", cursor: "default" }}
+              >
+                {saving ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}
+                {saving ? "Guardando…" : dirty ? "Guardar cambios" : "Guardado"}
+              </button>
+              <p className="text-xs" style={{ color: dirty ? "#B54708" : "#667085" }}>{saveStatus}</p>
+            </div>
           </div>
         </div>
 
@@ -1454,16 +1506,26 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           )}
         </div>
 
-        {(metrics.dueToday > 0 || metrics.blocked > 0) && (
+        {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0) && (
           <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 text-sm">
             <span className="font-semibold uppercase tracking-[0.08em] text-[#B76E00]">Requiere tu atención hoy</span>
+            {metrics.updatedPending > 0 && (
+              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("updated"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
+                className="inline-flex items-center gap-1 font-semibold text-[#6D28D9] underline-offset-2 hover:underline" title="Ver las tareas actualizadas por revisar">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#6D28D9" }} />
+                {metrics.updatedPending} actualizada(s) por revisar
+              </button>
+            )}
             {metrics.dueToday > 0 && <span className="font-semibold text-[#8A5700]">{metrics.dueToday} vence(n) hoy</span>}
             {metrics.blocked > 0 && <span className="font-semibold text-[#B42318]">{metrics.blocked} con bloqueo</span>}
           </div>
         )}
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <Metric label="Tareas abiertas" value={metrics.open} tone="#17727A" icon={ListChecks} />
+          <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("updated"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }} className="text-left" title="Ver las tareas actualizadas por revisar">
+            <Metric label="Actualizadas por revisar" value={metrics.updatedPending} tone="#6D28D9" icon={MessageCircle} />
+          </button>
           <Metric label="Vencen hoy" value={metrics.dueToday} tone="#B76E00" icon={CalendarDays} />
           <Metric label="Bloqueos" value={metrics.blocked} tone="#B42318" icon={AlertTriangle} />
           <Metric label="Empresas" value={metrics.companies} tone="#344054" icon={Building2} />
@@ -2051,6 +2113,7 @@ function TasksTable({
         <div className={`mt-3 flex flex-wrap gap-2 ${taskQuery.trim() ? "opacity-40 pointer-events-none" : ""}`}>
           {[
             ["open", "Abiertas"],
+            ["updated", "Actualizadas"],
             ["today", "Por vencer"],
             ["blocked", "Bloqueadas"],
             ["review", "En revisión"],
@@ -2438,6 +2501,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
                 {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
               </span>
+              {task.employeeTouchedAt && (
+                <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
+                </span>
+              )}
               {Array.isArray(task.comments) && task.comments.length > 0 && (
                 <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6D28D9" }}>
                   <MessageCircle size={11} /> {task.comments.length}
@@ -2547,18 +2615,24 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         </span>
       </summary>
       <div className="mt-2 space-y-2">
+        {task.employeeTouchedAt && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#C4B5FD] bg-[#F5F3FF] px-2.5 py-1.5">
+            <span className="text-xs font-semibold text-[#6D28D9]">
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: "#6D28D9" }} />
+              Actualizada por el empleado · {new Date(task.employeeTouchedAt).toLocaleString()}
+            </span>
+            <button type="button" onClick={() => onChangeTask(task.id, { employeeTouchedAt: "" })}
+              className="rounded border border-[#6D28D9] px-2 py-0.5 text-[11px] font-semibold text-[#6D28D9]">
+              Marcar revisada
+            </button>
+          </div>
+        )}
         {Array.isArray(task.comments) && task.comments.length > 0 && (
           <div className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#6D28D9]">
                 <MessageCircle size={12} className="mr-1 inline align-[-2px]" /> Comentarios ({task.comments.length})
               </span>
-              {task.employeeTouchedAt && (
-                <button type="button" onClick={() => onChangeTask(task.id, { employeeTouchedAt: "" })}
-                  className="rounded border border-[#6D28D9] px-1.5 py-0.5 text-[10px] font-semibold text-[#6D28D9]">
-                  Marcar revisada
-                </button>
-              )}
             </div>
             <ul className="space-y-1.5">
               {task.comments.map((c, i) => (
