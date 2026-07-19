@@ -24,12 +24,23 @@ function isoWeek(d) {
 function chip(kind, label) { return `<span class="chip ${kind}">${esc(label)}</span>`; }
 const PENDIENTE = chip("n", "por instrumentar");
 
-export function buildDesignOpsReportHtml({ company, tasks = [], people = [], clients = [], logoUrl = "" }) {
+const PERIOD_LABEL = { mes: "Mes", trimestre: "Trimestre", semestre: "Semestre", "año": "Año" };
+const PERIOD_DAYS = { mes: 30, trimestre: 90, semestre: 180, "año": 365 };
+
+export function buildDesignOpsReportHtml({ company, tasks = [], people = [], clients = [], logoUrl = "", period = "trimestre" }) {
   const today = todayIso();
   const now = new Date();
+  const DAY = 86400000;
+  const periodDays = PERIOD_DAYS[period] || 90;
+  const periodLabel = PERIOD_LABEL[period] || "Trimestre";
+  const cutoff = new Date(now.getTime() - periodDays * DAY);
+  const weeks = Math.max(1, periodDays / 7);
   const ct = tasks.filter((t) => t.companyId === company.id);
   const active = ct.filter((t) => t.status !== "done");
-  const done = ct.filter((t) => t.status === "done");
+  const doneAll = ct.filter((t) => t.status === "done");
+  // Cerradas DENTRO DEL PERIODO seleccionado (mes/trimestre/semestre/año). Las métricas de
+  // resultado/flujo se miden sobre esta ventana; lo activo (WIP, cola, vencidas) es al día.
+  const done = doneAll.filter((t) => t.completedAt && new Date(t.completedAt) >= cutoff);
   const isOverdue = (t) => t.dueDate && t.dueDate < today && t.status !== "done" && t.status !== "review";
   const overdue = active.filter(isOverdue);
   const blocked = active.filter((t) => t.status === "blocked");
@@ -44,20 +55,17 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   const predictPct = dueDone.length ? Math.round((onTime / dueDone.length) * 100) : null;
 
   // --- Métricas senior computables desde los datos reales (marco REACH · NN/g) ---
-  const DAY = 86400000;
   const nameOf0 = (id) => people.find((p) => p.id === id)?.name || "";
-  // Cycle time (lead time): días calendario de creada a cerrada.
+  // Cycle time (lead time): días calendario de creada a cerrada (en el periodo).
   const cycArr = done.filter((t) => t.createdAt && t.completedAt).map((t) => (new Date(t.completedAt) - new Date(t.createdAt)) / DAY).filter((d) => d >= 0);
   const cycleTime = cycArr.length ? cycArr.reduce((a, b) => a + b, 0) / cycArr.length : null;
-  // Throughput: cerradas en las últimas 4 semanas ÷ 4.
-  const fourWk = new Date(now.getTime() - 28 * DAY);
-  const doneRecent = done.filter((t) => t.completedAt && new Date(t.completedAt) >= fourWk);
-  const throughputWk = +(doneRecent.length / 4).toFixed(1);
+  // Throughput: cerradas en el periodo ÷ semanas del periodo.
+  const throughputWk = +(done.length / weeks).toFixed(1);
   const wip = doing.length;
   // Puntos de diseño → velocidad (pts/sem) y utilización por diseñador.
   const withPts = ct.filter((t) => t.designPoints != null);
-  const ptsDoneRecent = doneRecent.reduce((a, t) => a + (Number(t.designPoints) || 0), 0);
-  const velocity = withPts.length ? +(ptsDoneRecent / 4).toFixed(1) : null;
+  const ptsDoneP = done.reduce((a, t) => a + (Number(t.designPoints) || 0), 0);
+  const velocity = withPts.length ? +(ptsDoneP / weeks).toFixed(1) : null;
   const cap = velocity && velocity > 0 ? velocity : 10;
   const byDesigner = {};
   for (const t of active) if (t.assigneeId && t.designPoints != null) byDesigner[t.assigneeId] = (byDesigner[t.assigneeId] || 0) + Number(t.designPoints);
@@ -187,10 +195,10 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
       <div><div class="name">MediaLab Ingeniería</div><div class="tag">DesignOps · Visibilidad de producto</div></div>
     </div>
     <div class="meta">
-      <div class="big">Reporte semanal DesignOps</div>
+      <div class="big">Reporte DesignOps · ${esc(periodLabel)}</div>
       <div>Cliente: <b>${esc(company.name)}</b>${subs.length ? ` · ${subs.map(esc).join(" · ")}` : ""}</div>
-      <div>Semana ${isoWeek(now)} · corte ${now.getDate()} ${MESES[now.getMonth()]} ${now.getFullYear()}</div>
-      <div>Responsable: DesignOps · Cadencia: semanal a PM</div>
+      <div>Periodo: ${esc(periodLabel)} · corte ${now.getDate()} ${MESES[now.getMonth()]} ${now.getFullYear()}</div>
+      <div>Responsable: DesignOps · Semana ${isoWeek(now)}</div>
     </div>
   </div>
 

@@ -257,6 +257,14 @@ export async function saveState(token, state) {
   return { updatedAt, warning: warnings.length ? [...new Set(warnings)].join(" ") : "" };
 }
 
+// Guarda UNA sola tarea (botón "Guardar tarea" por tarjeta). Upsert por id, resiliente a
+// columnas nuevas que aún no estén migradas.
+export async function saveTask(token, task) {
+  if (!task?.id) return;
+  await upsertResilient(token, "tasks?on_conflict=id", [taskToRow(task)],
+    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools"]);
+}
+
 // Borrado EXPLÍCITO (una tarea/persona a la vez) — sustituye al deleteMissing masivo.
 export async function deleteTask(token, id) {
   if (!id) return;

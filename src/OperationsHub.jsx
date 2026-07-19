@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -595,10 +595,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "" });
   const [contextPreview, setContextPreview] = useState({});
   const [loadedState, setLoadedState] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Sin cambios");
-  const [dirty, setDirty] = useState(false);      // hay cambios sin guardar
-  const [saving, setSaving] = useState(false);
-  const dirtyArmed = useRef(false);               // se arma tras la primera carga
+  const [saveStatus, setSaveStatus] = useState("");
 
   useEffect(() => {
     async function loadState() {
@@ -649,63 +646,22 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     loadState();
   }, []);
 
-  // Cache LOCAL inmediato (respaldo en el navegador). El guardado a Supabase ya NO es
-  // automático: es explícito con el botón "Guardar" (saveNow). Así el CEO sabe con certeza
-  // cuándo quedó guardado y no vive cerrando/abriendo para verificar.
+  // Autosave silencioso de respaldo (estructura: empresas, personas, insumos y también
+  // tareas). NO se muestra un botón global "Guardar cambios" (confundía): el guardado
+  // visible es POR TAREA (botón "Guardar tarea" en cada tarjeta, con su ✓). Este autosave
+  // es solo la red de seguridad para que nada se pierda. Cache local inmediato + Supabase
+  // con debounce.
   useEffect(() => {
-    if (!loadedState) return;
+    if (!loadedState) return undefined;
     localStorage.setItem(STORE_KEY, JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany }));
-  }, [companies, tasks, sourceRecords, people, activeCompany, loadedState]);
-
-  // Marca "cambios sin guardar" cuando cambian los DATOS (no la navegación). Se arma
-  // después de la primera carga para no marcar el estado inicial como pendiente.
-  useEffect(() => {
-    if (!loadedState) return;
-    if (!dirtyArmed.current) { dirtyArmed.current = true; return; }
-    setDirty(true);
-    setSaveStatus("● Cambios sin guardar");
-  }, [companies, tasks, sourceRecords, people, loadedState]);
-
-  // Aviso del navegador si intenta salir con cambios sin guardar.
-  useEffect(() => {
-    if (!dirty) return undefined;
-    const handler = (event) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
-
-  // Guardado EXPLÍCITO a Supabase (botón). Devuelve estado claro: guardado ✓ / error.
-  async function saveNow() {
-    if (!opsData.opsDataReady()) {
-      setSaveStatus("Guardado solo en este navegador");
-      setDirty(false);
-      return;
-    }
-    setSaving(true);
-    setSaveStatus("Guardando…");
-    try {
-      const saved = await opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany });
-      if (saved.warning) {
-        setSaveStatus(`⚠ ${saved.warning}`);
-      } else {
-        setSaveStatus(`Guardado ✓ ${new Date(saved.updatedAt).toLocaleTimeString()}`);
-        setDirty(false);
-      }
-    } catch (e) {
-      if (opsData.isAuthError(e)) {
-        setSaveStatus("⚠ Sesión caída: NO se guardó. Reconectando…");
-        onAuthError?.();
-        return;
-      }
-      // Hacer VISIBLE el error real: si falta una columna nueva el guardado falla entero.
-      const msg = String(e?.message || "");
-      setSaveStatus(/column|does not exist|PGRST/i.test(msg)
-        ? `⚠ Falta migrar la base (corre supabase/setup.sql): ${msg}`
-        : `⚠ No se guardó en Supabase: ${msg || "error desconocido"}`);
-    } finally {
-      setSaving(false);
-    }
-  }
+    if (!opsData.opsDataReady()) return undefined;
+    const timer = setTimeout(() => {
+      opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany })
+        .then((saved) => { if (saved?.warning) setSaveStatus(`⚠ ${saved.warning}`); })
+        .catch((e) => { if (opsData.isAuthError(e)) onAuthError?.(); });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [companies, tasks, sourceRecords, people, activeCompany, loadedState, token]);
 
   // Asigna el codigo de referencia FIJO (AR01…) a las tareas que no lo tienen y lo persiste.
   // Se congela: una vez asignado no cambia aunque se borren o reordenen otras tareas.
@@ -895,6 +851,18 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       if (!onlyMarkReviewed) next.adminTouchedAt = new Date().toISOString();
       return next;
     }));
+  }
+
+  // Guardado POR TAREA (botón "Guardar tarea"): persiste esa tarea de inmediato. Devuelve
+  // una promesa para que la tarjeta muestre "Guardando…/Guardado ✓". El autosave sigue como
+  // respaldo, pero este botón es el guardado visible y con control que pidieron.
+  function saveTaskNow(id) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task || !opsData.opsDataReady()) return Promise.resolve();
+    return opsData.saveTask(token, task).catch((e) => {
+      if (opsData.isAuthError(e)) onAuthError?.();
+      throw e;
+    });
   }
 
   function deleteTask(id) {
@@ -1438,22 +1406,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             >
               <Plus size={16} /> Subir insumo global
             </button>
-            <div className="flex w-full flex-col gap-1 sm:w-auto sm:items-end">
-              <button
-                type="button"
-                onClick={saveNow}
-                disabled={saving || !dirty}
-                title={dirty ? "Guardar los cambios en Supabase" : "No hay cambios sin guardar"}
-                className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold sm:w-auto"
-                style={dirty
-                  ? { background: "#17727A", color: "#fff" }
-                  : { background: "#EAECF0", color: "#98A2B3", cursor: "default" }}
-              >
-                {saving ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}
-                {saving ? "Guardando…" : dirty ? "Guardar cambios" : "Guardado"}
-              </button>
-              <p className="text-xs" style={{ color: dirty ? "#B54708" : "#667085" }}>{saveStatus}</p>
-            </div>
+            {saveStatus && <p className="text-xs" style={{ color: "#B54708" }}>{saveStatus}</p>}
           </div>
         </div>
 
@@ -1643,6 +1596,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               onUpdateProjectDescription={updateProjectDescription}
             onChangeTask={updateTask}
             onDeleteTask={deleteTask}
+            onSaveTask={saveTaskNow}
             onUploadLogo={uploadCompanyLogo}
             onToggleLogoBg={toggleLogoBg}
             onToggleProjectImageBg={toggleProjectImageBg}
@@ -1762,6 +1716,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onAddTask={addManualTask}
             onChangeTask={updateTask}
             onDeleteTask={deleteTask}
+            onSaveTask={saveTaskNow}
             onUploadAttachment={uploadTaskAttachment}
             onDeleteAttachment={deleteTaskAttachment}
           />
@@ -2083,6 +2038,7 @@ function TasksTable({
   onAddTask,
   onChangeTask,
   onDeleteTask,
+  onSaveTask,
   onUploadAttachment,
   onDeleteAttachment,
 }) {
@@ -2254,6 +2210,7 @@ function TasksTable({
                 onOpenChange={(isOpen) => setOpenTaskId((prev) => (isOpen ? task.id : prev === task.id ? null : prev))}
                 onChangeTask={onChangeTask}
                 onDeleteTask={onDeleteTask}
+                onSaveTask={onSaveTask}
                 onUploadAttachment={onUploadAttachment}
                 onDeleteAttachment={onDeleteAttachment}
               />
@@ -2460,7 +2417,14 @@ function contactFor(person, message, subject) {
   return { href: "", medium: "Sin medio" };
 }
 
-function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onUploadAttachment, onDeleteAttachment }) {
+function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onSaveTask, onUploadAttachment, onDeleteAttachment }) {
+  const [taskSave, setTaskSave] = useState("idle"); // idle | saving | saved | error
+  const doSaveTask = async () => {
+    if (!onSaveTask) return;
+    setTaskSave("saving");
+    try { await onSaveTask(task.id); setTaskSave("saved"); setTimeout(() => setTaskSave("idle"), 2500); }
+    catch { setTaskSave("error"); }
+  };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [openInternal, setOpenInternal] = useState(false);
@@ -2470,8 +2434,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [mRating, setMRating] = useState(0);
   const [mFeedback, setMFeedback] = useState("");
   const [mAi, setMAi] = useState(0);
-  const openDoneModal = () => { setMRating(task.rating || 0); setMFeedback(task.ratingComment || ""); setMAi(task.aiUsage || 0); setDoneModal(true); };
-  const saveDone = () => { onChangeTask(task.id, { status: "done", rating: mRating || null, ratingComment: mFeedback || "", aiUsage: mAi || null }); setDoneModal(false); };
+  const [mTools, setMTools] = useState([]);
+  const openDoneModal = () => { setMRating(task.rating || 0); setMFeedback(task.ratingComment || ""); setMAi(task.aiUsage || 0); setMTools(Array.isArray(task.tools) ? task.tools : []); setDoneModal(true); };
+  const saveDone = () => { onChangeTask(task.id, { status: "done", rating: mRating || null, ratingComment: mFeedback || "", aiUsage: mAi || null, tools: mTools }); setDoneModal(false); };
   // Acordeón controlado por la lista (solo una tarea abierta a la vez) o autónomo si no.
   const controlled = typeof onOpenChange === "function";
   const open = controlled ? Boolean(openProp) : openInternal;
@@ -2528,7 +2493,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </span>
           )}
           {!open && (
-            <span className="flex flex-wrap gap-1 text-xs font-medium text-[#667085]">
+            <span className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#667085]">
               {task.category && (
                 <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
                   <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
@@ -2576,19 +2541,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           )}
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          {board.url && (
-            <a
-              href={board.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => event.stopPropagation()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]"
-              title={`Abrir/actualizar ${board.tool}`}
-            >
-              <ExternalLink size={14} />
-            </a>
-          )}
-          {reportHref && (
+          {/* Colapsada = solo eliminar. Enviar / retraso / adjuntar solo al abrir la tarea.
+              (El botón de "abrir Jira/plataforma" por tarea se quitó: casi nadie lo usaba.) */}
+          {open && reportHref && (
             <a
               href={reportHref}
               target="_blank"
@@ -2600,7 +2555,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               {reportMedium === "WhatsApp" ? <MessageCircle size={14} /> : <Send size={14} />}
             </a>
           )}
-          {overdue && delayHref && (
+          {open && overdue && delayHref && (
             <a
               href={delayHref}
               target="_blank"
@@ -2612,19 +2567,21 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               <AlertTriangle size={14} />
             </a>
           )}
-          <label className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]" title="Subir adjunto">
-            <Paperclip size={14} />
-            <input
-              type="file"
-              className="hidden"
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onUploadAttachment(task.id, file);
-                event.target.value = "";
-              }}
-            />
-          </label>
+          {open && (
+            <label className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#D0D5DD] bg-white text-[#344054]" title="Subir adjunto">
+              <Paperclip size={14} />
+              <input
+                type="file"
+                className="hidden"
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onUploadAttachment(task.id, file);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          )}
           {confirmDelete ? (
             <span className="inline-flex items-center gap-1 rounded-md border border-[#B42318] bg-[#FEF3F2] px-1.5 py-0.5">
               <span className="text-xs font-semibold text-[#B42318]">¿Borrar?</span>
@@ -2739,62 +2696,12 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </div>
         </div>
-        {/* Instrumentación DesignOps: puntos de diseño, defectos QA y Change Request.
-            Alimentan velocidad, utilización, calidad y eficiencia del tablero/reporte. */}
-        <div>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">DesignOps</span>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-1">
-              <span className="text-xs text-[#667085]">Puntos:</span>
-              {[[1, "Simple"], [2, "Media"], [4, "Compleja"]].map(([p, label]) => {
-                const on = Number(task.designPoints) === p;
-                return (
-                  <button key={p} type="button" title={`${label} (${p} pt${p > 1 ? "s" : ""})`}
-                    onClick={() => onChangeTask(task.id, { designPoints: on ? null : p })}
-                    className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-md border px-1.5 text-xs font-bold"
-                    style={on ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#475467" }}>
-                    {p}
-                  </button>
-                );
-              })}
-            </div>
-            <label className="inline-flex items-center gap-1 text-xs text-[#667085]">
-              Defectos QA:
-              <input type="number" min="0" step="1" value={task.qaDefects ?? ""}
-                onChange={(e) => onChangeTask(task.id, { qaDefects: e.target.value === "" ? null : Number(e.target.value) })}
-                className="h-7 w-14 rounded-md border border-[#D0D5DD] px-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]" placeholder="—" />
-            </label>
-            <button type="button"
-              onClick={() => onChangeTask(task.id, { changeRequest: !task.changeRequest })}
-              className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold"
-              style={task.changeRequest ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#667085" }}
-              title="Cambio pedido por el cliente después de aprobar el diseño">
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: task.changeRequest ? "#B54708" : "#D0D5DD" }} />
-              Change Request
-            </button>
-            <label className="inline-flex items-center gap-1 text-xs text-[#667085]">
-              % IA:
-              <input type="number" min="0" max="100" step="5" value={task.aiUsage ?? ""}
-                onChange={(e) => onChangeTask(task.id, { aiUsage: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value))) })}
-                className="h-7 w-14 rounded-md border border-[#D0D5DD] px-1.5 text-xs text-[#344054] outline-none focus:border-[#6941C6]" placeholder="—" />
-            </label>
-          </div>
-          {/* Herramientas usadas (uso/consumo de IA y tooling por tarea). */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <span className="mr-0.5 text-xs text-[#667085]">Herramientas:</span>
-            {TOOL_OPTIONS.map((tool) => {
-              const on = Array.isArray(task.tools) && task.tools.includes(tool);
-              return (
-                <button key={tool} type="button"
-                  onClick={() => { const cur = Array.isArray(task.tools) ? task.tools : []; onChangeTask(task.id, { tools: on ? cur.filter((x) => x !== tool) : [...cur, tool] }); }}
-                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                  style={on ? { borderColor: "#6941C6", background: "#F4F1FD", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#667085" }}>
-                  {tool}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Puntos de diseño: los asigna el MD al analizar la tarea (automático). Se muestran
+            solo como referencia si existen; ya NO es un campo manual. QA/CR/IA/herramientas
+            salen del feedback de cierre, no de la tarjeta. */}
+        {task.designPoints != null && (
+          <p className="text-xs text-[#667085]">Puntos de diseño (auto): <b className="text-[#17727A]">{task.designPoints}</b></p>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
           <select
@@ -2972,6 +2879,20 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               className="mt-2 w-full rounded-md border border-[#A6D9C4] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#0D7A4F]"
             />
             {task.aiUsage != null && <p className="mt-1 text-xs text-[#6941C6]">IA usada: {task.aiUsage}%</p>}
+            {Array.isArray(task.tools) && task.tools.length > 0 && <p className="mt-0.5 text-xs text-[#6941C6]">Herramientas: {task.tools.join(", ")}</p>}
+          </div>
+        )}
+        {/* Guardar TAREA (guardado por tarjeta, con confirmación). */}
+        {onSaveTask && (
+          <div className="flex items-center gap-2 border-t border-[#E4DED6] pt-2">
+            <button type="button" onClick={doSaveTask} disabled={taskSave === "saving"}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white"
+              style={{ background: taskSave === "saving" ? "#7FB0B4" : "#17727A" }}>
+              {taskSave === "saving" ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />}
+              {taskSave === "saving" ? "Guardando…" : "Guardar tarea"}
+            </button>
+            {taskSave === "saved" && <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#0D7A4F]"><Check size={14} /> Guardada</span>}
+            {taskSave === "error" && <span className="text-xs font-semibold text-[#B42318]">⚠ No se guardó. Reintenta.</span>}
           </div>
         )}
       </div>
@@ -2998,6 +2919,22 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               <span className="text-xs font-semibold text-[#667085]">¿Cuánta IA se usó? <b className="text-[#6941C6]">{mAi}%</b></span>
               <input type="range" min="0" max="100" step="5" value={mAi} onChange={(e) => setMAi(Number(e.target.value))} className="mt-1 w-full" style={{ accentColor: "#6941C6" }} />
             </label>
+            <div className="mt-3">
+              <span className="text-xs font-semibold text-[#667085]">¿Con qué herramientas se trabajó?</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {TOOL_OPTIONS.map((tool) => {
+                  const on = mTools.includes(tool);
+                  return (
+                    <button key={tool} type="button"
+                      onClick={() => setMTools((cur) => (on ? cur.filter((x) => x !== tool) : [...cur, tool]))}
+                      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                      style={on ? { borderColor: "#6941C6", background: "#F4F1FD", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#667085" }}>
+                      {tool}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={saveDone} className="flex-1 rounded-md bg-[#0D7A4F] px-3 py-2 text-sm font-semibold text-white">Guardar y finalizar</button>
               <button type="button" onClick={() => { onChangeTask(task.id, { status: "done" }); setDoneModal(false); }} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Solo finalizar</button>
@@ -3029,6 +2966,7 @@ function CompanyPanel({
   onUpdateProjectDescription,
   onChangeTask,
   onDeleteTask,
+  onSaveTask,
   onUploadLogo,
   onToggleLogoBg,
   onToggleProjectImageBg,
@@ -3424,9 +3362,11 @@ function CompanyPanel({
                       <button
                         type="button"
                         onClick={() => onArchiveClient(client)}
-                        className="rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#344054]"
+                        title="Archivar subproyecto"
+                        aria-label="Archivar subproyecto"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D0D5DD] text-[#344054]"
                       >
-                        Archivar
+                        <Archive size={14} />
                       </button>
                     )}
                   </div>
@@ -3455,8 +3395,11 @@ function CompanyPanel({
                       <Plus size={15} /> Nueva tarea
                     </button>
                     {getProjectBoardConfig(company, client).url && (
-                      <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">
-                        <ExternalLink size={15} /> Abrir {getProjectBoardConfig(company, client).tool}
+                      <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer"
+                        title={`Abrir ${getProjectBoardConfig(company, client).tool}`}
+                        aria-label={`Abrir ${getProjectBoardConfig(company, client).tool}`}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E4DED6] text-[#98A2B3]">
+                        <ExternalLink size={14} />
                       </a>
                     )}
                   </div>
@@ -3559,6 +3502,7 @@ function CompanyPanel({
                           onOpenChange={(isOpen) => setOpenTaskId((prev) => (isOpen ? task.id : prev === task.id ? null : prev))}
                           onChangeTask={onChangeTask}
                           onDeleteTask={onDeleteTask}
+                          onSaveTask={onSaveTask}
                           onUploadAttachment={onUploadTaskAttachment}
                           onDeleteAttachment={onDeleteTaskAttachment}
                         />
@@ -3674,6 +3618,29 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
   const aiTasks = companyTasks.filter((t) => t.aiUsage != null);
   const avgAi = aiTasks.length ? Math.round(aiTasks.reduce((s, t) => s + Number(t.aiUsage), 0) / aiTasks.length) : null;
 
+  // Métricas DesignOps EN PANTALLA (proceso total) — mismas que el reporte, por periodo.
+  const DAY_MS = 86400000;
+  const weeksP = Math.max(1, ({ mes: 30, trimestre: 90, semestre: 180, "año": 365 }[period] || 90) / 7);
+  const cycArr = doneInPeriod.filter((t) => t.createdAt && t.completedAt).map((t) => (new Date(t.completedAt) - new Date(t.createdAt)) / DAY_MS).filter((d) => d >= 0);
+  const cycleTime = cycArr.length ? Math.round(cycArr.reduce((a, b) => a + b, 0) / cycArr.length) : null;
+  const throughputWk = +(doneInPeriod.length / weeksP).toFixed(1);
+  const wip = enProgreso;
+  const withPts = companyTasks.filter((t) => t.designPoints != null);
+  const velocity = withPts.length ? +(doneInPeriod.reduce((a, t) => a + (Number(t.designPoints) || 0), 0) / weeksP).toFixed(1) : null;
+  const capV = velocity && velocity > 0 ? velocity : 10;
+  const byDes = {};
+  for (const t of activas) if (t.assigneeId && t.designPoints != null) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + Number(t.designPoints);
+  const utilVals = Object.values(byDes).map((p) => Math.round((p / capV) * 100));
+  const avgUtil = utilVals.length ? Math.round(utilVals.reduce((a, b) => a + b, 0) / utilVals.length) : null;
+  const devArr = doneInPeriod.filter((t) => t.dueDate && t.createdAt && t.completedAt).map((t) => { const est = (new Date(t.dueDate) - new Date(t.createdAt)) / DAY_MS; const real = (new Date(t.completedAt) - new Date(t.createdAt)) / DAY_MS; return est > 0 ? (real - est) / est : null; }).filter((v) => v != null);
+  const deviationPct = devArr.length ? Math.round((devArr.reduce((a, b) => a + b, 0) / devArr.length) * 100) : null;
+  const defTasks2 = companyTasks.filter((t) => t.qaDefects != null);
+  const defectsPer10 = defTasks2.length && doneInPeriod.length ? +(defTasks2.reduce((a, t) => a + (Number(t.qaDefects) || 0), 0) / doneInPeriod.length * 10).toFixed(1) : null;
+  const crCount = companyTasks.filter((t) => t.changeRequest).length;
+  const toolFreq = {};
+  for (const t of companyTasks) if (Array.isArray(t.tools)) for (const tool of t.tools) toolFreq[tool] = (toolFreq[tool] || 0) + 1;
+  const toolsSorted = Object.entries(toolFreq).sort((a, b) => b[1] - a[1]);
+
   const bySub = clients.map((cl) => {
     const ts = companyTasks.filter((t) => t.client === cl);
     const d = ts.filter((t) => t.status === "done").length;
@@ -3714,8 +3681,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
           {[["mes", "Mes"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["año", "Año"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
           ))}
-          <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title="Genera y descarga el reporte semanal DesignOps de esta empresa (PDF)"><Download size={12} /> Reporte DesignOps</button>
-          <button type="button" onClick={() => window.print()} className="no-print inline-flex items-center gap-1 rounded-full border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#344054]" title="Imprimir el panel actual"><Download size={12} /> Imprimir</button>
+          <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl, period })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title={`Descargar el reporte DesignOps (${period}, a corte de hoy)`}><Download size={12} /> Reporte DesignOps</button>
         </div>
       </div>
 
@@ -3743,6 +3709,45 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
           <p className="mt-1 font-metrics text-2xl font-semibold"><span className="text-[#B42318]">{vencidas}</span> <span className="text-base text-[#98A2B3]">· {activas.length}</span></p>
           <p className="text-[10px] text-[#98A2B3]">{bloqueadas} bloqueada(s)</p>
         </div>
+      </div>
+
+      {/* Indicadores DesignOps EN PANTALLA (proceso total) — alineados a REACH (NN/g). */}
+      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#17727A]">Indicadores DesignOps · proceso total <span className="font-normal normal-case text-[#98A2B3]">(REACH · {period})</span></p>
+        {/* Flujo del trabajo */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[["Cycle time", cycleTime == null ? "—" : `${cycleTime} d`, "días creada→cerrada"],
+            ["Throughput", throughputWk, "cerradas/sem"],
+            ["WIP", wip, "en progreso"],
+            ["Velocidad", velocity == null ? "—" : `${velocity}`, "pts diseño/sem"]].map(([k, v, s]) => (
+            <div key={k} className="rounded-md bg-[#F7FAFA] p-2">
+              <p className="text-[10px] uppercase tracking-[0.06em] text-[#667085]">{k}</p>
+              <p className="font-metrics text-lg font-semibold text-[#17727A]">{v}</p>
+              <p className="text-[9px] text-[#98A2B3]">{s}</p>
+            </div>
+          ))}
+        </div>
+        {/* Tabla de indicadores por categoría (valor · meta) */}
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead><tr className="text-[10px] uppercase tracking-[0.05em] text-[#98A2B3]"><th className="py-1 pr-2 font-semibold">Indicador</th><th className="py-1 pr-2 font-semibold">Valor</th><th className="py-1 font-semibold">Meta</th></tr></thead>
+            <tbody className="text-[#475467]">
+              {[["Predictibilidad de fecha", onTimePct == null ? "—" : `${onTimePct}%`, "≥ 85%"],
+                ["Desviación de fechas", deviationPct == null ? "—" : `${deviationPct > 0 ? "+" : ""}${deviationPct}%`, "≤ 10%"],
+                ["Utilización por diseñador", avgUtil == null ? "—" : `${avgUtil}%`, "70–90%"],
+                ["Defectos UX/UI (por 10)", defectsPer10 == null ? "—" : `${defectsPer10}`, "≤ 2"],
+                ["Satisfacción del PO", avg == null ? "—" : `${avg.toFixed(1)} / 5`, "≥ 4,5"],
+                ["Change Requests", `${crCount}`, "documentar"],
+                ["Consumo de IA", avgAi == null ? "—" : `${avgAi}%`, "—"]].map(([k, v, m]) => (
+                <tr key={k} className="border-t border-[#F2F4F7]"><td className="py-1 pr-2">{k}</td><td className="py-1 pr-2 font-semibold text-[#1D2939]">{v}</td><td className="py-1 text-[#98A2B3]">{m}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {toolsSorted.length > 0 && (
+          <p className="mt-2 text-[11px] text-[#6941C6]">Herramientas: {toolsSorted.map(([t, n]) => `${t} (${n})`).join(" · ")}</p>
+        )}
+        <p className="mt-1 text-[10px] text-[#98A2B3]">Los indicadores con "—" necesitan capturar el dato (puntos de diseño, defectos). El reporte descargable trae este mismo detalle.</p>
       </div>
 
       {/* Distribución de tareas por estado */}

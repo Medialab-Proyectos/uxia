@@ -377,10 +377,11 @@ function ContactLine({ contacto }) {
   );
 }
 
-function Badge({ children, color, bg }) {
+function Badge({ children, color, bg, title }) {
   return (
     <span
-      className="text-xs px-2 py-0.5 rounded-full font-medium"
+      title={title}
+      className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
       style={{ color, backgroundColor: bg, border: `1px solid ${color}33` }}
     >
       {children}
@@ -1600,7 +1601,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                             {o.persona} · {o.fuente}
                           </p>
                           <div className="flex flex-wrap items-center gap-1 mt-1">
-                            {(() => { const f = frescura(o.createdAt); if (!f) return null; const col = f.tone === "green" ? C.green : f.tone === "amber" ? C.amber : C.coral; return <Badge color={col} bg={`${col}14`}>{f.label} · {f.detail}</Badge>; })()}
+                            {(() => { const f = frescura(o.createdAt); if (!f) return null; const col = f.tone === "green" ? C.green : f.tone === "amber" ? C.amber : C.coral; return <Badge color={col} bg={`${col}14`} title={`Frescura: ${f.detail}`}>{f.label}</Badge>; })()}
                             {o.postulado && <Badge color={C.green} bg={`${C.green}14`}>✓ Postulado</Badge>}
                           </div>
                         </div>
@@ -1868,7 +1869,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           {j.empresa} · {j.fuente}{j.ubicacion ? ` · ${j.ubicacion}` : ""}
                         </p>
                         <div className="flex flex-wrap items-center gap-1 mt-1">
-                          {(() => { const f = frescura(j.createdAt); if (!f) return null; const col = f.tone === "green" ? C.green : f.tone === "amber" ? C.amber : C.coral; return <Badge color={col} bg={`${col}14`}>{f.label} · {f.detail}</Badge>; })()}
+                          {(() => { const f = frescura(j.createdAt); if (!f) return null; const col = f.tone === "green" ? C.green : f.tone === "amber" ? C.amber : C.coral; return <Badge color={col} bg={`${col}14`} title={`Frescura: ${f.detail}`}>{f.label}</Badge>; })()}
                           {j.postulado && <Badge color={C.green} bg={`${C.green}14`}>✓ Postulado</Badge>}
                         </div>
                       </div>
