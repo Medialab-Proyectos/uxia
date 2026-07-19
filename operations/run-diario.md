@@ -4,6 +4,17 @@ Rutina para correr **todos los días**. La app NO busca ni scrapea: Claude Code 
 las consultas/análisis y **guarda todo en Supabase**; la app solo muestra, busca y
 da seguimiento. Nada depende de servidores extra.
 
+> **Normas de referencia (leer y respetar SIEMPRE en cada corrida):**
+> - [`operations/daily-run.md`](daily-run.md) — normas del **Centro de Operaciones**: tareas,
+>   6 estados, ciclo de revisión / request review, novedades, instrumentación DesignOps y las
+>   normas de UI refinadas. Es la fuente de verdad del producto operativo.
+> - [`operations/radar-run.md`](radar-run.md) — normas del **Radar**: caducidad 5 días + archivo
+>   anti-duplicados, tags de frescura, listados fuera de la lista, "Postulado", ubicación honesta
+>   y orden por score.
+>
+> Con leer y ejecutar estos tres MD (maestro + los dos de normas) el recorrido queda completo:
+> no hay reglas fuera de estos documentos.
+
 ## Requisitos (una sola vez)
 - `.env` con `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
 - Tablas creadas: correr **`supabase/setup.sql`** (incluye `insumos_pendientes`,

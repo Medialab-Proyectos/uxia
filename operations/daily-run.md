@@ -202,8 +202,13 @@ respetarlas al crear/actualizar tareas y NO romper el ciclo.
 - Las ediciones o cambios de estado del PROPIO empleado NO son novedad para él.
 - En el portal, "Novedades" NO es un chip hermano de "Activas": al elegir **Activas** aparece
   DEBAJO un sub-filtro por tipo de novedad (Todas · Con novedad · Nuevas · Cambios solicitados ·
-  Actualizadas por el admin). La campana del empleado vive en el HEADER del shell (junto al tema)
-  y sus alertas se marcan vistas al abrirlas; no reaparecen salvo que el conteo vuelva a subir.
+  Actualizadas por el admin), con su CONTEO entre paréntesis. La campana del empleado vive en el
+  HEADER del shell (junto al tema) y sus alertas se marcan vistas al abrirlas.
+- **Alertas por IDENTIDAD, no por conteo** (campana del admin y del empleado): una alerta se
+  recuerda vista por la FIRMA de las tareas que la componen (sus ids), no por el número. Así
+  reaparece si entra o cambia una tarea aunque el total coincida (p. ej. el empleado aprueba/resuelve
+  un request review y la tarea vuelve a revisión). Al pulsar una alerta, navega a su filtro y se marca
+  vista. El portal del empleado además **recarga al volver a la pestaña** para no quedar con datos viejos.
 
 **Ciclo de estados (6 estados):** `ready` (Pendiente) · `doing` (En proceso) · `review`
 (En revisión — del EMPLEADO) · `verificacion` (Verificación — del CLIENTE, solo admin) ·
@@ -213,9 +218,13 @@ respetarlas al crear/actualizar tareas y NO romper el ciclo.
   estado que pone el empleado); el admin la mueve con Aprobar/Devolver.
 - Que el empleado marque `review` **NO es un request review** (no hubo gestión de cambios). Aparece
   como una **nota antes del contenido de la tarjeta** ("El empleado la marcó lista…") con dos botones
-  en línea: **Aprobar** (→ `verificacion`, la manda al cliente) y **Devolver** (→ `doing`).
+  en línea: **Aprobar** (→ `verificacion`, la manda al cliente) y **Devolver**.
+- **Devolver = abrir un request review**: no manda a `doing` en silencio, sino que abre el popup para
+  registrar el MOTIVO del cambio (queda en el historial) y recién ahí vuelve a `doing`. Así toda
+  devolución queda explicada. Vale tanto para la nota de `review` (origen CEO) como para la de
+  `verificacion` (origen Cliente = el cliente pidió ajustes).
 - Sobre lo que está en `verificacion` (el cliente lo está revisando): nota equivalente con **Finalizar**
-  (→ `done`, abre el modal de satisfacción) y **Devolver** (→ `doing`).
+  (→ `done`, abre el modal de satisfacción) y **Devolver** (abre el request review, → `doing`).
 - **Request review / pedir un cambio** = se crea con el **botón "Request review" al lado de Puntos**
   (abre un popup con origen CEO/Cliente + descripción). Al pedirlo, agrega un CR a `change_requests`,
   la tarea vuelve a **`doing`** (estado anterior, NO verificación) y se sella `admin_touched_at`.
@@ -236,6 +245,33 @@ generales de la tarea); el trigger de la base ya no revierte esa columna. Un CR 
 tarea sea "Cambio solicitado" para el empleado (prioridad sobre "Nueva"/"Actualizada", excluyentes).
 El MD normalmente NO crea CRs (los abre el admin al revisar); solo si un insumo describe
 explícitamente un cambio pedido por el cliente sobre un entregable ya aprobado, puede registrarlo.
+
+## Interfaz del Centro de Operaciones (normas de UI refinadas)
+
+Reglas de presentación acordadas con el CEO (para que la app no se sature y sea consistente):
+
+- **Arranque de sesión:** cada login abre SIEMPRE el **Centro de Operaciones**; el Radar es una
+  opción secundaria del menú, nunca la primera vista. Se fuerza en login y logout.
+- **Filtros de "Todas las tareas":** **Empresa** y **Responsable** son **desplegables** (pueden ser
+  muchos, no caben en carrusel); **Proyecto** es un **carrusel** (etiqueta arriba, chips debajo).
+  Responsable filtra por persona. Estado y tipo de tarea también van como carrusel.
+- **Comentarios de la tarea:** al abrir la tarea se ven **los 3 últimos** (recientes arriba) dentro de
+  un área con **scroll** para los anteriores; cada comentario se **acota a 2 líneas**. Los comentarios
+  deben ser **cortos**. Los comentarios de un request review NO van aquí (van en el CR).
+- **Puntos + Request review:** la caja de Puntos muestra los `designPoints` y, a su lado, el botón
+  **Request review** (que en responsive ocupa todo el ancho si baja de línea). Debajo, el acordeón de
+  **historial** (solo seguimiento).
+- **Sin ruido redundante:** en el portal del empleado, cada tarea muestra el color de prioridad SOLO
+  en el badge de score (no hay punto de color extra a la derecha). No se muestran puntos por tarea al
+  empleado.
+- **Modo oscuro:** las tarjetas y sus fondos deben respetar el tema oscuro (fondos por clase, no por
+  `style` inline, para que el remapeo de `index.html` los alcance).
+- **Guardado POR TAREA:** cada tarjeta se guarda con su botón **"Guardar tarea"** (guardado explícito
+  con confirmación "Guardada ✓"), no con autosave silencioso. Guardar una tarea no revierte cambios de
+  otra.
+- **Reporte e indicadores:** el **tablero de indicadores** es **solo del admin**. Hay **un solo** botón
+  de reporte, **"Reporte DesignOps"**, adaptado al periodo (no un "Imprimir" aparte). El panel de
+  indicadores en pantalla debe ser completo; el reporte descargable en PDF lo complementa.
 
 ## Como debe verse una tarea
 

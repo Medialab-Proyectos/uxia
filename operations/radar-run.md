@@ -58,6 +58,11 @@ ideal de una oferta es **máximo 3 días**:
   sigue en "Me gusta" y además queda marcada como postulada. Hay filtro "Postuladas".
 - **Listados vs empleos**: la lista de empleos muestra SOLO ofertas concretas. Los listados/
   búsquedas de plataforma se abren desde los botones de plataforma, antes de la lista.
+- **Ubicación honesta (no todo es Colombia)**: se prioriza Colombia/LATAM, pero las ofertas pueden
+  ser de cualquier país. Captura `ubicacion` tal cual la fuente (país/ciudad o "Remoto") y NO asumas
+  Colombia por defecto; la app muestra la ubicación real de cada oferta.
+- **Orden por score**: tanto Oportunidades como Empleos se presentan ordenados por `score`
+  (mayor probabilidad de encaje primero).
 
 ## Nota honesta
 La búsqueda web de Claude Code es US-first, así que para leads con **contacto
