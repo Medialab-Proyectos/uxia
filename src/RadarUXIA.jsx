@@ -1037,7 +1037,8 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
       const t = jobQuery.trim().toLowerCase();
       return !t || `${j.titulo || ""} ${j.empresa || ""} ${j.ubicacion || ""} ${j.fuente || ""} ${j.resumen || ""}`.toLowerCase().includes(t);
     })
-    .sort((a, b) => (jobRank(a) - jobRank(b)) || (b.score - a.score));
+    // Orden claro de MAYOR a MENOR por score; el encaje geográfico solo desempata.
+    .sort((a, b) => (b.score - a.score) || (jobRank(a) - jobRank(b)));
 
   const stats = {
     total: jobs.length,
@@ -1231,20 +1232,23 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         <div className="mb-4">
           <div className="grid grid-cols-4 gap-2">
             {[
-              [Briefcase, "Empleos", stats.total, C.text],
-              [Globe, "Remotos", stats.remotas, C.green],
-              [MapPin, "Colombia", stats.colombia, C.amber],
-              [Heart, "Me gusta", stats.megusta, stats.megusta ? C.coral : C.faint],
-            ].map(([Icon, label, val, color]) => (
-              <div
+              [Briefcase, "Empleos", stats.total, C.text, "todas"],
+              [Globe, "Remotos", stats.remotas, C.green, "remotas"],
+              [MapPin, "Colombia", stats.colombia, C.amber, "todas"],
+              [Heart, "Me gusta", stats.megusta, stats.megusta ? C.coral : C.faint, "megusta"],
+            ].map(([Icon, label, val, color, f]) => (
+              <button
                 key={label}
-                className="rounded-md px-2 py-2.5 text-center"
-                style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}
+                type="button"
+                onClick={() => setFilter(f)}
+                title={`Filtrar: ${label}`}
+                className="rounded-md px-2 py-2.5 text-center transition-colors"
+                style={{ backgroundColor: filter === f ? C.panelHi : C.panel, border: `1px solid ${filter === f ? color : C.border}` }}
               >
                 <Icon size={15} style={{ color, margin: "0 auto 3px" }} />
                 <div className="text-lg font-bold" style={{ color, fontFamily: FONT.display }}>{val}</div>
                 <div className="text-[10px] leading-tight" style={{ color: C.faint }}>{label}</div>
-              </div>
+              </button>
             ))}
           </div>
 

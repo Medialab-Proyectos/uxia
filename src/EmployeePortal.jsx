@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle } from "lucide-react";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -115,7 +115,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   // Filtros por empresa y estado → lista ordenada por prioridad.
   const filtered = tasks.filter((t) => {
     if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
-    if (statusFilter === "new") return hasNovelty(t) && t.status !== "done";
+    // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
+    if (statusFilter === "new") return (hasNovelty(t) || t.id === openId) && t.status !== "done";
     if (statusFilter === "active") return t.status !== "done";
     if (statusFilter === "all") return true;
     return t.status === statusFilter;
@@ -193,11 +194,9 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   return (
     <div style={{ minHeight: "100vh", background: bg, color: text }}>
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold">Hola, {me.name.split(" ")[0]}</h1>
-            <p className="text-sm" style={{ color: dim }}>Estas son tus tareas y su prioridad.</p>
-          </div>
+        {/* Header fijo: la campana de novedades queda SIEMPRE visible al hacer scroll. */}
+        <div className="sticky top-0 z-20 -mx-4 mb-4 flex items-center justify-between gap-3 px-4 py-2 sm:-mx-6 sm:px-6" style={{ background: bg, borderBottom: `1px solid ${border}` }}>
+          <h1 className="truncate text-lg font-semibold">Hola, {me.name.split(" ")[0]}</h1>
           {/* Campanita: cuántas tareas tienen novedades (nuevas o actualizadas por el admin) */}
           <button type="button" onClick={() => setStatusFilter("new")}
             className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
@@ -209,12 +208,13 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
             )}
           </button>
         </div>
+        <p className="-mt-2 mb-4 text-sm" style={{ color: dim }}>Estas son tus tareas y su prioridad.</p>
 
-        {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) */}
+        {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[["Novedades", noveltyCount, "#6D28D9"], ["Activas", active.length, "#17727A"], ["Vencidas", overdue, "#B42318"], ["Finalizadas", done.length, "#0D7A4F"]].map(([l, v, col]) => (
+          {[["Novedades", noveltyCount, "#6D28D9", Bell], ["Activas", active.length, "#17727A", ListChecks], ["Vencidas", overdue, "#B42318", AlertTriangle], ["Finalizadas", done.length, "#0D7A4F", CheckCircle2]].map(([l, v, col, Icon]) => (
             <div key={l} className="rounded-md border p-3" style={{ borderColor: border, background: card }}>
-              <p className="text-xs" style={{ color: dim }}>{l}</p>
+              <p className="flex items-center gap-1.5 text-xs" style={{ color: dim }}><Icon size={13} style={{ color: col }} />{l}</p>
               <p className="mt-1 text-2xl font-semibold" style={{ color: col }}>{v}</p>
             </div>
           ))}

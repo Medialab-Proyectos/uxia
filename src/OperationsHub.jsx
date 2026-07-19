@@ -581,6 +581,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
   const [sortRecent, setSortRecent] = useState(false);    // ordenar por últimas incluidas
   const [activeView, setActiveView] = useState("companies");
+  const [alertDismissed, setAlertDismissed] = useState(false);
   const [asideOpen, setAsideOpen] = useState(false);
   const [globalOpen, setGlobalOpen] = useState(false);
   const [globalText, setGlobalText] = useState("");
@@ -709,6 +710,14 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       updatedPending: tasks.filter((task) => task.employeeTouchedAt).length,
     };
   }, [companies.length, tasks]);
+
+  // Si aparece algo nuevo por atender (sube el total pendiente), reabre el aviso.
+  const alertTotal = metrics.dueToday + metrics.blocked + metrics.updatedPending;
+  const prevAlertTotal = useRef(alertTotal);
+  useEffect(() => {
+    if (alertTotal > prevAlertTotal.current) setAlertDismissed(false);
+    prevAlertTotal.current = alertTotal;
+  }, [alertTotal]);
 
   const processedAlerts = useMemo(() => {
     return [...sourceRecords]
@@ -1463,7 +1472,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           )}
         </div>
 
-        {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0) && (
+        {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0) && !alertDismissed && (
           <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 text-sm">
             <span className="font-semibold uppercase tracking-[0.08em] text-[#B76E00]">Requiere tu atención hoy</span>
             {metrics.updatedPending > 0 && (
@@ -1473,8 +1482,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 {metrics.updatedPending} actualizada(s) por revisar
               </button>
             )}
-            {metrics.dueToday > 0 && <span className="font-semibold text-[#8A5700]">{metrics.dueToday} vence(n) hoy</span>}
-            {metrics.blocked > 0 && <span className="font-semibold text-[#B42318]">{metrics.blocked} con bloqueo</span>}
+            {metrics.dueToday > 0 && (
+              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("today"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
+                className="font-semibold text-[#8A5700] underline-offset-2 hover:underline" title="Ver las tareas que vencen hoy">{metrics.dueToday} vence(n) hoy</button>
+            )}
+            {metrics.blocked > 0 && (
+              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("blocked"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
+                className="font-semibold text-[#B42318] underline-offset-2 hover:underline" title="Ver las tareas bloqueadas">{metrics.blocked} con bloqueo</button>
+            )}
+            <button type="button" onClick={() => setAlertDismissed(true)} title="Cerrar (ya lo vi)" aria-label="Cerrar aviso" className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-[#B76E00] hover:bg-[#F2C879]/40">
+              <X size={14} />
+            </button>
           </div>
         )}
 
@@ -2475,8 +2493,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     ["done", "Finalizada", CheckCircle2],
   ];
   return (
-    <details open={open} onToggle={handleToggle} className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-2 rounded text-xs font-semibold text-[#1D2939] hover:bg-[#17727A14]">
+    <details open={open} onToggle={handleToggle} className="rounded-md border p-2 transition-colors"
+      style={open
+        ? { borderColor: "#17727A", background: "#EAF4F2", boxShadow: "0 0 0 1px #17727A55" }
+        : { borderColor: "#E4DED6", background: "#FFFCF7" }}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-2 rounded text-xs font-semibold text-[#1D2939]">
         <span
           className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
           style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", color: "#17727A" }}
@@ -2497,10 +2518,10 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           )}
           {!open && (
             <span className="flex w-full flex-col gap-1 text-xs font-medium text-[#667085]">
-              {/* Línea 1: estado + tipo (+ actualizada / comentarios) */}
-              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {/* Línea 1: estado + tipo en UNA sola línea (+ actualizada / comentarios) */}
+              <span className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
                 <span
-                  className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold"
                   style={overdue
                     ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
                     : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
@@ -2509,7 +2530,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
                 </span>
                 {task.category && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                  <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
                     {task.category}
                   </span>
@@ -2673,7 +2694,8 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         </label>
         <div>
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Tipo de tarea</span>
-          <div className="flex flex-wrap gap-1.5">
+          {/* Carrusel horizontal (scroll con el dedo) en responsive */}
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
             {scopeOptions.map((cat) => {
               const on = task.category === cat;
               return (
@@ -2681,7 +2703,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   key={cat}
                   type="button"
                   onClick={() => onChangeTask(task.id, { category: on ? "" : cat })}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold"
+                  className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold"
                   style={on
                     ? { borderColor: categoryColor(cat), background: `${categoryColor(cat)}1A`, color: categoryColor(cat) }
                     : { borderColor: "#D0D5DD", background: "#fff", color: "#667085" }}
