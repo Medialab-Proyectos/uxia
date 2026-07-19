@@ -236,7 +236,7 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
           </div>
         )}
         <div className="mb-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-          {[["new", "Novedades"], ["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
+          {[["active", "Activas"], ["new", "Novedades"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
             const on = statusFilter === k;
             const isNov = k === "new";
             return (
