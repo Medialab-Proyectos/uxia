@@ -331,6 +331,7 @@ function taskToRow(task) {
     change_request: !!task.changeRequest,
     tools: asArray(task.tools),
     ai_usage: task.aiUsage ?? null,
+    md_touched_at: task.mdTouchedAt || null,
     created_at: task.createdAt || new Date().toISOString(),
   };
 }

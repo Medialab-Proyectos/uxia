@@ -434,6 +434,13 @@ de `supabase/schema-insumos-pendientes.sql`).
    Reglas de análisis (aplicar SIEMPRE):
    - Título accionable, descripción clara, responsable sugerido (`role`/owner), vencimiento.
    - Cruzar varias fuentes; **no** una tarea por archivo; **dedup** contra tareas existentes.
+   - **Complementar tareas existentes**: si un insumo enriquece una tarea que YA existe
+     (más contexto, aclara el alcance, aporta datos de finalización), en vez de crear una
+     nueva, incluye en `tasks.json` esa tarea con su **`id` real** + los campos actualizados
+     (descripción ampliada, etc.) y marca **`mdTouchedAt`** con la fecha/hora actual. El
+     `daily-push` hace upsert por id. En la app, el admin verá el tag **"Tocada por el MD"**
+     y debe revisarla/accionar. NO cambies el responsable ni el estado del empleado al
+     complementar.
    - Cada tarea con `priority` (alta = vital 20% / cuello de botella / urgente).
    - **Tipo de tarea por CONTEXTO** (`category`): a partir de lo que pide el insumo, clasifica
      la tarea en una categoría del alcance (ej. Diseño UX/UI, Desarrollo, Gestión de proyecto,

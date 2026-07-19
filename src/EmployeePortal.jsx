@@ -43,6 +43,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [q, setQ] = React.useState("");
   const [crResolve, setCrResolve] = React.useState(null); // { task, cr } al resolver un cambio
   const [crComment, setCrComment] = React.useState("");
+  const [lastLoadedAt, setLastLoadedAt] = React.useState(null); // momento de la última carga de la BD
+  const [staleWarn, setStaleWarn] = React.useState(false);      // aviso de refrescar tras horas
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -73,6 +75,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
       } else {
         setTasks([]);
       }
+      setLastLoadedAt(Date.now());
+      setStaleWarn(false);
     } catch (e) {
       setError("No se pudieron cargar tus tareas.");
     } finally {
@@ -81,6 +85,15 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   }, [headers, email]);
 
   React.useEffect(() => { load(); }, [load]);
+
+  // Si la pantalla lleva abierta +2h sin refrescar, sugiere actualizar (puede haber cambios).
+  React.useEffect(() => {
+    if (!lastLoadedAt) return undefined;
+    const timer = setInterval(() => {
+      if (Date.now() - lastLoadedAt > 2 * 60 * 60 * 1000) setStaleWarn(true);
+    }, 60 * 1000);
+    return () => clearInterval(timer);
+  }, [lastLoadedAt]);
 
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "";
 
@@ -246,7 +259,14 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
             )}
           </button>
         </div>
-        <p className="-mt-2 mb-4 text-sm" style={{ color: dim }}>Estas son tus tareas y su prioridad.</p>
+        <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
+          <span>Estas son tus tareas y su prioridad.</span>
+          {lastLoadedAt && (
+            <button type="button" onClick={() => load()} className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: "#17727A" }} title="Actualizar desde la base de datos">
+              <LoaderCircle size={12} /> Actualizado {new Date(lastLoadedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · Actualizar
+            </button>
+          )}
+        </div>
 
         {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono — clicables → filtran */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -401,6 +421,20 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
           }) : <p className="text-sm" style={{ color: dim }}>No hay tareas con estos filtros.</p>}
         </div>
       </div>
+
+      {/* Aviso: la pantalla lleva horas abierta; conviene actualizar por si hubo cambios */}
+      {staleWarn && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) setStaleWarn(false); }}>
+          <div className="w-full max-w-sm rounded-md p-4 shadow-xl" style={{ background: card, color: text }}>
+            <h3 className="text-sm font-semibold"><Bell size={14} className="mr-1 inline align-[-2px]" style={{ color: "#B76E00" }} /> Actualiza la base de datos</h3>
+            <p className="mt-1 text-xs" style={{ color: dim }}>Llevas más de 2 horas con esta pantalla abierta. Puede haber tareas nuevas, cambios solicitados o actualizaciones. Refresca para verlas.</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => load()} className="flex-1 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>Actualizar ahora</button>
+              <button type="button" onClick={() => setStaleWarn(false)} className="rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: border, color: dim }}>Ahora no</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Popup: resolver un cambio solicitado (marca resuelto + envía a revisión) */}
       {crResolve && (

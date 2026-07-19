@@ -115,6 +115,10 @@ alter table tasks add column if not exists tools jsonb not null default '[]'::js
 -- durante la revisión. [{ id, at, by:'ceo'|'cliente', text, resolved, resolved_at }].
 -- El empleado NO lo edita (los abre/resuelve el admin); dispara la novedad "Cambio solicitado".
 alter table tasks add column if not exists change_requests jsonb not null default '[]'::jsonb;
+-- md_touched_at = el MD (daily-run) complementó/enriqueció esta tarea (más contexto,
+-- fusión de insumos). El admin ve un tag "Tocada por el MD" y debe revisar/accionar. El
+-- empleado no la toca.
+alter table tasks add column if not exists md_touched_at timestamptz;
 -- ai_usage (ya existe en 3e) = % de IA usada en la tarea (0..100). Con `tools` da la
 -- visibilidad de "uso y consumo de IA + herramientas" por tarea que pide negocio.
 
@@ -234,6 +238,7 @@ begin
     -- Instrumentación DesignOps: solo la fija el admin/MD, el empleado no.
     new.design_points := old.design_points; new.qa_defects := old.qa_defects;
     new.change_request := old.change_request; new.tools := old.tools; new.ai_usage := old.ai_usage;
+    new.md_touched_at := old.md_touched_at;
     -- change_requests SÍ lo puede tocar el empleado en SUS tareas: para marcar un cambio
     -- como RESUELTO al re-enviar a revisión. El admin tiene la última palabra (aprobar/re-pedir).
     if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then

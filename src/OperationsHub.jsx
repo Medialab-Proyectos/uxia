@@ -2032,6 +2032,28 @@ function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatu
   );
 }
 
+// "?" con explicación que se abre con TAP (funciona en móvil, a diferencia de title=).
+// Fondo oscuro + texto blanco para contraste en claro y oscuro.
+function InfoTip({ text }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex align-middle">
+      <button type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        aria-label="Más información"
+        className="inline-flex items-center justify-center">
+        <HelpCircle size={12} className="text-[#98A2B3]" />
+      </button>
+      {open && (
+        <span role="tooltip" className="absolute left-1/2 top-5 z-40 w-52 max-w-[70vw] -translate-x-1/2 rounded-md bg-[#1D2939] px-2.5 py-1.5 text-[11px] font-normal normal-case leading-snug text-white shadow-lg">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function Metric({ label, value, tone, icon: Icon }) {
   return (
     <div className="rounded-md border border-[#E4DED6] bg-white p-4 shadow-sm">
@@ -2661,11 +2683,16 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 )}
               </span>
             )}
-            {(task.employeeTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
+            {(task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
               <span className="flex flex-wrap items-center gap-1.5">
                 {task.employeeTouchedAt && (
                   <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
+                  </span>
+                )}
+                {task.mdTouchedAt && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#F2A93B", background: "#FFF7E6", color: "#B76E00" }} title="El MD complementó esta tarea; revísala">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#B76E00" }} /> Tocada por el MD
                   </span>
                 )}
                 {Array.isArray(task.comments) && task.comments.length > 0 && (
@@ -2697,6 +2724,18 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })}
               className="inline-flex items-center gap-1 rounded-md border border-[#17727A] px-2 py-0.5 text-[11px] font-semibold text-[#17727A]">
               <LoaderCircle size={12} /> Reactivar
+            </button>
+          </div>
+        )}
+        {task.mdTouchedAt && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#F2C879] bg-[#FFF7E6] px-2.5 py-1.5">
+            <span className="text-xs font-semibold text-[#B76E00]">
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: "#B76E00" }} />
+              El MD complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString()}
+            </span>
+            <button type="button" onClick={() => onChangeTask(task.id, { mdTouchedAt: "" })}
+              className="rounded border border-[#B76E00] px-2 py-0.5 text-[11px] font-semibold text-[#B76E00]">
+              Visto
             </button>
           </div>
         )}
@@ -2786,8 +2825,8 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         {/* DesignOps ligero: puntos (los asigna el análisis automáticamente; aquí se ven).
             Los Change Requests se abren desde el botón "Revisión y cambios". */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
-          <span className="inline-flex items-center gap-1 text-xs text-[#667085]" title="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea.">
-            Puntos <HelpCircle size={12} className="text-[#98A2B3]" />:
+          <span className="inline-flex items-center gap-1 text-xs text-[#667085]">
+            Puntos <InfoTip text="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea." />:
             <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
@@ -3907,7 +3946,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
             ["WIP", wip, "en progreso", "Work In Progress: cuántas tareas están en progreso a la vez. Mucho WIP fragmenta el foco y alarga el cycle time."],
             ["Velocidad", velocity == null ? "—" : `${velocity}`, "pts diseño/sem", "Puntos de diseño cerrados por semana (ref. 8–12 senior). Requiere que las tareas tengan puntos estimados."]].map(([k, v, s, help]) => (
             <div key={k} className="rounded-md bg-[#F7FAFA] p-2">
-              <p className="flex items-center gap-1 text-[10px] uppercase tracking-[0.06em] text-[#667085]">{k} <HelpCircle size={11} className="text-[#98A2B3]" title={help} /></p>
+              <p className="flex items-center gap-1 text-[10px] uppercase tracking-[0.06em] text-[#667085]">{k} <InfoTip text={help} /></p>
               <p className="font-metrics text-lg font-semibold text-[#17727A]">{v}</p>
               <p className="text-[9px] text-[#98A2B3]">{s}</p>
             </div>
@@ -3925,7 +3964,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
                 ["Satisfacción del PO", avg == null ? "—" : `${avg.toFixed(1)} / 5`, "≥ 4,5", "Promedio de calificación del cliente al cerrar la tarea (1–5)."],
                 ["Change Requests", `${crCount}`, "documentar", "Cambios que pidió el cliente DESPUÉS de aprobar el diseño (no son alcance original). 'Documentar' = registrarlos siempre para no absorberlos gratis; se marcan en cada tarjeta de tarea."],
                 ["Consumo de IA", avgAi == null ? "—" : `${avgAi}%`, "—", "% promedio de IA usada, capturado al cerrar la tarea."]].map(([k, v, m, help]) => (
-                <tr key={k} className="border-t border-[#F2F4F7]"><td className="py-1 pr-2"><span className="inline-flex items-center gap-1">{k}{help && <HelpCircle size={11} className="text-[#98A2B3]" title={help} />}</span></td><td className="py-1 pr-2 font-semibold text-[#1D2939]">{v}</td><td className="py-1 text-[#98A2B3]">{m}</td></tr>
+                <tr key={k} className="border-t border-[#F2F4F7]"><td className="py-1 pr-2"><span className="inline-flex items-center gap-1">{k}{help && <InfoTip text={help} />}</span></td><td className="py-1 pr-2 font-semibold text-[#1D2939]">{v}</td><td className="py-1 text-[#98A2B3]">{m}</td></tr>
               ))}
             </tbody>
           </table>
