@@ -141,6 +141,10 @@ function AppShell() {
         const tasks = state?.tasks || [];
         const vencen = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate <= today).length;
         const bloq = tasks.filter((t) => t.status === "blocked").length;
+        const enRevision = tasks.filter((t) => t.status === "review").length;
+        const actualizadas = tasks.filter((t) => t.employeeTouchedAt).length;
+        if (enRevision) list.push({ kind: "operations", text: `${enRevision} tarea(s) por aprobar (en revisión)` });
+        if (actualizadas) list.push({ kind: "operations", text: `${actualizadas} tarea(s) actualizada(s) por revisar` });
         if (vencen) list.push({ kind: "operations", text: `${vencen} tarea(s) vencen hoy o están vencidas` });
         if (bloq) list.push({ kind: "operations", text: `${bloq} tarea(s) bloqueadas` });
         const viejas = (vacantes || []).filter((v) => {

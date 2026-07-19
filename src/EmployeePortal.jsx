@@ -45,6 +45,7 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [crComment, setCrComment] = React.useState("");
   const [lastLoadedAt, setLastLoadedAt] = React.useState(null); // momento de la última carga de la BD
   const [staleWarn, setStaleWarn] = React.useState(false);      // aviso de refrescar tras horas
+  const [bellOpen, setBellOpen] = React.useState(false);        // centro de alertas (campana)
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -248,16 +249,48 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
         {/* Header fijo: la campana de novedades queda SIEMPRE visible al hacer scroll. */}
         <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center justify-between gap-3 px-4 py-2 sm:-mx-6 sm:px-6" style={{ background: bg }}>
           <h1 className="truncate text-lg font-semibold">Hola, {me.name.split(" ")[0]}</h1>
-          {/* Campanita: cuántas tareas tienen novedades (nuevas o actualizadas por el admin) */}
-          <button type="button" onClick={() => setStatusFilter("new")}
-            className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
-            style={{ borderColor: noveltyCount ? "#6D28D9" : border, background: noveltyCount ? "#F5F3FF" : card, color: noveltyCount ? "#6D28D9" : dim }}
-            title={noveltyCount ? `${noveltyCount} tarea(s) con novedades` : "Sin novedades"}>
-            <Bell size={18} />
-            {noveltyCount > 0 && (
-              <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[11px] font-bold text-white" style={{ background: "#6D28D9" }}>{noveltyCount}</span>
-            )}
-          </button>
+          {/* Campana = centro de alertas: novedades, cambios solicitados, vencidas */}
+          <div className="relative shrink-0">
+            <button type="button" onClick={() => setBellOpen((v) => !v)}
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border"
+              style={{ borderColor: noveltyCount ? "#6D28D9" : border, background: noveltyCount ? "#F5F3FF" : card, color: noveltyCount ? "#6D28D9" : dim }}
+              title="Centro de alertas">
+              <Bell size={18} />
+              {noveltyCount > 0 && (
+                <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[11px] font-bold text-white" style={{ background: "#6D28D9" }}>{noveltyCount}</span>
+              )}
+            </button>
+            {bellOpen && (() => {
+              const nNew = tasks.filter((t) => t.status !== "done" && isNew(t)).length;
+              const nCR = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t)).length;
+              const nUpd = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t)).length;
+              const items = [
+                ["Cambios solicitados", nCR, "#B54708", "new"],
+                ["Tareas nuevas", nNew, "#0D7A4F", "new"],
+                ["Actualizadas por el admin", nUpd, "#6D28D9", "new"],
+                ["Vencidas", overdue, "#B42318", "vencidas"],
+              ].filter(([, v]) => v > 0);
+              return (
+                <div className="fixed left-3 right-3 top-16 z-40 max-h-[70vh] overflow-y-auto rounded-md border p-3 text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72" style={{ background: card, borderColor: border, color: text }}>
+                  <p className="mb-2 font-semibold">Alertas</p>
+                  {items.length === 0 ? (
+                    <p className="text-xs" style={{ color: dim }}>Sin alertas por ahora. 🎉</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {items.map(([label, v, col, f]) => (
+                        <li key={label}>
+                          <button type="button" onClick={() => { setStatusFilter(f); setBellOpen(false); }} className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs" style={{ borderColor: border }}>
+                            <span className="inline-flex items-center gap-2"><span className="inline-block h-2 w-2 rounded-full" style={{ background: col }} />{label}</span>
+                            <span className="font-bold" style={{ color: col }}>{v}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         </div>
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
           <span>Estas son tus tareas y su prioridad.</span>

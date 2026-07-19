@@ -288,15 +288,56 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
 }
 
 // Abre el reporte en una ventana nueva y lanza el diálogo de impresión (Guardar como PDF).
-export function openDesignOpsReport(args) {
-  const html = buildDesignOpsReportHtml(args);
+// Respaldo: abre el reporte en una ventana lista para "Guardar como PDF" (diálogo de impresión).
+function openReportPrintWindow(html) {
   const w = window.open("", "_blank");
-  if (!w) { alert("Habilita las ventanas emergentes para descargar el reporte DesignOps."); return; }
+  if (!w) { alert("Habilita las ventanas emergentes para el reporte DesignOps."); return; }
   w.document.open();
   w.document.write(html);
   w.document.close();
   let printed = false;
   const doPrint = () => { if (printed) return; printed = true; try { w.focus(); w.print(); } catch { /* ignore */ } };
   w.onload = doPrint;
-  setTimeout(doPrint, 900); // respaldo si onload no dispara
+  setTimeout(doPrint, 900);
+}
+
+// DESCARGA directa del PDF (sin diálogo de imprimir). Renderiza el reporte en un iframe
+// aislado (para no contaminar los estilos de la app) y usa html2pdf. Si algo falla, cae al
+// respaldo de imprimir.
+export async function openDesignOpsReport(args) {
+  const company = args?.company;
+  const period = args?.period || "trimestre";
+  const filename = `Reporte-DesignOps-${(company?.name || "empresa").replace(/[^\w-]+/g, "_")}-${period}.pdf`;
+  const html = buildDesignOpsReportHtml(args);
+
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;height:1200px;border:0;";
+  document.body.appendChild(iframe);
+  try {
+    const doc = iframe.contentDocument;
+    doc.open(); doc.write(html); doc.close();
+    // Espera a que carguen imágenes (el logo) antes de rasterizar.
+    await new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      iframe.onload = finish;
+      setTimeout(finish, 1200);
+    });
+    const el = doc.querySelector(".wrap") || doc.body;
+    const mod = await import("html2pdf.js");
+    const html2pdf = mod.default || mod;
+    await html2pdf().set({
+      margin: [10, 10, 12, 10],
+      filename,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 820 },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "avoid-all"] },
+    }).from(el).save();
+  } catch (e) {
+    // Si la descarga directa falla, abre la ventana imprimible como respaldo.
+    openReportPrintWindow(html);
+  } finally {
+    setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ignore */ } }, 500);
+  }
 }
