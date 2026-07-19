@@ -209,29 +209,33 @@ respetarlas al crear/actualizar tareas y NO romper el ciclo.
 (En revisión — del EMPLEADO) · `verificacion` (Verificación — del CLIENTE, solo admin) ·
 `blocked` (Bloqueada) · `done` (Finalizada).
 - El empleado solo mueve la tarea a **`doing`** o **`review`** (él cree que está lista). NO finaliza
-  ni pasa a verificación.
-- El admin revisa lo que está en `review` (revisión del empleado):
-  - **Aprobar → verificación del cliente** → pasa a `verificacion`, resuelve los CR abiertos y deja
-    una nota "Request review validado por el administrador · enviado a verificación del cliente".
-  - **Devolver a en progreso** → `doing`.
-  - **Pedir un cambio** → agrega un CR a `change_requests`, la tarea vuelve a `doing` y se sella
-    `admin_touched_at` (le suena la campana al empleado con "Cambio solicitado").
-- Sobre lo que está en `verificacion` (el cliente lo está revisando):
-  - **Cliente aprobó → Finalizar** → `done` (abre el modal de satisfacción).
-  - **Cliente pidió ajustes → en progreso** → `doing`.
+  ni pasa a verificación. En el selector de estado del admin, **`review` NO es clickeable** (es un
+  estado que pone el empleado); el admin la mueve con Aprobar/Devolver.
+- Que el empleado marque `review` **NO es un request review** (no hubo gestión de cambios). Aparece
+  como una **nota antes del contenido de la tarjeta** ("El empleado la marcó lista…") con dos botones
+  en línea: **Aprobar** (→ `verificacion`, la manda al cliente) y **Devolver** (→ `doing`).
+- Sobre lo que está en `verificacion` (el cliente lo está revisando): nota equivalente con **Finalizar**
+  (→ `done`, abre el modal de satisfacción) y **Devolver** (→ `doing`).
+- **Request review / pedir un cambio** = se crea con el **botón "Request review" al lado de Puntos**
+  (abre un popup con origen CEO/Cliente + descripción). Al pedirlo, agrega un CR a `change_requests`,
+  la tarea vuelve a **`doing`** (estado anterior, NO verificación) y se sella `admin_touched_at`.
+- **El acordeón "Historial de request review" (debajo de Puntos) es SOLO seguimiento** (lista de los
+  CR con su estado y el comentario con que el empleado los resolvió). Los CR NUEVOS no se crean ahí,
+  sino desde el botón del popup. Colapsado por defecto; un puntico avisa si hay CR abiertos.
 - La "revisión" del empleado (`review`) ≠ la "verificación" del cliente (`verificacion`): el empleado
   avisa que cree que está lista; el admin valida internamente y recién ahí la manda al cliente.
-- **Toda la revisión/cambios (aprobar, verificar, pedir cambios, historial) vive en un ACORDEÓN
-  debajo de la caja de Puntos** dentro de la misma tarjeta — NO en un popup. No hay caja/banner
-  amarillo aparte: el tag "Actualizada por el empleado" basta para avisar que hay que revisar.
+- **No hay botón "Marcar revisada".** El tag "Actualizada por el empleado" (`employee_touched_at`) se
+  limpia solo cuando el admin ACCIONA sobre la tarea (cambia estado, categoría/tipo o pide un cambio).
 
 **Change Requests (`change_requests` jsonb):** lista `[{ id, at, by:'ceo'|'cliente', text,
-resolved, resolved_at }]`. El origen distingue **CEO** (revisión interna) vs **Cliente**
-(trasladado por el CEO). Alimenta el indicador de eficiencia del tablero DesignOps (cuenta CR
-ABIERTOS). El empleado SÍ puede **resolver** un CR abierto desde su portal (lo marca resuelto y la
-tarea pasa a `review`); el trigger de la base ya no revierte esa columna. El MD normalmente
-NO crea CRs (los abre el admin al revisar); solo si un insumo describe explícitamente un cambio
-pedido por el cliente sobre un entregable ya aprobado, puede registrarlo.
+resolved, resolved_at, resolved_comment }]`. El origen distingue **CEO** (revisión interna) vs
+**Cliente** (trasladado por el CEO). Alimenta el indicador de eficiencia del tablero DesignOps (cuenta
+CR ABIERTOS). El empleado SÍ puede **resolver** un CR abierto desde su portal (lo marca resuelto, la
+tarea pasa a `review`, y su comentario va en `resolved_comment` DENTRO del CR, NO en los comentarios
+generales de la tarea); el trigger de la base ya no revierte esa columna. Un CR abierto hace que la
+tarea sea "Cambio solicitado" para el empleado (prioridad sobre "Nueva"/"Actualizada", excluyentes).
+El MD normalmente NO crea CRs (los abre el admin al revisar); solo si un insumo describe
+explícitamente un cambio pedido por el cliente sobre un entregable ya aprobado, puede registrarlo.
 
 ## Como debe verse una tarea
 

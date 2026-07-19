@@ -6,7 +6,7 @@ const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 const STATUS_LABEL = {
   backlog: "Pendiente", ready: "Pendiente", doing: "En progreso",
-  review: "En revisión", blocked: "Bloqueada", actualizada: "Actualizada", done: "Finalizada",
+  review: "En revisión", verificacion: "Verificación", blocked: "Bloqueada", actualizada: "Actualizada", done: "Finalizada",
 };
 const PRIORITY_COLOR = { alta: "#B42318", media: "#B76E00", baja: "#1570EF" };
 
@@ -17,7 +17,7 @@ function scoreTask(t) {
   let s = t.priority === "alta" ? 40 : t.priority === "baja" ? 8 : 20;
   const today = todayIso();
   if (t.dueDate) {
-    if (t.status !== "review" && t.dueDate < today) s += 35;
+    if (t.status !== "review" && t.status !== "verificacion" && t.dueDate < today) s += 35;
     else {
       const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);
       s += d <= 2 ? 25 : d <= 7 ? 15 : 5;
@@ -63,7 +63,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setMe(person);
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
-        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref";
+        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points";
         // Intenta con las columnas de novedad; si la base aún no está migrada, carga sin ellas.
         let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
         if (!tRes.ok) {
@@ -100,11 +100,13 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
 
   // Novedades por persona: "Nueva" = nunca vista; "Actualizada" = el admin la cambió
   // después de la última vez que la vi. Al abrirla se marca vista y el tag desaparece.
+  // Prioridad de novedad: cambio solicitado > nueva > actualizada (excluyentes). Si hay un CR
+  // abierto la tarea es "cambio solicitado", NO "nueva" ni "actualizada".
   const openCRs = (t) => (Array.isArray(t.change_requests) ? t.change_requests : []).filter((c) => !c.resolved);
   const hasChangeRequest = (t) => noveltyReady && openCRs(t).length > 0;
-  const isNew = (t) => noveltyReady && !t.assignee_seen_at;
+  const isNew = (t) => noveltyReady && !t.assignee_seen_at && !hasChangeRequest(t);
   const isUpdatedByAdmin = (t) => Boolean(
-    noveltyReady && t.assignee_seen_at && t.admin_touched_at && new Date(t.admin_touched_at) > new Date(t.assignee_seen_at)
+    noveltyReady && !hasChangeRequest(t) && t.assignee_seen_at && t.admin_touched_at && new Date(t.admin_touched_at) > new Date(t.assignee_seen_at)
   );
   // Una novedad puede ser: nueva, un cambio solicitado (CR) o una actualización del admin.
   const hasNovelty = (t) => isNew(t) || hasChangeRequest(t) || isUpdatedByAdmin(t);
@@ -127,7 +129,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
 
   const active = tasks.filter((t) => t.status !== "done");
   const done = tasks.filter((t) => t.status === "done");
-  const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review").length;
+  const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion").length;
 
   // Reporta las alertas al shell (la campana vive en el header del shell, junto al tema).
   const nNew = tasks.filter((t) => t.status !== "done" && isNew(t)).length;
@@ -163,7 +165,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     if (qLow) return `${t.title || ""} ${t.client || ""} ${nameOf(t.company_id)} ${t.task_ref || ""} ${t.role || ""}`.toLowerCase().includes(qLow);
     // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
     if (statusFilter === "new") return (hasNovelty(t) || t.id === openId) && t.status !== "done";
-    if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review";
+    if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion";
     if (statusFilter === "active") {
       if (t.status === "done") return false;
       // Sub-filtro de novedades (solo dentro de Activas). La tarea abierta se mantiene visible.
@@ -232,14 +234,12 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   async function confirmResolveCR() {
     if (!crResolve) return;
     const { task, cr } = crResolve;
-    const crs = (Array.isArray(task.change_requests) ? task.change_requests : [])
-      .map((c) => (c.id === cr.id ? { ...c, resolved: true, resolved_at: new Date().toISOString() } : c));
-    const body = { change_requests: crs, status: "review", employee_touched_at: new Date().toISOString() };
     const text = crComment.trim();
-    if (text) {
-      const comments = Array.isArray(task.comments) ? task.comments : [];
-      body.comments = [...comments, { author: me?.name || email, role: "employee", text: `Resolví el cambio: ${text}`, at: new Date().toISOString() }];
-    }
+    // El comentario al resolver un CR se guarda DENTRO del propio request review (resolved_comment),
+    // NO en los comentarios generales de la tarea: es seguimiento del cambio, no una conversación.
+    const crs = (Array.isArray(task.change_requests) ? task.change_requests : [])
+      .map((c) => (c.id === cr.id ? { ...c, resolved: true, resolved_at: new Date().toISOString(), resolved_comment: text || c.resolved_comment || "" } : c));
+    const body = { change_requests: crs, status: "review", employee_touched_at: new Date().toISOString() };
     setError("");
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${task.id}`, {
@@ -338,11 +338,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
             <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: dim }}>Novedad:</span>
             {[
-              ["all", "Todas", "#17727A"],
+              ["all", `Todas (${active.length})`, "#17727A"],
               ["any", `Con novedad${noveltyCount ? ` (${noveltyCount})` : ""}`, "#6D28D9"],
-              ["new", "Nuevas", "#0D7A4F"],
-              ["cr", "Cambios solicitados", "#B54708"],
-              ["updated", "Actualizadas por el admin", "#6D28D9"],
+              ["new", `Nuevas${nNew ? ` (${nNew})` : ""}`, "#0D7A4F"],
+              ["cr", `Cambios solicitados${nCR ? ` (${nCR})` : ""}`, "#B54708"],
+              ["updated", `Actualizadas por el admin${nUpd ? ` (${nUpd})` : ""}`, "#6D28D9"],
             ].map(([k, l, col]) => {
               const on = novFilter === k;
               return (
@@ -372,7 +372,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                       {t.title}
                     </span>
                     <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
-                      {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}
+                      {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}{t.design_points != null ? ` · ${t.design_points} pts` : ""}
                     </span>
                   </span>
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: PRIORITY_COLOR[t.priority] || "#98A2B3" }} title={`Prioridad ${t.priority || "media"}`} />

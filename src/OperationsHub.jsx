@@ -868,11 +868,15 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         next.workedHours = null;
       }
       // Sello de "el admin tocó esta tarea" → el empleado la verá "Actualizada" y le
-      // sonará la campanita. Excepción: marcar revisada (solo limpia employeeTouchedAt)
-      // NO es una novedad para el empleado, así que no actualiza el sello.
+      // sonará la campanita.
       const keys = Object.keys(patch);
-      const onlyMarkReviewed = keys.length === 1 && keys[0] === "employeeTouchedAt";
-      if (!onlyMarkReviewed) next.adminTouchedAt = new Date().toISOString();
+      next.adminTouchedAt = new Date().toISOString();
+      // "Actualizada por el empleado" (employeeTouchedAt) se limpia sola en cuanto el admin
+      // ACCIONA sobre la tarea (cambia estado, categoría/tipo o pide un cambio); ya no hay
+      // botón manual "marcar revisada": el estado de la tarea refleja lo que pasó.
+      if (task.employeeTouchedAt && (patch.status || patch.category || patch.changeRequests)) {
+        next.employeeTouchedAt = "";
+      }
       return next;
     }));
   }
@@ -2204,39 +2208,34 @@ function TasksTable({
             </button>
           ))}
         </div>
-        {/* Filtros como carruseles horizontales (no consumen alto): empresa · proyecto · responsable */}
-        <div className="mt-2 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="w-[92px] shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Empresa</span>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-              {[["all", "Todas"], ...companies.map((c) => [c.id, c.name])].map(([key, label]) => (
-                <button key={key} onClick={() => onCompanyFilter(key)}
-                  className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
-                  style={{ borderColor: companyFilter === key ? "#17727A" : "#D0D5DD", background: companyFilter === key ? "#EAF4F2" : "#FFFFFF", color: companyFilter === key ? "#17727A" : "#667085" }}>
-                  {label}
-                </button>
-              ))}
-            </div>
+        {/* Filtros: empresa y responsable como desplegables (pueden ser muchos); proyecto como carrusel. */}
+        <div className="mt-2 space-y-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Empresa</span>
+              <select value={companyFilter} onChange={(event) => onCompanyFilter(event.target.value)}
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]">
+                <option value="all">Todas las empresas</option>
+                {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Responsable</span>
+              <select value={ownerFilter} onChange={(event) => onOwnerFilter?.(event.target.value)}
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#B42318]">
+                <option value="all">Todos los responsables</option>
+                <option value="unowned">Sin responsable</option>
+                {(people || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-[92px] shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Proyecto</span>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+          <div>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Proyecto</span>
+            <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
               {[["all", "Todas"], ["unassigned", "Sin proyecto"], ["assigned", "Con proyecto"]].map(([key, label]) => (
                 <button key={key} onClick={() => onAssignFilter(key)}
                   className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
                   style={{ borderColor: assignFilter === key ? "#B76E00" : "#D0D5DD", background: assignFilter === key ? "#FFF7E6" : "#FFFFFF", color: assignFilter === key ? "#B76E00" : "#667085" }}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-[92px] shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Responsable</span>
-            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-              {[["all", "Todas"], ["unowned", "Sin responsable"], ...(people || []).map((p) => [p.id, p.name])].map(([key, label]) => (
-                <button key={key} onClick={() => onOwnerFilter?.(key)}
-                  className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
-                  style={{ borderColor: ownerFilter === key ? "#B42318" : "#D0D5DD", background: ownerFilter === key ? "#FEF3F2" : "#FFFFFF", color: ownerFilter === key ? "#B42318" : "#667085" }}>
                   {label}
                 </button>
               ))}
@@ -2715,6 +2714,26 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         )}
       </summary>
       <div className="mt-2 space-y-2">
+        {/* Nota antes del título: el empleado marcó lista (en revisión) — NO es un request review.
+            Dos botones en la misma línea: Aprobar (manda al cliente) y Devolver. */}
+        {task.status === "review" && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#B7D8D4] bg-[#EAF4F2] px-2.5 py-1.5">
+            <span className="min-w-0 text-[11px] font-semibold text-[#17727A]">El empleado la marcó lista (en revisión). Valídala y mándala a verificación, o devuélvela.</span>
+            <span className="flex shrink-0 gap-1.5">
+              <button type="button" onClick={approveReview} className="inline-flex items-center gap-1 rounded-md bg-[#175CD3] px-2.5 py-1 text-xs font-semibold text-white"><Send size={12} /> Aprobar</button>
+              <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]">Devolver</button>
+            </span>
+          </div>
+        )}
+        {task.status === "verificacion" && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#9CC7E4] bg-[#EAF2FB] px-2.5 py-1.5">
+            <span className="min-w-0 text-[11px] font-semibold text-[#175CD3]">En verificación del cliente. Si aprueba, ciérrala; si pide ajustes, devuélvela.</span>
+            <span className="flex shrink-0 gap-1.5">
+              <button type="button" onClick={openDoneModal} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Finalizar</button>
+              <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]">Devolver</button>
+            </span>
+          </div>
+        )}
         {task.status === "done" && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#A6D9C4] bg-[#E5F5EE] px-2.5 py-1.5">
             <span className="text-xs font-semibold text-[#0D7A4F]"><CheckCircle2 size={12} className="mr-1 inline align-[-2px]" /> Tarea finalizada (archivada){task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString()}` : ""}</span>
@@ -2736,27 +2755,14 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </button>
           </div>
         )}
-        {task.employeeTouchedAt && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#C4B5FD] bg-[#F5F3FF] px-2.5 py-1.5">
-            <span className="text-xs font-semibold text-[#6D28D9]">
-              <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: "#6D28D9" }} />
-              Actualizada por el empleado · {new Date(task.employeeTouchedAt).toLocaleString()}
-            </span>
-            <button type="button" onClick={() => onChangeTask(task.id, { employeeTouchedAt: "" })}
-              className="rounded border border-[#6D28D9] px-2 py-0.5 text-[11px] font-semibold text-[#6D28D9]">
-              Marcar revisada
-            </button>
-          </div>
-        )}
 
         {Array.isArray(task.comments) && task.comments.length > 0 && (
-          <div className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#6D28D9]">
-                <MessageCircle size={12} className="mr-1 inline align-[-2px]" /> Comentarios ({task.comments.length})
-              </span>
-            </div>
-            <ul className="space-y-1.5">
+          <details className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#6D28D9]">
+              <ChevronRight size={13} className="ops-caret transition-transform" />
+              <MessageCircle size={12} /> Comentarios ({task.comments.length})
+            </summary>
+            <ul className="mt-2 space-y-1.5">
               {task.comments.map((c, i) => (
                 <li key={i} className="rounded-md border border-[#E4DED6] bg-white p-2 text-xs">
                   <span className="font-semibold text-[#344054]">{c.author}</span>
@@ -2774,7 +2780,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 <Send size={12} /> Responder
               </button>
             </div>
-          </div>
+          </details>
         )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Título</span>
@@ -2819,73 +2825,46 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </div>
         </div>
-        {/* DesignOps ligero: puntos (los asigna el análisis automáticamente; aquí se ven). */}
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
+        {/* DesignOps ligero: puntos + botón Request review (abre popup para describir el cambio). */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
           <span className="inline-flex items-center gap-1 text-xs text-[#667085]">
             Puntos <InfoTip text="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea." />:
             <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
+          <button type="button" onClick={() => { setCrText(""); setCrBy("ceo"); setCrModal(true); }}
+            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold"
+            style={openCRs.length ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#475467" }}>
+            <AlertTriangle size={12} /> Request review
+          </button>
         </div>
-        {/* Revisión y cambios: ACORDEÓN debajo de Puntos (aprobar + pedir cambios + historial). */}
-        <details className="rounded-md border px-2 py-1.5" open={task.status === "review" || task.status === "verificacion" || openCRs.length > 0}
-          style={openCRs.length || task.status === "review" || task.status === "verificacion" ? { borderColor: "#F2C879", background: "#FFFCF5" } : { borderColor: "#E4DED6", background: "#fff" }}>
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-[#B76E00]">
-            <ChevronRight size={13} className="ops-caret transition-transform" />
-            <AlertTriangle size={12} /> Revisión y cambios{changeRequests.length ? ` (${changeRequests.length}${openCRs.length ? ` · ${openCRs.length} abierto(s)` : ""})` : ""}
-          </summary>
-          <div className="mt-2 space-y-2">
-            {task.status === "review" && (
-              <div className="rounded-md border border-[#B7D8D4] bg-[#EAF4F2] p-2">
-                <p className="text-[11px] font-semibold text-[#17727A]">El empleado la marcó lista (en revisión). Valídala y mándala a verificación del cliente, o devuélvela.</p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  <button type="button" onClick={approveReview} className="inline-flex items-center gap-1 rounded-md bg-[#175CD3] px-2.5 py-1 text-xs font-semibold text-white"><Send size={12} /> Aprobar → verificación del cliente</button>
-                  <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Devolver a en progreso</button>
-                </div>
-              </div>
-            )}
-            {task.status === "verificacion" && (
-              <div className="rounded-md border border-[#9CC7E4] bg-[#EAF2FB] p-2">
-                <p className="text-[11px] font-semibold text-[#175CD3]">En verificación del cliente. Cuando el cliente apruebe, ciérrala; si pide ajustes, devuélvela.</p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  <button type="button" onClick={openDoneModal} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Cliente aprobó → Finalizar</button>
-                  <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Cliente pidió ajustes → en progreso</button>
-                </div>
-              </div>
-            )}
-            {/* Pedir un cambio (queda registrado y vuelve a "en progreso") */}
-            <div className="rounded-md border border-[#E4DED6] bg-white p-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] font-semibold text-[#667085]">Pedir un cambio · lo pide:</span>
-                <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-1.5 py-1 text-xs font-semibold text-[#344054]">
-                  <option value="ceo">CEO</option>
-                  <option value="cliente">Cliente</option>
-                </select>
-              </div>
-              <textarea value={crText} onChange={(e) => setCrText(e.target.value)} rows={2} placeholder="Describe el cambio…"
-                className="mt-1.5 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
-              <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="mt-1.5 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
-            </div>
-            {/* Historial */}
-            {changeRequests.length > 0 && (
-              <ul className="space-y-1.5">
-                {[...changeRequests].reverse().map((c) => (
-                  <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-70" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: c.resolved ? "#FBFAF7" : "#FFFCF5" }}>
-                    <div className="flex items-start justify-between gap-2">
-                      <span>
-                        <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
-                        <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
-                        {c.resolved ? <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto por el empleado</span> : <span className="ml-1.5 font-semibold text-[#B54708]">abierto</span>}
-                        <p className="mt-0.5 text-[#475467]">{c.text}</p>
-                      </span>
-                      <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </details>
+        {/* Historial de request review: SOLO seguimiento (los cambios nuevos van por el popup de arriba).
+            Colapsado por defecto; un puntico avisa si hay alguno abierto. */}
+        {changeRequests.length > 0 && (
+          <details className="rounded-md border border-[#E4DED6] bg-white px-2 py-1.5">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-[#667085]">
+              <ChevronRight size={13} className="ops-caret transition-transform" />
+              {openCRs.length > 0 && <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: "#B54708" }} title="Hay request review abiertos" />}
+              Historial de request review ({changeRequests.length}{openCRs.length ? ` · ${openCRs.length} abierto(s)` : " · resueltos"})
+            </summary>
+            <ul className="mt-2 space-y-1.5">
+              {[...changeRequests].reverse().map((c) => (
+                <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-80" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: c.resolved ? "#FBFAF7" : "#FFFCF5" }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="min-w-0">
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                      <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
+                      {c.resolved ? <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto por el empleado</span> : <span className="ml-1.5 font-semibold text-[#B54708]">abierto</span>}
+                      <p className="mt-0.5 text-[#475467]">{c.text}</p>
+                      {(c.resolved_comment || c.resolvedComment) && <p className="mt-1 rounded border border-[#E4DED6] bg-white px-1.5 py-1 text-[#667085]"><b className="text-[#0D7A4F]">Empleado:</b> {c.resolved_comment || c.resolvedComment}</p>}
+                    </span>
+                    <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
           <select
@@ -2922,20 +2901,27 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </select>
           </div>
           <div className="flex rounded-md border border-[#D0D5DD] bg-white p-0.5">
-            {stateOptions.map(([key, label, Icon]) => (
+            {stateOptions.map(([key, label, Icon]) => {
+              // "En revisión" es un estado que pone el EMPLEADO: el admin no puede clicarlo
+              // (sí se ilumina cuando la tarea está ahí). El admin la mueve con Aprobar/Devolver.
+              const employeeOnly = key === "review";
+              const isOn = task.status === key;
+              return (
               <button
                 key={key}
                 type="button"
-                onClick={() => { if (key === "done" && task.status !== "done") openDoneModal(); else onChangeTask(task.id, { status: key }); }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded"
-                style={task.status === key
+                disabled={employeeOnly && !isOn}
+                onClick={() => { if (employeeOnly) return; if (key === "done" && task.status !== "done") openDoneModal(); else onChangeTask(task.id, { status: key }); }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded disabled:cursor-not-allowed disabled:opacity-40"
+                style={isOn
                   ? { background: statusTone(key).text, color: "#fff" }
                   : { color: "#344054" }}
-                title={label}
+                title={employeeOnly ? `${label} (lo marca el empleado)` : label}
               >
                 <Icon size={14} />
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
@@ -3124,6 +3110,34 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               <button type="button" onClick={() => { onChangeTask(task.id, { status: "done" }); setDoneModal(false); }} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Solo finalizar</button>
             </div>
             <button type="button" onClick={() => setDoneModal(false)} className="mt-2 w-full rounded-md px-3 py-2 text-sm font-semibold text-[#667085] hover:bg-[#F2F4F7]">Cancelar — no finalizar</button>
+          </div>
+        </div>,
+        document.body,
+      )}
+      {crModal && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) setCrModal(false); }}>
+          <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-[#1D2939]"><AlertTriangle size={14} className="mr-1 inline align-[-2px] text-[#B54708]" /> Nuevo request review</h3>
+                <p className="mt-0.5 text-xs text-[#667085]">Describe el cambio. La tarea vuelve a <b>en progreso</b> y le suena la campana al empleado.</p>
+              </div>
+              <button type="button" onClick={() => setCrModal(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]"><X size={16} /></button>
+            </div>
+            <div className="mt-3 flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-[#667085]">Lo pide:</span>
+              <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs font-semibold text-[#344054]">
+                <option value="ceo">CEO (revisión interna)</option>
+                <option value="cliente">Cliente</option>
+              </select>
+            </div>
+            <textarea value={crText} onChange={(e) => setCrText(e.target.value)} rows={3} autoFocus placeholder="Describe el cambio que se necesita…"
+              className="mt-2 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm text-[#344054] outline-none focus:border-[#B54708]" />
+            <div className="mt-3 flex gap-2">
+              <button type="button" disabled={!crText.trim()} onClick={() => { addChangeRequest(); setCrModal(false); }}
+                className="flex-1 rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
+              <button type="button" onClick={() => setCrModal(false)} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Cancelar</button>
+            </div>
           </div>
         </div>,
         document.body,
