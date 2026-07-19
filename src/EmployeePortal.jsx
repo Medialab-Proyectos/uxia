@@ -210,8 +210,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
           </button>
         </div>
 
-        {/* Indicadores del empleado */}
-        <div className="mb-5 grid grid-cols-4 gap-3">
+        {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) */}
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[["Novedades", noveltyCount, "#6D28D9"], ["Activas", active.length, "#17727A"], ["Vencidas", overdue, "#B42318"], ["Finalizadas", done.length, "#0D7A4F"]].map(([l, v, col]) => (
             <div key={l} className="rounded-md border p-3" style={{ borderColor: border, background: card }}>
               <p className="text-xs" style={{ color: dim }}>{l}</p>
@@ -222,21 +222,23 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
 
         {error && <p className="mb-3 rounded-md border border-[#F3B0A8] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
 
-        {/* Filtros: empresa y estado */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {myCompanies.length > 1 && (
+        {/* Filtros: empresa (si hay varias) + estado como carrusel horizontal en móvil */}
+        {myCompanies.length > 1 && (
+          <div className="mb-2">
             <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
-              className="rounded-md border px-2 py-1.5 text-xs font-semibold" style={{ borderColor: border, background: card, color: text }}>
+              className="w-full rounded-md border px-2 py-1.5 text-xs font-semibold sm:w-auto" style={{ borderColor: border, background: card, color: text }}>
               <option value="all">Todas las empresas</option>
               {myCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-          )}
+          </div>
+        )}
+        <div className="mb-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
           {[["new", "Novedades"], ["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
             const on = statusFilter === k;
             const isNov = k === "new";
             return (
             <button key={k} type="button" onClick={() => setStatusFilter(k)}
-              className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
+              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
               style={on
                 ? (isNov ? { borderColor: "#6D28D9", background: "#F5F3FF", color: "#6D28D9" } : { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" })
                 : { borderColor: border, color: dim }}>
@@ -278,17 +280,17 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                       const saving = st?.kind === "saving";
                       return (
                     <>
-                    {/* Estado (solo en progreso / en revisión) — marca la elección, no guarda aún */}
-                    <div className="mb-3 flex flex-wrap gap-2">
+                    {/* Estado (solo en progreso / en revisión) — 2 columnas; marca la elección */}
+                    <div className="mb-3 grid grid-cols-2 gap-2">
                       <button type="button" disabled={saving} onClick={() => setPendingStatus(t, "doing")}
-                        className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold"
+                        className="inline-flex items-center justify-center gap-1 rounded-md border px-2 py-2 text-xs font-semibold"
                         style={pStatus === "doing" ? { borderColor: "#1570EF", background: "#EAF2FB", color: "#1D5A99" } : { borderColor: border, color: text }}>
                         <Clock size={13} /> En progreso
                       </button>
                       <button type="button" disabled={saving} onClick={() => setPendingStatus(t, "review")}
-                        className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold"
+                        className="inline-flex items-center justify-center gap-1 rounded-md border px-2 py-2 text-xs font-semibold"
                         style={pStatus === "review" ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: text }}>
-                        <CheckCircle2 size={13} /> Finalizada (en revisión)
+                        <CheckCircle2 size={13} /> En revisión
                       </button>
                     </div>
 
@@ -307,24 +309,19 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                       className="w-full rounded-md border px-3 py-1.5 text-sm outline-none"
                       style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
 
-                    {/* Guardar EXPLÍCITO + confirmación */}
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                    {/* Guardar EXPLÍCITO a ancho completo + confirmación */}
+                    <div className="mt-3">
                       <button type="button" disabled={saving || !dirtyHere} onClick={() => save(t)}
-                        className="inline-flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-semibold text-white"
-                        style={dirtyHere && !saving ? { background: "#17727A" } : { background: "#C7CDD4", cursor: "default" }}>
-                        {saving ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />}
-                        {saving ? "Guardando…" : "Guardar cambios"}
+                        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-4 py-2.5 text-sm font-semibold text-white"
+                        style={dirtyHere && !saving ? { background: "#17727A" } : (st?.kind === "saved" ? { background: "#0D7A4F" } : { background: "#C7CDD4", cursor: "default" })}>
+                        {saving ? <LoaderCircle size={14} className="animate-spin" /> : (st?.kind === "saved" && !dirtyHere ? <CheckCircle2 size={14} /> : <Send size={14} />)}
+                        {saving ? "Guardando…" : (st?.kind === "saved" && !dirtyHere ? `Guardado ${new Date(st.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Guardar cambios")}
                       </button>
-                      {st?.kind === "saved" && !dirtyHere && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: "#0D7A4F" }}>
-                          <CheckCircle2 size={14} /> Guardado {new Date(st.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      )}
                       {st?.kind === "error" && (
-                        <span className="text-xs font-semibold" style={{ color: "#B42318" }}>⚠ {st.msg} Reintenta.</span>
+                        <p className="mt-1 text-center text-xs font-semibold" style={{ color: "#B42318" }}>⚠ {st.msg} Reintenta.</p>
                       )}
                       {dirtyHere && st?.kind !== "saving" && (
-                        <span className="text-xs font-semibold" style={{ color: "#B54708" }}>● Cambios sin guardar</span>
+                        <p className="mt-1 text-center text-xs font-semibold" style={{ color: "#B54708" }}>● Cambios sin guardar</p>
                       )}
                     </div>
                     <p className="mt-2 text-[11px]" style={{ color: dim }}><MessageCircle size={11} className="mr-1 inline align-[-1px]" /> Elige el estado y/o escribe un comentario, luego pulsa <b>Guardar</b>. Solo puedes cambiar el estado y comentar; el resto lo gestiona el administrador.</p>
