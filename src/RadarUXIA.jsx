@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Heart, ExternalLink, Trash2, Upload, Briefcase, Globe, MapPin, X } from "lucide-react";
+import { Heart, ExternalLink, Trash2, Upload, Briefcase, Globe, MapPin, X, Check } from "lucide-react";
 import logoLight from "./logos/logouxia.fw.png";
 import logoDark from "./logos/logouxiaoscuro.fw.png";
 import * as opsData from "./opsData.js";
@@ -1023,12 +1023,14 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     // los botones de plataforma (pestaña Radar), no en la lista de empleos.
     .filter((j) => !esListado(j))
     .filter((j) => {
-      if (filter === "todas") return true;
-      if (filter === "remotas") return j.remoto === "remoto";
-      if (filter === "español") return j.idioma === "español";
       if (filter === "megusta") return j.estado === "me_interesa";
       if (filter === "postuladas") return j.postulado;
-      return true;
+      // En las listas generales, las que ya están en "Me gusta" NO se muestran
+      // (ya pasaron a esa lista); se ven en el filtro/segmento "Me gusta".
+      if (j.estado === "me_interesa") return false;
+      if (filter === "remotas") return j.remoto === "remoto";
+      if (filter === "español") return j.idioma === "español";
+      return true; // todas
     })
     .filter((j) => withinPeriod(j.createdAt, periodo))
     .filter((j) => {
@@ -1190,10 +1192,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
           onClick={() => setTab("importar")}
           className="mb-4 inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors sm:w-auto"
           style={{
-            backgroundColor: tab === "importar" ? C.panelHi : C.panel,
-            border: `1px solid ${tab === "importar" ? C.amber : C.border}`,
-            color: tab === "importar" ? C.amber : C.text,
+            backgroundColor: C.amber,
+            border: `1px solid ${C.amber}`,
+            color: "#fff",
             fontFamily: FONT.display,
+            outline: tab === "importar" ? `2px solid ${C.amber}55` : "none",
+            outlineOffset: 2,
           }}
         >
           <Upload size={16} /> Subir propuesta
@@ -1359,7 +1363,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 {[...postSources.slice(0, 2), ...sources.slice(0, 4)].map((s) => (
                   <div
                     key={s.name}
-                    className="flex items-center justify-between gap-2 rounded-md px-3 py-2"
+                    className="flex min-w-0 items-center justify-between gap-2 rounded-md px-3 py-2"
                     style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}
                   >
                     <div className="min-w-0">
@@ -1605,15 +1609,16 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                             {o.postulado && <Badge color={C.green} bg={`${C.green}14`}>✓ Postulado</Badge>}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1">
                           {o.estado === "me_interesa" && (
                             <button
                               onClick={(e) => { e.preventDefault(); updateOppPostulado(o.id, !o.postulado); }}
-                              title={o.postulado ? "Quitar 'postulado'" : "Marcar que ya te postulaste"}
-                              className="inline-flex items-center justify-center rounded-md text-[11px] font-semibold px-2"
-                              style={{ height: 34, backgroundColor: o.postulado ? C.green : `${C.green}14`, color: o.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}
+                              title={o.postulado ? "Postulado — clic para quitar" : "Marcar que ya te postulaste"}
+                              aria-label="Postulado"
+                              className="inline-flex items-center justify-center rounded-md"
+                              style={{ width: 34, height: 34, backgroundColor: o.postulado ? C.green : `${C.green}14`, color: o.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}
                             >
-                              {o.postulado ? "Postulado ✓" : "Postulado"}
+                              <Check size={16} />
                             </button>
                           )}
                           <button
@@ -1672,8 +1677,8 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             ) : (
               <div className="space-y-3">
                 {[
-                  ...likedOpps.map((o) => ({ id: o.id, kind: "Propuesta", score: o.score, titulo: o.empresa, sub: `${o.persona || ""} · ${o.fuente || ""}`, url: o.url, unlike: () => updateOppEstado(o.id, "nueva"), del: () => removeOpp(o.id) })),
-                  ...likedJobs.map((j) => ({ id: j.id, kind: "Empleo", score: j.score, titulo: j.titulo, sub: `${j.empresa || ""} · ${j.ubicacion || ""}`, url: j.url, unlike: () => updateEstado(j.id, "nueva"), del: () => removeJob(j.id) })),
+                  ...likedOpps.map((o) => ({ id: o.id, kind: "Propuesta", score: o.score, titulo: o.empresa, sub: `${o.persona || ""} · ${o.fuente || ""}`, url: o.url, postulado: o.postulado, togglePost: () => updateOppPostulado(o.id, !o.postulado), unlike: () => updateOppEstado(o.id, "nueva"), del: () => removeOpp(o.id) })),
+                  ...likedJobs.map((j) => ({ id: j.id, kind: "Empleo", score: j.score, titulo: j.titulo, sub: `${j.empresa || ""} · ${j.ubicacion || ""}`, url: j.url, postulado: j.postulado, togglePost: () => updateJobPostulado(j.id, !j.postulado), unlike: () => updateEstado(j.id, "nueva"), del: () => removeJob(j.id) })),
                 ].map((item) => (
                   <article key={item.id} className="rounded-md p-4" style={{ backgroundColor: C.panel, border: `1px solid ${C.border}` }}>
                     <div className="flex gap-3 items-center">
@@ -1681,8 +1686,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-sm leading-snug truncate" style={{ fontFamily: FONT.display }}>{item.titulo}</h3>
                         <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>{item.sub} · {item.kind}</p>
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={item.postulado ? { backgroundColor: `${C.green}18`, color: C.green } : { backgroundColor: `${C.amber}18`, color: C.amber }}>
+                          {item.postulado ? "✓ Postulado" : "Sin postular"}
+                        </span>
                       </div>
-                      <div className="flex gap-2 items-center shrink-0">
+                      <div className="flex gap-1.5 items-center shrink-0">
+                        <button onClick={item.togglePost} title={item.postulado ? "Postulado — clic para quitar" : "Marcar postulado"} className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, backgroundColor: item.postulado ? C.green : `${C.green}14`, color: item.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}><Check size={16} /></button>
                         <button onClick={item.unlike} title="Quitar me gusta" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, backgroundColor: C.coral, color: "#fff", border: `1px solid ${C.coral}` }}><Heart size={16} fill="#fff" /></button>
                         {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" title="Ver" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, color: C.cyan, border: `1px solid ${C.cyan}44` }}><ExternalLink size={16} /></a>}
                         {renderDelete(item.id, () => item.del())}
@@ -1873,15 +1882,16 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           {j.postulado && <Badge color={C.green} bg={`${C.green}14`}>✓ Postulado</Badge>}
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1">
                         {j.estado === "me_interesa" && (
                           <button
                             onClick={(e) => { e.preventDefault(); updateJobPostulado(j.id, !j.postulado); }}
-                            title={j.postulado ? "Quitar 'postulado'" : "Marcar que ya te postulaste"}
-                            className="inline-flex items-center justify-center rounded-md text-[11px] font-semibold px-2"
-                            style={{ height: 34, backgroundColor: j.postulado ? C.green : `${C.green}14`, color: j.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}
+                            title={j.postulado ? "Postulado — clic para quitar" : "Marcar que ya te postulaste"}
+                            aria-label="Postulado"
+                            className="inline-flex items-center justify-center rounded-md"
+                            style={{ width: 34, height: 34, backgroundColor: j.postulado ? C.green : `${C.green}14`, color: j.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}
                           >
-                            {j.postulado ? "Postulado ✓" : "Postulado"}
+                            <Check size={16} />
                           </button>
                         )}
                         <button

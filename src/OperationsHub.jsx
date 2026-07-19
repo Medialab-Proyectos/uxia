@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -2493,48 +2493,47 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </span>
           )}
           {!open && (
-            <span className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#667085]">
-              {task.category && (
-                <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
-                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
-                  {task.category}
+            <span className="flex w-full flex-col gap-1 text-xs font-medium text-[#667085]">
+              {/* Línea 1: tipo + estado (+ actualizada / comentarios) */}
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {task.category && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
+                    {task.category}
+                  </span>
+                )}
+                <span
+                  className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
+                  style={overdue
+                    ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
+                    : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
+                >
+                  {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
+                  {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
                 </span>
-              )}
-              <span
-                className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
-                style={overdue
-                  ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
-                  : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
-              >
-                {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
-                {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
+                {task.employeeTouchedAt && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
+                  </span>
+                )}
+                {Array.isArray(task.comments) && task.comments.length > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6D28D9" }}>
+                    <MessageCircle size={11} /> {task.comments.length}
+                  </span>
+                )}
               </span>
-              {task.employeeTouchedAt && (
-                <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
-                </span>
-              )}
-              {Array.isArray(task.comments) && task.comments.length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6D28D9" }}>
-                  <MessageCircle size={11} /> {task.comments.length}
-                </span>
-              )}
-              {task.dueDate && (
-                <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
-                  <CalendarDays size={11} />
-                  {displayDate(task.dueDate)}
-                </span>
-              )}
-              {assignedPerson && (
-                <span className="inline-flex items-center gap-1 rounded border border-[#E4DED6] bg-white px-1.5 py-0.5">
-                  <UserRound size={11} />
-                  {assignedPerson.name}
-                </span>
-              )}
-              {task.status === "done" && task.workedHours != null && (
-                <span className="inline-flex items-center gap-1 rounded border border-[#A6D9C4] bg-[#E5F5EE] px-1.5 py-0.5 font-semibold text-[#0D7A4F]">
-                  <Clock size={11} />
-                  {task.workedHours} h
+              {/* Línea 2: fecha + persona (+ horas si finalizada) */}
+              {(task.dueDate || assignedPerson || (task.status === "done" && task.workedHours != null)) && (
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[#8b8272]">
+                  {task.dueDate && (
+                    <span className="inline-flex items-center gap-1"><CalendarDays size={11} />{displayDate(task.dueDate)}</span>
+                  )}
+                  {assignedPerson && (
+                    <span className="inline-flex items-center gap-1"><UserRound size={11} />{assignedPerson.name}</span>
+                  )}
+                  {task.status === "done" && task.workedHours != null && (
+                    <span className="inline-flex items-center gap-1 font-semibold text-[#0D7A4F]"><Clock size={11} />{task.workedHours} h</span>
+                  )}
                 </span>
               )}
             </span>
@@ -2696,12 +2695,23 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </div>
         </div>
-        {/* Puntos de diseño: los asigna el MD al analizar la tarea (automático). Se muestran
-            solo como referencia si existen; ya NO es un campo manual. QA/CR/IA/herramientas
-            salen del feedback de cierre, no de la tarjeta. */}
-        {task.designPoints != null && (
-          <p className="text-xs text-[#667085]">Puntos de diseño (auto): <b className="text-[#17727A]">{task.designPoints}</b></p>
-        )}
+        {/* DesignOps ligero: puntos (los asigna el MD automáticamente; aquí se ven) y la
+            marca de Change Request con explicación. QA/IA/herramientas salen del cierre. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
+          <span className="inline-flex items-center gap-1 text-xs text-[#667085]" title="Puntos de diseño por complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis del MD; miden esfuerzo para el tablero DesignOps.">
+            Puntos DesignOps <HelpCircle size={12} className="text-[#98A2B3]" />:
+            <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
+            {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
+          </span>
+          <button type="button"
+            onClick={() => onChangeTask(task.id, { changeRequest: !task.changeRequest })}
+            title="Change Request: márcalo si el cliente pidió un cambio DESPUÉS de aprobar el diseño (no es alcance original). Alimenta el indicador de eficiencia."
+            className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+            style={task.changeRequest ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#667085" }}>
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: task.changeRequest ? "#B54708" : "#D0D5DD" }} />
+            Change Request <HelpCircle size={11} className="opacity-70" />
+          </button>
+        </div>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
           <select
@@ -2882,17 +2892,16 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             {Array.isArray(task.tools) && task.tools.length > 0 && <p className="mt-0.5 text-xs text-[#6941C6]">Herramientas: {task.tools.join(", ")}</p>}
           </div>
         )}
-        {/* Guardar TAREA (guardado por tarjeta, con confirmación). */}
+        {/* Guardar TAREA (guardado por tarjeta, a ancho completo, con confirmación). */}
         {onSaveTask && (
-          <div className="flex items-center gap-2 border-t border-[#E4DED6] pt-2">
+          <div className="border-t border-[#E4DED6] pt-2">
             <button type="button" onClick={doSaveTask} disabled={taskSave === "saving"}
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2.5 text-sm font-semibold text-white"
               style={{ background: taskSave === "saving" ? "#7FB0B4" : "#17727A" }}>
               {taskSave === "saving" ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />}
-              {taskSave === "saving" ? "Guardando…" : "Guardar tarea"}
+              {taskSave === "saving" ? "Guardando…" : taskSave === "saved" ? "Guardada ✓" : "Guardar tarea"}
             </button>
-            {taskSave === "saved" && <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#0D7A4F]"><Check size={14} /> Guardada</span>}
-            {taskSave === "error" && <span className="text-xs font-semibold text-[#B42318]">⚠ No se guardó. Reintenta.</span>}
+            {taskSave === "error" && <p className="mt-1 text-center text-xs font-semibold text-[#B42318]">⚠ No se guardó. Reintenta.</p>}
           </div>
         )}
       </div>
@@ -3310,11 +3319,9 @@ function CompanyPanel({
                         <button type="button" onClick={() => setEditClient({ old: client, value: client })} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-white/40" style={{ color: accent }} title="Editar nombre del subproyecto"><Pencil size={12} /></button>
                       </div>
                     )}
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      <span className="inline-flex rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
-                      <span className="inline-flex rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
-                    </div>
+                    <p className="mt-1 text-xs font-semibold text-[#667085]">
+                      <span className="text-[#17727A]">{projectTasks.length} tareas</span> · <span className="text-[#B76E00]">{pendingAssignment} sin asignar</span> · <span className={overdueTasks ? "text-[#B42318]" : "text-[#98A2B3]"}>{overdueTasks} vencidas</span>
+                    </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
@@ -3484,10 +3491,8 @@ function CompanyPanel({
                         <ChevronRight size={16} className="ops-caret" style={{ color: accent }} />
                         <span className="text-xs font-semibold" style={{ color: accent }}>Tareas del subproyecto</span>
                       </span>
-                      <span className="flex flex-wrap gap-1">
-                        <span className="rounded-full bg-[#EAF4F2] px-2 py-0.5 text-xs font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
-                        <span className="rounded-full bg-[#FFF7E6] px-2 py-0.5 text-xs font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
+                      <span className="text-xs font-semibold text-[#667085]">
+                        <span className="text-[#17727A]">{projectTasks.length} tareas</span> · <span className="text-[#B76E00]">{pendingAssignment} sin asignar</span> · <span className={overdueTasks ? "text-[#B42318]" : "text-[#98A2B3]"}>{overdueTasks} vencidas</span>
                       </span>
                     </summary>
                     <div className="mt-2 space-y-2">
@@ -3681,7 +3686,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
           {[["mes", "Mes"], ["trimestre", "Trimestre"], ["semestre", "Semestre"], ["año", "Año"]].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
           ))}
-          <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl, period })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title={`Descargar el reporte DesignOps (${period}, a corte de hoy)`}><Download size={12} /> Reporte DesignOps</button>
+          <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl, period })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title={`Descargar el reporte DesignOps (${period}, a corte de hoy)`}><Download size={12} /><span className="hidden sm:inline"> Reporte DesignOps</span></button>
         </div>
       </div>
 
@@ -3711,17 +3716,21 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
         </div>
       </div>
 
-      {/* Indicadores DesignOps EN PANTALLA (proceso total) — alineados a REACH (NN/g). */}
-      <div className="rounded-md border border-[#E4DED6] bg-white p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#17727A]">Indicadores DesignOps · proceso total <span className="font-normal normal-case text-[#98A2B3]">(REACH · {period})</span></p>
-        {/* Flujo del trabajo */}
+      {/* Indicadores DesignOps EN PANTALLA (proceso total) — colapsable, alineado a REACH. */}
+      <details className="rounded-md border border-[#E4DED6] bg-white p-3">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-[#17727A]">
+          <ChevronRight size={14} className="ops-caret transition-transform" />
+          Indicadores DesignOps <span className="font-normal normal-case text-[#98A2B3]">· proceso total (REACH · {period})</span>
+        </summary>
+        <div className="mt-2 space-y-3">
+        {/* Flujo del trabajo — con ayuda de qué significa cada término */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {[["Cycle time", cycleTime == null ? "—" : `${cycleTime} d`, "días creada→cerrada"],
-            ["Throughput", throughputWk, "cerradas/sem"],
-            ["WIP", wip, "en progreso"],
-            ["Velocidad", velocity == null ? "—" : `${velocity}`, "pts diseño/sem"]].map(([k, v, s]) => (
+          {[["Cycle time", cycleTime == null ? "—" : `${cycleTime} d`, "días creada→cerrada", "Tiempo de ciclo: días promedio desde que se crea una tarea hasta que se cierra. Mide qué tan rápido fluye el trabajo."],
+            ["Throughput", throughputWk, "cerradas/sem", "Rendimiento: cuántas tareas se cierran por semana en promedio. Mide la capacidad de entrega."],
+            ["WIP", wip, "en progreso", "Work In Progress: cuántas tareas están en progreso a la vez. Mucho WIP fragmenta el foco y alarga el cycle time."],
+            ["Velocidad", velocity == null ? "—" : `${velocity}`, "pts diseño/sem", "Puntos de diseño cerrados por semana (ref. 8–12 senior). Requiere que las tareas tengan puntos estimados."]].map(([k, v, s, help]) => (
             <div key={k} className="rounded-md bg-[#F7FAFA] p-2">
-              <p className="text-[10px] uppercase tracking-[0.06em] text-[#667085]">{k}</p>
+              <p className="flex items-center gap-1 text-[10px] uppercase tracking-[0.06em] text-[#667085]">{k} <HelpCircle size={11} className="text-[#98A2B3]" title={help} /></p>
               <p className="font-metrics text-lg font-semibold text-[#17727A]">{v}</p>
               <p className="text-[9px] text-[#98A2B3]">{s}</p>
             </div>
@@ -3745,10 +3754,11 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
           </table>
         </div>
         {toolsSorted.length > 0 && (
-          <p className="mt-2 text-[11px] text-[#6941C6]">Herramientas: {toolsSorted.map(([t, n]) => `${t} (${n})`).join(" · ")}</p>
+          <p className="text-[11px] text-[#6941C6]">Herramientas: {toolsSorted.map(([t, n]) => `${t} (${n})`).join(" · ")}</p>
         )}
-        <p className="mt-1 text-[10px] text-[#98A2B3]">Los indicadores con "—" necesitan capturar el dato (puntos de diseño, defectos). El reporte descargable trae este mismo detalle.</p>
-      </div>
+        <p className="text-[10px] text-[#98A2B3]">Los indicadores con "—" necesitan capturar el dato (puntos de diseño, defectos). El reporte descargable trae este mismo detalle.</p>
+        </div>
+      </details>
 
       {/* Distribución de tareas por estado */}
       <div className="rounded-md border border-[#E4DED6] bg-white p-3">
