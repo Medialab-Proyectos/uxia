@@ -189,6 +189,36 @@ Estos campos se escriben en el `tasks.json` del run (`designPoints`, `qaDefects`
 `changeRequest`) y el `daily-push.mjs` los sube. El empleado NO puede alterarlos (los protege
 el trigger de la base); solo el admin o el MD.
 
+## Novedades y ciclo de revisión / Change Requests (normas del producto)
+
+Estas reglas rigen cómo fluye una tarea entre el empleado y el administrador. El MD debe
+respetarlas al crear/actualizar tareas y NO romper el ciclo.
+
+**Tipos de "novedad" para el empleado** (todas son subconjunto de las ACTIVAS):
+- **Nueva**: recién asignada, nunca abierta (`assignee_seen_at` null).
+- **Cambio solicitado (Change Request)**: hay un CR abierto en `change_requests`. Es la más
+  urgente; el empleado debe ajustar y reenviar a revisión.
+- **Actualizada**: el admin editó la tarea (`admin_touched_at` > `assignee_seen_at`) sin CR abierto.
+- Las ediciones o cambios de estado del PROPIO empleado NO son novedad para él.
+- En el portal, "Novedades" es un FILTRO dentro de activas (no una lista paralela a "Activas").
+
+**Ciclo de estados:**
+- El empleado solo mueve la tarea a **`doing`** (en progreso) o **`review`** (él cree que está
+  lista). NO finaliza.
+- El admin revisa lo que está en `review`:
+  - **Aprobar** → `done` (resuelve los CR abiertos, abre el modal de satisfacción).
+  - **Pedir cambios** → agrega un CR a `change_requests`, la tarea vuelve a `doing` y se sella
+    `admin_touched_at` (le suena la campana al empleado con "Cambio solicitado").
+- La "revisión" del empleado (`review`) ≠ la del admin: el empleado avisa que cree que está
+  lista; el admin decide aprobar o pedir cambios. Puede iterar muchas veces.
+
+**Change Requests (`change_requests` jsonb):** lista `[{ id, at, by:'ceo'|'cliente', text,
+resolved, resolved_at }]`. El origen distingue **CEO** (revisión interna) vs **Cliente**
+(trasladado por el CEO). Alimenta el indicador de eficiencia del tablero DesignOps (cuenta CR
+ABIERTOS). El empleado NO puede editarlos (los protege el trigger de la base). El MD normalmente
+NO crea CRs (los abre el admin al revisar); solo si un insumo describe explícitamente un cambio
+pedido por el cliente sobre un entregable ya aprobado, puede registrarlo.
+
 ## Como debe verse una tarea
 
 Las tareas viven debajo de `Contexto del subproyecto`.

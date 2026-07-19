@@ -2453,6 +2453,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   // Change Requests: texto + origen (CEO/cliente) del cambio a pedir.
   const [crText, setCrText] = useState("");
   const [crBy, setCrBy] = useState("ceo");
+  const [crModal, setCrModal] = useState(false);
   const changeRequests = Array.isArray(task.changeRequests) ? task.changeRequests : [];
   const openCRs = changeRequests.filter((c) => !c.resolved);
   function addChangeRequest() {
@@ -2519,7 +2520,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
       style={open
         ? { borderColor: "#17727A", background: "#EAF4F2", boxShadow: "0 0 0 1px #17727A55" }
         : { borderColor: "#E4DED6", background: "#FFFCF7" }}>
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-2 rounded text-xs font-semibold text-[#1D2939]">
+      <summary className="flex cursor-pointer list-none flex-col gap-1.5 rounded text-xs font-semibold text-[#1D2939]">
+        {/* Fila superior: chevron + título (2 columnas) + acciones (tacho a la derecha) */}
+        <span className="flex w-full items-start gap-2">
         <span
           className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
           style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", color: "#17727A" }}
@@ -2527,7 +2530,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         >
           <ChevronRight size={16} />
         </span>
-        <span className="min-w-0 flex-1 space-y-1">
+        <span className="min-w-0 flex-1">
           {open ? (
             <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#17727A]">
               Editando tarea{task.ref ? ` · ${task.ref}` : ""}
@@ -2536,49 +2539,6 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             <span className="block break-words">
               {task.ref && <span className="mr-1.5 rounded border border-[#D9D2C7] bg-[#F7F4EF] px-1 py-0.5 font-mono text-[10px] font-bold text-[#475467]">{task.ref}</span>}
               {task.title}
-            </span>
-          )}
-          {!open && (
-            <span className="flex w-full flex-col gap-1 text-xs font-medium text-[#667085]">
-              {/* Línea 1: estado + tipo juntos y completos (shrink-0); si hay extras
-                  (actualizada/comentarios) bajan a otra línea, sin recortar el tipo. */}
-              <span className="flex flex-wrap items-center gap-1.5">
-                <span
-                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold"
-                  style={overdue
-                    ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
-                    : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
-                >
-                  {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
-                  {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
-                </span>
-                {task.category && (
-                  <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
-                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
-                    {task.category}
-                  </span>
-                )}
-                {task.employeeTouchedAt && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
-                  </span>
-                )}
-                {Array.isArray(task.comments) && task.comments.length > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6D28D9" }}>
-                    <MessageCircle size={11} /> {task.comments.length}
-                  </span>
-                )}
-              </span>
-              {/* Línea 2: persona + fecha en dos columnas (2×2) */}
-              {(task.dueDate || assignedPerson || (task.status === "done" && task.workedHours != null)) && (
-                <span className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[#8b8272]">
-                  <span className="inline-flex items-center gap-1 truncate">{assignedPerson ? <><UserRound size={11} className="shrink-0" />{assignedPerson.name}</> : <span className="text-[#B76E00]">Sin responsable</span>}</span>
-                  {task.dueDate && <span className="inline-flex items-center gap-1"><CalendarDays size={11} className="shrink-0" />{displayDate(task.dueDate)}</span>}
-                  {task.status === "done" && task.workedHours != null && (
-                    <span className="inline-flex items-center gap-1 font-semibold text-[#0D7A4F]"><Clock size={11} />{task.workedHours} h</span>
-                  )}
-                </span>
-              )}
             </span>
           )}
         </span>
@@ -2655,6 +2615,53 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </button>
           )}
         </span>
+        </span>
+        {/* Etiquetas A LO ANCHO debajo (no las tapa el tacho). Máx 3 filas:
+            estado+tipo · persona+fecha · (actualizada su propia fila). */}
+        {!open && (
+          <span className="flex w-full flex-col gap-1 pl-7 text-xs font-medium text-[#667085]">
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold"
+                style={overdue
+                  ? { borderColor: "#B42318", background: "#FEF3F2", color: "#B42318" }
+                  : { borderColor: statusTone(task.status).border, background: statusTone(task.status).bg, color: statusTone(task.status).text }}
+              >
+                {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
+                {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
+              </span>
+              {task.category && (
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
+                  {task.category}
+                </span>
+              )}
+            </span>
+            {(task.dueDate || assignedPerson || (task.status === "done" && task.workedHours != null)) && (
+              <span className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[#8b8272]">
+                <span className="inline-flex items-center gap-1 truncate">{assignedPerson ? <><UserRound size={11} className="shrink-0" />{assignedPerson.name}</> : <span className="text-[#B76E00]">Sin responsable</span>}</span>
+                {task.dueDate && <span className="inline-flex items-center gap-1"><CalendarDays size={11} className="shrink-0" />{displayDate(task.dueDate)}</span>}
+                {task.status === "done" && task.workedHours != null && (
+                  <span className="inline-flex items-center gap-1 font-semibold text-[#0D7A4F]"><Clock size={11} />{task.workedHours} h</span>
+                )}
+              </span>
+            )}
+            {(task.employeeTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
+              <span className="flex flex-wrap items-center gap-1.5">
+                {task.employeeTouchedAt && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
+                  </span>
+                )}
+                {Array.isArray(task.comments) && task.comments.length > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6D28D9" }}>
+                    <MessageCircle size={11} /> {task.comments.length}
+                  </span>
+                )}
+              </span>
+            )}
+          </span>
+        )}
       </summary>
       <div className="mt-2 space-y-2">
         {task.employeeTouchedAt && (
@@ -2669,54 +2676,6 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </button>
           </div>
         )}
-
-        {/* Revisión y Change Requests (ciclo empleado↔admin) */}
-        <div className="rounded-md border border-[#F2C879] bg-[#FFFCF5] p-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#B76E00]">
-              <AlertTriangle size={12} className="mr-1 inline align-[-2px]" /> Revisión y cambios{openCRs.length ? ` · ${openCRs.length} abierto(s)` : ""}
-            </span>
-            {task.status === "review" && (
-              <span className="inline-flex gap-1.5">
-                <button type="button" onClick={approveReview} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Aprobar</button>
-                <button type="button" onClick={() => document.getElementById(`cr-input-${task.id}`)?.focus()} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-2.5 py-1 text-xs font-semibold text-[#B54708]">Pedir cambios</button>
-              </span>
-            )}
-          </div>
-          {task.status === "review" && (
-            <p className="mt-1 text-[11px] text-[#8A6D3B]">El empleado la envió a revisión. Apruébala o pide un cambio (queda registrado y vuelve a "en progreso").</p>
-          )}
-          {/* Historial de CRs */}
-          {changeRequests.length > 0 && (
-            <ul className="mt-2 space-y-1.5">
-              {changeRequests.map((c) => (
-                <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-60" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: "#fff" }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <span>
-                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
-                      <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
-                      {c.resolved && <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto</span>}
-                      <p className="mt-0.5 text-[#475467]">{c.text}</p>
-                    </span>
-                    <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* Registrar un CR (CEO o cliente) */}
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-1.5 py-1.5 text-xs font-semibold text-[#344054]">
-              <option value="ceo">CEO</option>
-              <option value="cliente">Cliente</option>
-            </select>
-            <input id={`cr-input-${task.id}`} value={crText} onChange={(e) => setCrText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && crText.trim()) { e.preventDefault(); addChangeRequest(); } }}
-              placeholder="¿Qué cambio se pide? (vuelve a 'en progreso' y avisa al empleado)"
-              className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
-            <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
-          </div>
-        </div>
 
         {Array.isArray(task.comments) && task.comments.length > 0 && (
           <div className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
@@ -2789,13 +2748,18 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           </div>
         </div>
         {/* DesignOps ligero: puntos (los asigna el análisis automáticamente; aquí se ven).
-            Los Change Requests se abren desde "Revisión y cambios" arriba, no aquí. */}
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
+            Los Change Requests se abren desde el botón "Revisión y cambios". */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
           <span className="inline-flex items-center gap-1 text-xs text-[#667085]" title="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea.">
             Puntos <HelpCircle size={12} className="text-[#98A2B3]" />:
             <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
+          <button type="button" onClick={() => setCrModal(true)}
+            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold"
+            style={openCRs.length ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#475467" }}>
+            <AlertTriangle size={12} /> Revisión y cambios{openCRs.length ? ` · ${openCRs.length}` : ""}
+          </button>
         </div>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
@@ -2990,6 +2954,66 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           </div>
         )}
       </div>
+      {crModal && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) setCrModal(false); }}>
+          <div className="w-full max-w-md rounded-md bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#1D2939]"><AlertTriangle size={14} className="mr-1 inline align-[-2px] text-[#B54708]" /> Revisión y cambios{task.ref ? ` · ${task.ref}` : ""}</h3>
+              <button type="button" onClick={() => setCrModal(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]"><X size={16} /></button>
+            </div>
+            <p className="mt-0.5 text-xs text-[#667085]">El CEO (o el cliente) pide un cambio; la tarea vuelve a "en progreso" y se le avisa al empleado. Quedan registrados aquí.</p>
+
+            {task.status === "review" && (
+              <div className="mt-3 rounded-md border border-[#F2C879] bg-[#FFFCF5] p-2">
+                <p className="text-[11px] font-semibold text-[#8A6D3B]">El empleado la envió a revisión. Decide:</p>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" onClick={() => { approveReview(); setCrModal(false); }} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-3 py-1.5 text-xs font-semibold text-white"><Check size={13} /> Aprobar</button>
+                  <button type="button" onClick={() => document.getElementById(`cr-input-modal-${task.id}`)?.focus()} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-3 py-1.5 text-xs font-semibold text-[#B54708]">Pedir cambios ↓</button>
+                </div>
+              </div>
+            )}
+
+            {/* Registrar un cambio */}
+            <div className="mt-3">
+              <span className="text-xs font-semibold text-[#667085]">Pedir un cambio</span>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-1.5 py-1.5 text-xs font-semibold text-[#344054]">
+                  <option value="ceo">CEO</option>
+                  <option value="cliente">Cliente</option>
+                </select>
+                <input id={`cr-input-modal-${task.id}`} value={crText} onChange={(e) => setCrText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && crText.trim()) { e.preventDefault(); addChangeRequest(); } }}
+                  placeholder="¿Qué cambio se pide?"
+                  className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
+                <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir</button>
+              </div>
+            </div>
+
+            {/* Historial */}
+            <div className="mt-3">
+              <span className="text-xs font-semibold text-[#667085]">Historial ({changeRequests.length})</span>
+              {changeRequests.length ? (
+                <ul className="mt-1 max-h-56 space-y-1.5 overflow-y-auto">
+                  {[...changeRequests].reverse().map((c) => (
+                    <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-60" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: "#fff" }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span>
+                          <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                          <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
+                          {c.resolved && <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto</span>}
+                          <p className="mt-0.5 text-[#475467]">{c.text}</p>
+                        </span>
+                        <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="mt-1 text-xs text-[#98A2B3]">Sin cambios registrados todavía.</p>}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       {doneModal && createPortal(
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setDoneModal(false); }}>
           <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-xl">
