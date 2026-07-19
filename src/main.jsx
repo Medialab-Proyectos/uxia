@@ -91,7 +91,8 @@ function AppShell() {
   };
   const [notifs, setNotifs] = React.useState([]);
   // Notificaciones vistas: mapa clave→conteo ya visto. Una alerta se oculta cuando el usuario la
-  // abre (se marca vista con su conteo actual) y solo reaparece si el conteo vuelve a subir.
+  // abre (se marca vista con la FIRMA actual: qué tareas la componen). Reaparece si esa firma
+  // cambia (entra/sale una tarea distinta), no solo si sube el conteo.
   const [notifSeen, setNotifSeen] = React.useState(() => {
     try { return JSON.parse(localStorage.getItem("uxia.notifSeen") || "{}") || {}; } catch { return {}; }
   });
@@ -99,7 +100,7 @@ function AppShell() {
   const [opsFocus, setOpsFocus] = React.useState(null);
   function dismissNotif(n) {
     setNotifSeen((prev) => {
-      const next = { ...prev, [n.key]: n.count };
+      const next = { ...prev, [n.key]: n.sig };
       try { localStorage.setItem("uxia.notifSeen", JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
@@ -125,25 +126,14 @@ function AppShell() {
   });
   function empDismiss(a) {
     setEmpSeen((prev) => {
-      const next = { ...prev, [a.key]: a.count };
+      const next = { ...prev, [a.key]: a.sig };
       try { localStorage.setItem("uxia.empNotifSeen", JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
   }
-  // Cuando una alerta desaparece (su conteo bajó a 0 y ya no la reporta el portal), se olvida su
-  // "visto": así, si el mismo tipo de alerta vuelve a aparecer (otro cambio solicitado), se muestra
-  // de nuevo aunque el conteo coincida con el anterior. Antes se quedaba oculta y "no aparecía".
-  React.useEffect(() => {
-    const keys = new Set(empAlerts.map((a) => a.key));
-    setEmpSeen((prev) => {
-      let changed = false; const next = {};
-      for (const k of Object.keys(prev)) { if (keys.has(k)) next[k] = prev[k]; else changed = true; }
-      if (!changed) return prev;
-      try { localStorage.setItem("uxia.empNotifSeen", JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
-  }, [empAlerts]);
-  const empVisible = empAlerts.filter((a) => (empSeen[a.key] || 0) < a.count);
+  // Se muestra una alerta si su FIRMA (qué tareas la componen) cambió desde la última vez que se
+  // marcó vista. Así reaparece al llegar una tarea distinta aunque el conteo coincida.
+  const empVisible = empAlerts.filter((a) => empSeen[a.key] !== a.sig);
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
   // Sesion con la base caida: null = ok; "refrescando" = intentando recuperar en silencio;
@@ -182,33 +172,27 @@ function AppShell() {
         const list = [];
         const today = new Date().toISOString().slice(0, 10);
         const tasks = state?.tasks || [];
-        const vencen = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate <= today).length;
-        const bloq = tasks.filter((t) => t.status === "blocked").length;
-        const enRevision = tasks.filter((t) => t.status === "review").length;
-        const verificando = tasks.filter((t) => t.status === "verificacion").length;
-        const actualizadas = tasks.filter((t) => t.employeeTouchedAt).length;
-        if (enRevision) list.push({ kind: "operations", key: "ops-review", focus: "review", count: enRevision, text: `${enRevision} tarea(s) por aprobar (en revisión)` });
-        if (verificando) list.push({ kind: "operations", key: "ops-verif", focus: "verificacion", count: verificando, text: `${verificando} tarea(s) en verificación del cliente` });
-        if (actualizadas) list.push({ kind: "operations", key: "ops-updated", focus: "updated", count: actualizadas, text: `${actualizadas} tarea(s) actualizada(s) por revisar` });
-        if (vencen) list.push({ kind: "operations", key: "ops-today", focus: "today", count: vencen, text: `${vencen} tarea(s) vencen hoy o están vencidas` });
-        if (bloq) list.push({ kind: "operations", key: "ops-blocked", focus: "blocked", count: bloq, text: `${bloq} tarea(s) bloqueadas` });
+        // Firma por IDENTIDAD (qué tareas, no cuántas): así una alerta reaparece si entra una
+        // tarea distinta aunque el total coincida (p. ej. el empleado aprueba un request review y
+        // otra tarea sale de revisión el mismo día). Antes, con dedupe por conteo, se perdía.
+        const sig = (arr) => arr.map((t) => t.id).sort().join(",");
+        const vencen = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate <= today);
+        const bloq = tasks.filter((t) => t.status === "blocked");
+        const enRevision = tasks.filter((t) => t.status === "review");
+        const verificando = tasks.filter((t) => t.status === "verificacion");
+        const actualizadas = tasks.filter((t) => t.employeeTouchedAt);
+        if (enRevision.length) list.push({ kind: "operations", key: "ops-review", focus: "review", count: enRevision.length, sig: sig(enRevision), text: `${enRevision.length} tarea(s) por aprobar (en revisión)` });
+        if (verificando.length) list.push({ kind: "operations", key: "ops-verif", focus: "verificacion", count: verificando.length, sig: sig(verificando), text: `${verificando.length} tarea(s) en verificación del cliente` });
+        if (actualizadas.length) list.push({ kind: "operations", key: "ops-updated", focus: "updated", count: actualizadas.length, sig: sig(actualizadas), text: `${actualizadas.length} tarea(s) actualizada(s) por revisar` });
+        if (vencen.length) list.push({ kind: "operations", key: "ops-today", focus: "today", count: vencen.length, sig: sig(vencen), text: `${vencen.length} tarea(s) vencen hoy o están vencidas` });
+        if (bloq.length) list.push({ kind: "operations", key: "ops-blocked", focus: "blocked", count: bloq.length, sig: sig(bloq), text: `${bloq.length} tarea(s) bloqueadas` });
         const viejas = (vacantes || []).filter((v) => {
           if (!v.createdAt) return false;
           return Math.floor((Date.now() - new Date(v.createdAt).getTime()) / 86400000) > 15;
-        }).length;
-        if (viejas) list.push({ kind: "radar", key: "radar-old", count: viejas, text: `${viejas} empleo(s) con +15 días (revisa o elimina)` });
-        // Olvida el "visto" de las alertas que ya no están (conteo 0) para que, si vuelven a
-        // aparecer con el mismo conteo, se muestren de nuevo (antes se quedaban ocultas).
-        const activeKeys = new Set(list.map((n) => n.key));
-        setNotifSeen((prev) => {
-          let changed = false; const cleaned = {};
-          for (const k of Object.keys(prev)) { if (activeKeys.has(k)) cleaned[k] = prev[k]; else changed = true; }
-          if (!changed) return prev;
-          try { localStorage.setItem("uxia.notifSeen", JSON.stringify(cleaned)); } catch { /* ignore */ }
-          return cleaned;
         });
-        // Oculta las que ya se vieron con ese mismo conteo (o menor); reaparecen si el conteo sube.
-        setNotifs(list.filter((n) => (notifSeen[n.key] || 0) < n.count));
+        if (viejas.length) list.push({ kind: "radar", key: "radar-old", count: viejas.length, sig: sig(viejas), text: `${viejas.length} empleo(s) con +15 días (revisa o elimina)` });
+        // Muestra una alerta si su FIRMA cambió desde la última vez que se marcó vista.
+        setNotifs(list.filter((n) => notifSeen[n.key] !== n.sig));
       } catch {
         setNotifs([]);
       }
@@ -257,6 +241,11 @@ function AppShell() {
       body: { email, password },
     });
     const saved = saveSession(nextSession);
+    // Cada inicio de sesión ARRANCA en el Centro de Operaciones (el Radar es secundario).
+    // Se fuerza aquí porque el AppShell no se desmonta entre sesiones y el módulo podría
+    // quedar en "radar" de la sesión anterior.
+    setModule("operations");
+    try { localStorage.setItem("uxia.activeModule", "operations"); } catch { /* ignore */ }
     setSession(saved);
   }
 
@@ -267,6 +256,8 @@ function AppShell() {
       }
     } finally {
       clearSession();
+      setModule("operations");
+      try { localStorage.setItem("uxia.activeModule", "operations"); } catch { /* ignore */ }
       setSession(null);
     }
   }

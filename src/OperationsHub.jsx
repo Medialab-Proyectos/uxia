@@ -2561,10 +2561,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     ["done", "Finalizada", CheckCircle2],
   ];
   return (
-    <details open={open} onToggle={handleToggle} className="rounded-md border p-2 transition-colors"
-      style={open
-        ? { borderColor: "#17727A", background: "#EAF4F2", boxShadow: "0 0 0 1px #17727A55" }
-        : { borderColor: "#E4DED6", background: "#FFFCF7" }}>
+    <details open={open} onToggle={handleToggle}
+      className={`rounded-md border p-2 transition-colors ${open ? "border-[#17727A] bg-[#EAF4F2]" : "border-[#E4DED6] bg-[#FFFCF7]"}`}
+      style={open ? { boxShadow: "0 0 0 1px #17727A55" } : undefined}>
       <summary className="flex cursor-pointer list-none flex-col gap-1.5 rounded text-xs font-semibold text-[#1D2939]">
         {/* Fila superior: chevron + título (2 columnas) + acciones (tacho a la derecha) */}
         <span className="flex w-full items-start gap-2">
@@ -2757,17 +2756,19 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         )}
 
         {Array.isArray(task.comments) && task.comments.length > 0 && (
-          <details className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#6D28D9]">
-              <ChevronRight size={13} className="ops-caret transition-transform" />
+          <div className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#6D28D9]">
               <MessageCircle size={12} /> Comentarios ({task.comments.length})
-            </summary>
-            <ul className="mt-2 space-y-1.5">
-              {task.comments.map((c, i) => (
+              {task.comments.length > 3 && <span className="font-semibold normal-case text-[#98A2B3]">· se ven los 3 últimos, baja para ver más</span>}
+            </div>
+            {/* Se muestran los ÚLTIMOS 3 (recientes arriba); scroll para los anteriores. Cada
+                comentario va acotado a 2 líneas para que se mantengan cortos e independientes. */}
+            <ul className="mt-2 space-y-1.5 overflow-y-auto pr-0.5" style={{ maxHeight: "168px" }}>
+              {[...task.comments].reverse().map((c, i) => (
                 <li key={i} className="rounded-md border border-[#E4DED6] bg-white p-2 text-xs">
                   <span className="font-semibold text-[#344054]">{c.author}</span>
                   <span className="text-[#98A2B3]"> · {c.role === "employee" ? "empleado" : "admin"} · {String(c.at || "").slice(0, 10)}</span>
-                  <p className="mt-0.5 text-[#667085]">{c.text}</p>
+                  <p className="mt-0.5 text-[#667085]" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.text}</p>
                 </li>
               ))}
             </ul>
@@ -2780,7 +2781,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 <Send size={12} /> Responder
               </button>
             </div>
-          </details>
+          </div>
         )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Título</span>

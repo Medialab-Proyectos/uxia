@@ -148,19 +148,27 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion").length;
 
   // Reporta las alertas al shell (la campana vive en el header del shell, junto al tema).
-  const nNew = tasks.filter((t) => t.status !== "done" && isNew(t)).length;
-  const nCR = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t)).length;
-  const nUpd = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t)).length;
+  // Cada alerta lleva una FIRMA (ids de las tareas que la componen): así reaparece si cambia el
+  // conjunto, no solo el conteo (p. ej. llega un cambio solicitado nuevo aunque el total coincida).
+  const sigOf = (arr) => arr.map((t) => t.id).sort().join(",");
+  const crTasks = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t));
+  const newTasks = tasks.filter((t) => t.status !== "done" && isNew(t));
+  const updTasks = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t));
+  const overdueTasks = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion");
+  const nNew = newTasks.length;
+  const nCR = crTasks.length;
+  const nUpd = updTasks.length;
+  const alertSig = `${sigOf(crTasks)}|${sigOf(newTasks)}|${sigOf(updTasks)}|${sigOf(overdueTasks)}`;
   React.useEffect(() => {
     if (!onAlerts) return;
     const items = [
-      { key: "emp-cr", label: "Cambios solicitados", count: nCR, color: "#B54708", focus: "cr" },
-      { key: "emp-new", label: "Tareas nuevas", count: nNew, color: "#0D7A4F", focus: "new" },
-      { key: "emp-upd", label: "Actualizadas por el admin", count: nUpd, color: "#6D28D9", focus: "updated" },
-      { key: "emp-overdue", label: "Vencidas", count: overdue, color: "#B42318", focus: "vencidas" },
+      { key: "emp-cr", label: "Cambios solicitados", count: nCR, sig: sigOf(crTasks), color: "#B54708", focus: "cr" },
+      { key: "emp-new", label: "Tareas nuevas", count: nNew, sig: sigOf(newTasks), color: "#0D7A4F", focus: "new" },
+      { key: "emp-upd", label: "Actualizadas por el admin", count: nUpd, sig: sigOf(updTasks), color: "#6D28D9", focus: "updated" },
+      { key: "emp-overdue", label: "Vencidas", count: overdue, sig: sigOf(overdueTasks), color: "#B42318", focus: "vencidas" },
     ].filter((it) => it.count > 0);
     onAlerts(items);
-  }, [nNew, nCR, nUpd, overdue]);
+  }, [alertSig]);
   // Foco desde la campana del shell → aplica el filtro (o sub-filtro de novedad) correspondiente.
   React.useEffect(() => {
     if (!focus) return;
@@ -391,7 +399,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                       {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}
                     </span>
                   </span>
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: PRIORITY_COLOR[t.priority] || "#98A2B3" }} title={`Prioridad ${t.priority || "media"}`} />
                 </button>
 
                 {isOpen && (
