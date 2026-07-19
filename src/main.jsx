@@ -74,7 +74,9 @@ const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 
 function AppShell() {
-  const [module, setModule] = React.useState(() => localStorage.getItem("uxia.activeModule") || "operations");
+  // El login SIEMPRE abre el Centro de Operaciones (prioridad). El Radar es una página
+  // independiente a la que se entra por el menú; no es la primera vista.
+  const [module, setModule] = React.useState("operations");
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [theme, setTheme] = React.useState(() => {

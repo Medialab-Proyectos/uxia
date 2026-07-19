@@ -40,6 +40,7 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [saveState, setSaveState] = React.useState({}); // { [taskId]: { kind, at, msg } }
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("active");
+  const [q, setQ] = React.useState("");
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -116,10 +117,14 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const myCompanies = [...new Set(tasks.map((t) => t.company_id))].map((id) => ({ id, name: nameOf(id) }));
 
   // Filtros por empresa y estado → lista ordenada por prioridad.
+  const qLow = q.trim().toLowerCase();
   const filtered = tasks.filter((t) => {
     if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
+    // Buscador por palabras (ignora el filtro de estado para encontrar también finalizadas).
+    if (qLow) return `${t.title || ""} ${t.client || ""} ${nameOf(t.company_id)} ${t.task_ref || ""} ${t.role || ""}`.toLowerCase().includes(qLow);
     // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
     if (statusFilter === "new") return (hasNovelty(t) || t.id === openId) && t.status !== "done";
+    if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review";
     if (statusFilter === "active") return t.status !== "done";
     if (statusFilter === "all") return true;
     return t.status === statusFilter;
@@ -198,7 +203,7 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
     <div style={{ minHeight: "100vh", background: bg, color: text }}>
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
         {/* Header fijo: la campana de novedades queda SIEMPRE visible al hacer scroll. */}
-        <div className="sticky top-0 z-20 -mx-4 mb-4 flex items-center justify-between gap-3 px-4 py-2 sm:-mx-6 sm:px-6" style={{ background: bg, borderBottom: `1px solid ${border}` }}>
+        <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center justify-between gap-3 px-4 py-2 sm:-mx-6 sm:px-6" style={{ background: bg }}>
           <h1 className="truncate text-lg font-semibold">Hola, {me.name.split(" ")[0]}</h1>
           {/* Campanita: cuántas tareas tienen novedades (nuevas o actualizadas por el admin) */}
           <button type="button" onClick={() => setStatusFilter("new")}
@@ -213,13 +218,15 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
         </div>
         <p className="-mt-2 mb-4 text-sm" style={{ color: dim }}>Estas son tus tareas y su prioridad.</p>
 
-        {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono */}
+        {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono — clicables → filtran */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[["Novedades", noveltyCount, "#6D28D9", Bell], ["Activas", active.length, "#17727A", ListChecks], ["Vencidas", overdue, "#B42318", AlertTriangle], ["Finalizadas", done.length, "#0D7A4F", CheckCircle2]].map(([l, v, col, Icon]) => (
-            <div key={l} className="rounded-md border p-3" style={{ borderColor: border, background: card }}>
+          {[["Novedades", noveltyCount, "#6D28D9", Bell, "new"], ["Activas", active.length, "#17727A", ListChecks, "active"], ["Vencidas", overdue, "#B42318", AlertTriangle, "vencidas"], ["Finalizadas", done.length, "#0D7A4F", CheckCircle2, "done"]].map(([l, v, col, Icon, f]) => (
+            <button key={l} type="button" onClick={() => setStatusFilter(f)} title={`Filtrar: ${l}`}
+              className="rounded-md border p-3 text-left transition-colors"
+              style={{ borderColor: statusFilter === f ? col : border, background: card }}>
               <p className="flex items-center gap-1.5 text-xs" style={{ color: dim }}><Icon size={13} style={{ color: col }} />{l}</p>
               <p className="mt-1 text-2xl font-semibold" style={{ color: col }}>{v}</p>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -235,7 +242,9 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
             </select>
           </div>
         )}
-        <div className="mb-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar tu tarea por palabras…"
+          className="mb-2 w-full rounded-md border px-3 py-2 text-sm outline-none" style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
+        <div className={`mb-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 ${qLow ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
           {[["active", "Activas"], ["new", "Novedades"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
             const on = statusFilter === k;
             const isNov = k === "new";

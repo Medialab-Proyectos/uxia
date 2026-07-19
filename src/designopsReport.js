@@ -204,11 +204,11 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   </div>
 
   <div class="kicker">Resumen ejecutivo</div>
-  <p>El área de diseño de <b>${esc(company.name)}</b> tiene <b>${active.length}</b> proyecto(s) activo(s) (${done.length} cerrado(s)), con ${satTxt}.
+  <p>El área de diseño de <b>${esc(company.name)}</b> tiene <b>${active.length}</b> tarea(s) activa(s) en ${subs.length || 1} subproyecto(s) (${done.length} cerrada(s)), con ${satTxt}.
   El foco de la semana es <b>${focoTxt}</b>. La predictibilidad de fecha ${predictPct == null ? "aún no tiene base suficiente" : `es del <b>${predictPct}%</b>`}${predictPct != null && predictPct < 85 ? ", por debajo de la meta (≥85%)" : ""}.</p>
 
   <div class="tiles">
-    <div class="tile"><div class="k">Proyectos activos</div><div class="v" style="color:var(--teal)">${active.length}</div><div class="s">de ${ct.length} · ${done.length} cerradas</div></div>
+    <div class="tile"><div class="k">Tareas activas</div><div class="v" style="color:var(--teal)">${active.length}</div><div class="s">de ${ct.length} · ${done.length} cerradas</div></div>
     <div class="tile"><div class="k">En revisión</div><div class="v" style="color:var(--violet)">${review.length}</div><div class="s">esperan aprobación</div></div>
     <div class="tile"><div class="k">Vencidas</div><div class="v" style="color:var(--red)">${overdue.length}</div><div class="s">${blocked.length} bloqueada(s)</div></div>
     <div class="tile"><div class="k">Satisfacción</div><div class="v" style="color:var(--green)">${avg != null ? avg.toFixed(1) : "—"}</div><div class="s">/ 5 · ${rated.length} evaluada(s)</div></div>

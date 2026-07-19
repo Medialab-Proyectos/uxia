@@ -1473,7 +1473,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
         </div>
 
         {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0) && !alertDismissed && (
-          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 text-sm">
+          <div className="relative mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 pr-10 text-sm">
             <span className="font-semibold uppercase tracking-[0.08em] text-[#B76E00]">Requiere tu atención hoy</span>
             {metrics.updatedPending > 0 && (
               <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("updated"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
@@ -1490,7 +1490,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("blocked"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
                 className="font-semibold text-[#B42318] underline-offset-2 hover:underline" title="Ver las tareas bloqueadas">{metrics.blocked} con bloqueo</button>
             )}
-            <button type="button" onClick={() => setAlertDismissed(true)} title="Cerrar (ya lo vi)" aria-label="Cerrar aviso" className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-[#B76E00] hover:bg-[#F2C879]/40">
+            <button type="button" onClick={() => setAlertDismissed(true)} title="Cerrar (ya lo vi)" aria-label="Cerrar aviso" className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md text-[#B76E00] hover:bg-[#F2C879]/40">
               <X size={14} />
             </button>
           </div>
@@ -1879,7 +1879,7 @@ function buildTaskRefs(tasks, companies) {
 }
 
 // Estados que el admin puede fijar rápido desde la vista de prioridad.
-const QUICK_STATUSES = [["ready", "Pendiente"], ["doing", "En proceso"], ["review", "En revisión"], ["blocked", "Bloqueada"], ["done", "Finalizada"]];
+const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
 
 function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatus }) {
   const [openId, setOpenId] = useState(null);
@@ -1953,15 +1953,15 @@ function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatu
           {/* Cambio rápido de estado (sin salir de Prioridad). */}
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[#667085]">Estado:</span>
-            {QUICK_STATUSES.map(([k, label]) => {
+            {QUICK_STATUSES.map(([k, label, Icon]) => {
               const on = t.status === k;
               const tone = statusTone(k);
               return (
                 <button key={k} type="button"
                   onClick={(e) => { e.stopPropagation(); onChangeStatus?.(t.id, k); }}
-                  className="rounded-md border px-2.5 py-1 text-xs font-semibold"
+                  className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold"
                   style={on ? { borderColor: tone.text, background: tone.bg, color: tone.text } : { borderColor: "#D0D5DD", color: "#475467" }}>
-                  {label}
+                  <Icon size={12} /> {label}
                 </button>
               );
             })}
@@ -2115,22 +2115,22 @@ function TasksTable({
   return (
     <section className="mt-6 space-y-4">
       <div className="rounded-md border border-[#D9D2C7] bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-[#1D2939]">Todas las tareas</h2>
-            <p className="text-sm text-[#667085]">Toca una tarea para desplegar y editar lo que se requiere.</p>
-          </div>
-          <button onClick={onAddTask} className="min-h-[44px] rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white">
-            Crear tarea manual
-          </button>
+        <div>
+          <h2 className="text-lg font-semibold text-[#1D2939]">Todas las tareas</h2>
+          <p className="text-sm text-[#667085]">Toca una tarea para desplegar y editar lo que se requiere.</p>
         </div>
+        {/* "Crear tarea manual" a lo ancho en responsive, con márgenes */}
+        <button onClick={onAddTask} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white sm:w-auto">
+          <Plus size={16} /> Crear tarea manual
+        </button>
         <input
           value={taskQuery}
           onChange={(event) => onTaskQuery(event.target.value)}
           placeholder="Buscar en todas las tareas por palabras (incluye finalizadas)…"
-          className="mt-4 w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
+          className="mt-3 w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
         />
-        <div className={`mt-3 flex flex-wrap gap-2 ${taskQuery.trim() ? "opacity-40 pointer-events-none" : ""}`}>
+        {/* Chips de estado como carrusel horizontal (no consumen tanto alto) */}
+        <div className={`mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 ${taskQuery.trim() ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
           {[
             ["open", "Abiertas"],
             ["updated", "Actualizadas"],
@@ -2142,7 +2142,7 @@ function TasksTable({
             <button
               key={key}
               onClick={() => onStatus(key)}
-              className="rounded-md border px-3 py-1.5 text-sm font-semibold"
+              className="shrink-0 whitespace-nowrap rounded-md border px-3 py-1.5 text-sm font-semibold"
               style={{
                 borderColor: activeStatus === key ? "#17727A" : "#D0D5DD",
                 background: activeStatus === key ? "#EAF4F2" : "#FFFFFF",
@@ -2973,20 +2973,20 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               </div>
             )}
 
-            {/* Registrar un cambio */}
+            {/* Registrar un cambio: quién lo pide arriba, el texto (largo) abajo */}
             <div className="mt-3">
               <span className="text-xs font-semibold text-[#667085]">Pedir un cambio</span>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-1.5 py-1.5 text-xs font-semibold text-[#344054]">
-                  <option value="ceo">CEO</option>
-                  <option value="cliente">Cliente</option>
+              <label className="mt-1 block">
+                <span className="text-[11px] text-[#667085]">¿Quién lo pide?</span>
+                <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="mt-0.5 w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054]">
+                  <option value="ceo">CEO (revisión interna)</option>
+                  <option value="cliente">Cliente (trasladado)</option>
                 </select>
-                <input id={`cr-input-modal-${task.id}`} value={crText} onChange={(e) => setCrText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && crText.trim()) { e.preventDefault(); addChangeRequest(); } }}
-                  placeholder="¿Qué cambio se pide?"
-                  className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
-                <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir</button>
-              </div>
+              </label>
+              <textarea id={`cr-input-modal-${task.id}`} value={crText} onChange={(e) => setCrText(e.target.value)} rows={3}
+                placeholder="Describe el cambio que se pide…"
+                className="mt-2 w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
+              <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md px-2.5 py-2 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
             </div>
 
             {/* Historial */}
@@ -3039,13 +3039,14 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </label>
             <div className="mt-3">
               <span className="text-xs font-semibold text-[#667085]">¿Con qué herramientas se trabajó?</span>
-              <div className="mt-1 flex flex-wrap gap-1">
+              {/* Carrusel horizontal (scroll con el dedo) en responsive */}
+              <div className="mt-1 -mx-1 flex gap-1 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
                 {TOOL_OPTIONS.map((tool) => {
                   const on = mTools.includes(tool);
                   return (
                     <button key={tool} type="button"
                       onClick={() => setMTools((cur) => (on ? cur.filter((x) => x !== tool) : [...cur, tool]))}
-                      className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold"
                       style={on ? { borderColor: "#6941C6", background: "#F4F1FD", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#667085" }}>
                       {tool}
                     </button>

@@ -1029,6 +1029,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
       // (ya pasaron a esa lista); se ven en el filtro/segmento "Me gusta".
       if (j.estado === "me_interesa") return false;
       if (filter === "remotas") return j.remoto === "remoto";
+      if (filter === "colombia") return Boolean(j.esColombia);
       if (filter === "español") return j.idioma === "español";
       return true; // todas
     })
@@ -1234,7 +1235,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
             {[
               [Briefcase, "Empleos", stats.total, C.text, "todas"],
               [Globe, "Remotos", stats.remotas, C.green, "remotas"],
-              [MapPin, "Colombia", stats.colombia, C.amber, "todas"],
+              [MapPin, "Colombia", stats.colombia, C.amber, "colombia"],
               [Heart, "Me gusta", stats.megusta, stats.megusta ? C.coral : C.faint, "megusta"],
             ].map(([Icon, label, val, color, f]) => (
               <button
@@ -1806,7 +1807,6 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 ["todas", "Todas"],
                 ["remotas", "Solo remotas"],
                 ["español", "En español"],
-                ["megusta", "Me gusta"],
                 ["postuladas", "Postuladas"],
               ].map(([key, label]) => (
                 <button
