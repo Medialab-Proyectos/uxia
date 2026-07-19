@@ -200,22 +200,36 @@ respetarlas al crear/actualizar tareas y NO romper el ciclo.
   urgente; el empleado debe ajustar y reenviar a revisión.
 - **Actualizada**: el admin editó la tarea (`admin_touched_at` > `assignee_seen_at`) sin CR abierto.
 - Las ediciones o cambios de estado del PROPIO empleado NO son novedad para él.
-- En el portal, "Novedades" es un FILTRO dentro de activas (no una lista paralela a "Activas").
+- En el portal, "Novedades" NO es un chip hermano de "Activas": al elegir **Activas** aparece
+  DEBAJO un sub-filtro por tipo de novedad (Todas · Con novedad · Nuevas · Cambios solicitados ·
+  Actualizadas por el admin). La campana del empleado vive en el HEADER del shell (junto al tema)
+  y sus alertas se marcan vistas al abrirlas; no reaparecen salvo que el conteo vuelva a subir.
 
-**Ciclo de estados:**
-- El empleado solo mueve la tarea a **`doing`** (en progreso) o **`review`** (él cree que está
-  lista). NO finaliza.
-- El admin revisa lo que está en `review`:
-  - **Aprobar** → `done` (resuelve los CR abiertos, abre el modal de satisfacción).
-  - **Pedir cambios** → agrega un CR a `change_requests`, la tarea vuelve a `doing` y se sella
+**Ciclo de estados (6 estados):** `ready` (Pendiente) · `doing` (En proceso) · `review`
+(En revisión — del EMPLEADO) · `verificacion` (Verificación — del CLIENTE, solo admin) ·
+`blocked` (Bloqueada) · `done` (Finalizada).
+- El empleado solo mueve la tarea a **`doing`** o **`review`** (él cree que está lista). NO finaliza
+  ni pasa a verificación.
+- El admin revisa lo que está en `review` (revisión del empleado):
+  - **Aprobar → verificación del cliente** → pasa a `verificacion`, resuelve los CR abiertos y deja
+    una nota "Request review validado por el administrador · enviado a verificación del cliente".
+  - **Devolver a en progreso** → `doing`.
+  - **Pedir un cambio** → agrega un CR a `change_requests`, la tarea vuelve a `doing` y se sella
     `admin_touched_at` (le suena la campana al empleado con "Cambio solicitado").
-- La "revisión" del empleado (`review`) ≠ la del admin: el empleado avisa que cree que está
-  lista; el admin decide aprobar o pedir cambios. Puede iterar muchas veces.
+- Sobre lo que está en `verificacion` (el cliente lo está revisando):
+  - **Cliente aprobó → Finalizar** → `done` (abre el modal de satisfacción).
+  - **Cliente pidió ajustes → en progreso** → `doing`.
+- La "revisión" del empleado (`review`) ≠ la "verificación" del cliente (`verificacion`): el empleado
+  avisa que cree que está lista; el admin valida internamente y recién ahí la manda al cliente.
+- **Toda la revisión/cambios (aprobar, verificar, pedir cambios, historial) vive en un ACORDEÓN
+  debajo de la caja de Puntos** dentro de la misma tarjeta — NO en un popup. No hay caja/banner
+  amarillo aparte: el tag "Actualizada por el empleado" basta para avisar que hay que revisar.
 
 **Change Requests (`change_requests` jsonb):** lista `[{ id, at, by:'ceo'|'cliente', text,
 resolved, resolved_at }]`. El origen distingue **CEO** (revisión interna) vs **Cliente**
 (trasladado por el CEO). Alimenta el indicador de eficiencia del tablero DesignOps (cuenta CR
-ABIERTOS). El empleado NO puede editarlos (los protege el trigger de la base). El MD normalmente
+ABIERTOS). El empleado SÍ puede **resolver** un CR abierto desde su portal (lo marca resuelto y la
+tarea pasa a `review`); el trigger de la base ya no revierte esa columna. El MD normalmente
 NO crea CRs (los abre el admin al revisar); solo si un insumo describe explícitamente un cambio
 pedido por el cliente sobre un entregable ya aprobado, puede registrarlo.
 
@@ -295,14 +309,17 @@ salirse de la tarjeta en responsive.
 
 ## Estados
 
-Estados operativos esperados:
+Estados operativos esperados (6):
 
-- Enviada o pendiente.
-- En proceso.
-- Finalizada.
-- Bloqueada cuando falte acceso, decision o informacion.
+- Pendiente (`ready`).
+- En proceso (`doing`).
+- En revisión (`review`) — el empleado cree que está lista.
+- Verificación (`verificacion`) — el admin la mandó al cliente para que verifique (solo admin).
+- Bloqueada (`blocked`) cuando falte acceso, decision o informacion.
+- Finalizada (`done`).
 
-El estado debe poder cambiarse desde la tarjeta de la tarea.
+El estado debe poder cambiarse desde la tarjeta de la tarea. `verificacion` solo la asigna el admin
+(al aprobar la revisión del empleado); el empleado nunca la pone.
 
 ## Retrasos
 

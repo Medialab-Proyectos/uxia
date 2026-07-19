@@ -10,6 +10,7 @@ const STATUS = {
   ready: "Pendiente",
   doing: "En proceso",
   review: "En revisión",
+  verificacion: "Verificación",
   blocked: "Bloqueada",
   actualizada: "Actualizada",
   done: "Finalizada",
@@ -21,6 +22,7 @@ const STATUS_TONE = {
   ready:   { border: "#F2C879", bg: "#FFF7E6", text: "#8A5700" },
   doing:   { border: "#9CC7E4", bg: "#EAF2FB", text: "#1D5A99" },
   review:  { border: "#B7D8D4", bg: "#EAF4F2", text: "#17727A" },
+  verificacion: { border: "#9CC7E4", bg: "#EAF2FB", text: "#175CD3" },
   blocked: { border: "#F3B0A8", bg: "#FEF3F2", text: "#B42318" },
   actualizada: { border: "#C4B5FD", bg: "#F5F3FF", text: "#6D28D9" },
   done:    { border: "#A6D9C4", bg: "#E5F5EE", text: "#0D7A4F" },
@@ -441,7 +443,7 @@ function attachmentUrl(attachment) {
 
 function taskIsOverdue(task) {
   // "En revisión" no cuenta como vencida: está esperando feedback, no atrasada.
-  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review");
+  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion");
 }
 
 function isValidPhone(value) {
@@ -566,7 +568,7 @@ const defaultCompanies = [
 
 const defaultTasks = [];
 
-export default function OperationsHub({ token = "", theme = "light", onAuthError } = {}) {
+export default function OperationsHub({ token = "", theme = "light", onAuthError, focus = null, onFocusHandled } = {}) {
   const [companies, setCompanies] = useState(defaultCompanies);
   const [tasks, setTasks] = useState(defaultTasks);
   const [sourceRecords, setSourceRecords] = useState([]);
@@ -582,6 +584,16 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [sortRecent, setSortRecent] = useState(false);    // ordenar por últimas incluidas
   const [activeView, setActiveView] = useState("companies");
   const [alertDismissed, setAlertDismissed] = useState(false);
+  // Foco desde una notificación del shell: abre "Todas las tareas" en el filtro indicado.
+  useEffect(() => {
+    if (!focus) return;
+    setActiveView("tasks");
+    setActiveStatus(focus);
+    setCompanyFilter("all");
+    setAssignFilter("all");
+    setTaskQuery("");
+    onFocusHandled?.();
+  }, [focus]);
   const [asideOpen, setAsideOpen] = useState(false);
   const [globalOpen, setGlobalOpen] = useState(false);
   const [globalText, setGlobalText] = useState("");
@@ -683,8 +695,9 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const sinProyecto = task.companyId === "por-asignar" || !task.client;
     if (assignFilter === "unassigned" && !sinProyecto) return false;
     if (assignFilter === "assigned" && sinProyecto) return false;
-    // Sin responsable = sin persona asignada (ni assigneeId ni owner).
+    // Responsable: "unowned" = sin persona; un id de persona = solo sus tareas.
     if (ownerFilter === "unowned" && (task.assigneeId || task.owner)) return false;
+    if (ownerFilter !== "all" && ownerFilter !== "unowned" && task.assigneeId !== ownerFilter) return false;
     if (taskQ) {
       // Al buscar por palabras se ignora el filtro de estado, para encontrar también
       // las tareas FINALIZADAS (archivadas) en cualquier consulta.
@@ -1786,7 +1799,7 @@ function scoreTask(task) {
   // Urgencia (fecha): vencida > hoy/pronto > esta semana.
   const today = todayIso();
   if (task.dueDate) {
-    if (task.status !== "review" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
+    if (task.status !== "review" && task.status !== "verificacion" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
     else {
       const days = Math.round((new Date(task.dueDate) - new Date(today)) / 86400000);
       if (days <= 2) { score += 25; reasons.push("Vence pronto"); }
@@ -1888,7 +1901,7 @@ function buildTaskRefs(tasks, companies) {
 }
 
 // Estados que el admin puede fijar rápido desde la vista de prioridad.
-const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
+const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Verificación", Send], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
 
 function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatus }) {
   const [openId, setOpenId] = useState(null);
@@ -1907,7 +1920,7 @@ function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatu
 
   // Foco para HOY (vence hoy o vencidas) y ESTA SEMANA (proximos 7 dias), por prioridad.
   const today = todayIso();
-  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review");
+  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review" && t.status !== "verificacion");
   const semana = ranked.filter((t) => {
     if (!t.dueDate || t.dueDate <= today) return false;
     const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);
@@ -2174,6 +2187,7 @@ function TasksTable({
             ["today", "Por vencer"],
             ["blocked", "Bloqueadas"],
             ["review", "En revisión"],
+            ["verificacion", "En verificación"],
             ["done", "Finalizadas (archivo)"],
           ].map(([key, label]) => (
             <button
@@ -2190,62 +2204,50 @@ function TasksTable({
             </button>
           ))}
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Empresa:</span>
-          <select
-            value={companyFilter}
-            onChange={(event) => onCompanyFilter(event.target.value)}
-            className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]"
-          >
-            <option value="all">Todas las empresas</option>
-            {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Proyecto:</span>
-          {[
-            ["all", "Todas"],
-            ["unassigned", "Sin asignar a proyecto"],
-            ["assigned", "Con proyecto"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => onAssignFilter(key)}
-              className="rounded-full border px-3 py-1 text-xs font-semibold"
-              style={{
-                borderColor: assignFilter === key ? "#B76E00" : "#D0D5DD",
-                background: assignFilter === key ? "#FFF7E6" : "#FFFFFF",
-                color: assignFilter === key ? "#B76E00" : "#667085",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-          <span className="ml-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Responsable:</span>
-          {[["all", "Todas"], ["unowned", "Sin responsable"]].map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => onOwnerFilter?.(key)}
-              className="rounded-full border px-3 py-1 text-xs font-semibold"
-              style={{
-                borderColor: ownerFilter === key ? "#B42318" : "#D0D5DD",
-                background: ownerFilter === key ? "#FEF3F2" : "#FFFFFF",
-                color: ownerFilter === key ? "#B42318" : "#667085",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-          <button
-            onClick={() => onSortRecent?.(!sortRecent)}
-            className="ml-2 inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
-            style={{
-              borderColor: sortRecent ? "#17727A" : "#D0D5DD",
-              background: sortRecent ? "#EAF4F2" : "#FFFFFF",
-              color: sortRecent ? "#17727A" : "#667085",
-            }}
-            title="Ordenar por últimas tareas incluidas"
-          >
-            <Clock size={12} /> Recientes
-          </button>
+        {/* Filtros como carruseles horizontales (no consumen alto): empresa · proyecto · responsable */}
+        <div className="mt-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="w-[92px] shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Empresa</span>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+              {[["all", "Todas"], ...companies.map((c) => [c.id, c.name])].map(([key, label]) => (
+                <button key={key} onClick={() => onCompanyFilter(key)}
+                  className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
+                  style={{ borderColor: companyFilter === key ? "#17727A" : "#D0D5DD", background: companyFilter === key ? "#EAF4F2" : "#FFFFFF", color: companyFilter === key ? "#17727A" : "#667085" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-[92px] shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Proyecto</span>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+              {[["all", "Todas"], ["unassigned", "Sin proyecto"], ["assigned", "Con proyecto"]].map(([key, label]) => (
+                <button key={key} onClick={() => onAssignFilter(key)}
+                  className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
+                  style={{ borderColor: assignFilter === key ? "#B76E00" : "#D0D5DD", background: assignFilter === key ? "#FFF7E6" : "#FFFFFF", color: assignFilter === key ? "#B76E00" : "#667085" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-[92px] shrink-0 text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Responsable</span>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+              {[["all", "Todas"], ["unowned", "Sin responsable"], ...(people || []).map((p) => [p.id, p.name])].map(([key, label]) => (
+                <button key={key} onClick={() => onOwnerFilter?.(key)}
+                  className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
+                  style={{ borderColor: ownerFilter === key ? "#B42318" : "#D0D5DD", background: ownerFilter === key ? "#FEF3F2" : "#FFFFFF", color: ownerFilter === key ? "#B42318" : "#667085" }}>
+                  {label}
+                </button>
+              ))}
+              <button onClick={() => onSortRecent?.(!sortRecent)}
+                className="ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
+                style={{ borderColor: sortRecent ? "#17727A" : "#D0D5DD", background: sortRecent ? "#EAF4F2" : "#FFFFFF", color: sortRecent ? "#17727A" : "#667085" }}
+                title="Ordenar por últimas tareas incluidas">
+                <Clock size={12} /> Recientes
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2506,9 +2508,15 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     onChangeTask(task.id, { changeRequests: next, changeRequest: next.some((c) => !c.resolved) });
   }
   function approveReview() {
-    // Aprobar: resuelve los CR abiertos y abre el modal de cierre (satisfacción).
-    if (openCRs.length) onChangeTask(task.id, { changeRequests: changeRequests.map((c) => ({ ...c, resolved: true })), changeRequest: false });
-    openDoneModal();
+    // Aprobar la revisión del EMPLEADO: resuelve CR abiertos, deja nota "validado" y la manda a
+    // Verificación (el cliente la revisa). No cierra la tarea todavía.
+    const comments = Array.isArray(task.comments) ? task.comments : [];
+    const patch = {
+      status: "verificacion",
+      comments: [...comments, { author: "Administrador", role: "admin", text: "Request review validado por el administrador · enviado a verificación del cliente.", at: new Date().toISOString() }],
+    };
+    if (openCRs.length) { patch.changeRequests = changeRequests.map((c) => ({ ...c, resolved: true })); patch.changeRequest = false; }
+    onChangeTask(task.id, patch);
   }
   // Popup al finalizar: satisfacción (1-5) + recomendaciones + % de IA usada.
   const [doneModal, setDoneModal] = useState(false);
@@ -2549,6 +2557,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     ["ready", "Pendiente", Circle],
     ["doing", "En proceso", LoaderCircle],
     ["review", "En revisión", Clock],
+    ["verificacion", "Verificación", Send],
     ["blocked", "Bloqueada", AlertTriangle],
     ["done", "Finalizada", CheckCircle2],
   ];
@@ -2706,18 +2715,6 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         )}
       </summary>
       <div className="mt-2 space-y-2">
-        {/* Estado del EMPLEADO: "en revisión" es su pre-aprobación (él cree que está lista),
-            NO la finalización del admin. El admin aprueba, pide cambios o la devuelve. */}
-        {task.status === "review" && (
-          <div className="rounded-md border border-[#B7D8D4] bg-[#EAF4F2] px-2.5 py-2">
-            <p className="text-xs font-semibold text-[#17727A]"><Clock size={12} className="mr-1 inline align-[-2px]" /> El empleado la marcó lista (en revisión). Es su aprobación, no la final — decide:</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              <button type="button" onClick={openDoneModal} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Aprobar</button>
-              <button type="button" onClick={() => setCrModal(true)} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-2.5 py-1 text-xs font-semibold text-[#B54708]"><AlertTriangle size={12} /> Pedir cambios</button>
-              <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Devolver a en progreso</button>
-            </div>
-          </div>
-        )}
         {task.status === "done" && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#A6D9C4] bg-[#E5F5EE] px-2.5 py-1.5">
             <span className="text-xs font-semibold text-[#0D7A4F]"><CheckCircle2 size={12} className="mr-1 inline align-[-2px]" /> Tarea finalizada (archivada){task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString()}` : ""}</span>
@@ -2822,44 +2819,73 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </div>
         </div>
-        {/* DesignOps ligero: puntos (los asigna el análisis automáticamente; aquí se ven).
-            Los Change Requests se abren desde el botón "Revisión y cambios". */}
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
+        {/* DesignOps ligero: puntos (los asigna el análisis automáticamente; aquí se ven). */}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
           <span className="inline-flex items-center gap-1 text-xs text-[#667085]">
             Puntos <InfoTip text="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea." />:
             <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
-          <button type="button" onClick={() => setCrModal(true)}
-            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold"
-            style={openCRs.length ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#475467" }}>
-            <AlertTriangle size={12} /> Revisión y cambios{openCRs.length ? ` · ${openCRs.length}` : ""}
-          </button>
         </div>
-        {/* Historial de request review como colapsable (no acumulado en el popup) */}
-        {changeRequests.length > 0 && (
-          <details className="rounded-md border border-[#E4DED6] bg-white px-2 py-1.5">
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-[#667085]">
-              <ChevronRight size={13} className="ops-caret transition-transform" />
-              Request review ({changeRequests.length}{openCRs.length ? ` · ${openCRs.length} abierto(s)` : " · todos resueltos"})
-            </summary>
-            <ul className="mt-1.5 space-y-1.5">
-              {[...changeRequests].reverse().map((c) => (
-                <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-70" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: c.resolved ? "#FBFAF7" : "#FFFCF5" }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <span>
-                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
-                      <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
-                      {c.resolved ? <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto por el empleado</span> : <span className="ml-1.5 font-semibold text-[#B54708]">abierto</span>}
-                      <p className="mt-0.5 text-[#475467]">{c.text}</p>
-                    </span>
-                    <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
+        {/* Revisión y cambios: ACORDEÓN debajo de Puntos (aprobar + pedir cambios + historial). */}
+        <details className="rounded-md border px-2 py-1.5" open={task.status === "review" || task.status === "verificacion" || openCRs.length > 0}
+          style={openCRs.length || task.status === "review" || task.status === "verificacion" ? { borderColor: "#F2C879", background: "#FFFCF5" } : { borderColor: "#E4DED6", background: "#fff" }}>
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-[#B76E00]">
+            <ChevronRight size={13} className="ops-caret transition-transform" />
+            <AlertTriangle size={12} /> Revisión y cambios{changeRequests.length ? ` (${changeRequests.length}${openCRs.length ? ` · ${openCRs.length} abierto(s)` : ""})` : ""}
+          </summary>
+          <div className="mt-2 space-y-2">
+            {task.status === "review" && (
+              <div className="rounded-md border border-[#B7D8D4] bg-[#EAF4F2] p-2">
+                <p className="text-[11px] font-semibold text-[#17727A]">El empleado la marcó lista (en revisión). Valídala y mándala a verificación del cliente, o devuélvela.</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button type="button" onClick={approveReview} className="inline-flex items-center gap-1 rounded-md bg-[#175CD3] px-2.5 py-1 text-xs font-semibold text-white"><Send size={12} /> Aprobar → verificación del cliente</button>
+                  <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Devolver a en progreso</button>
+                </div>
+              </div>
+            )}
+            {task.status === "verificacion" && (
+              <div className="rounded-md border border-[#9CC7E4] bg-[#EAF2FB] p-2">
+                <p className="text-[11px] font-semibold text-[#175CD3]">En verificación del cliente. Cuando el cliente apruebe, ciérrala; si pide ajustes, devuélvela.</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button type="button" onClick={openDoneModal} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Cliente aprobó → Finalizar</button>
+                  <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Cliente pidió ajustes → en progreso</button>
+                </div>
+              </div>
+            )}
+            {/* Pedir un cambio (queda registrado y vuelve a "en progreso") */}
+            <div className="rounded-md border border-[#E4DED6] bg-white p-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-[#667085]">Pedir un cambio · lo pide:</span>
+                <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-1.5 py-1 text-xs font-semibold text-[#344054]">
+                  <option value="ceo">CEO</option>
+                  <option value="cliente">Cliente</option>
+                </select>
+              </div>
+              <textarea value={crText} onChange={(e) => setCrText(e.target.value)} rows={2} placeholder="Describe el cambio…"
+                className="mt-1.5 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
+              <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="mt-1.5 inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
+            </div>
+            {/* Historial */}
+            {changeRequests.length > 0 && (
+              <ul className="space-y-1.5">
+                {[...changeRequests].reverse().map((c) => (
+                  <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-70" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: c.resolved ? "#FBFAF7" : "#FFFCF5" }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <span>
+                        <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                        <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
+                        {c.resolved ? <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto por el empleado</span> : <span className="ml-1.5 font-semibold text-[#B54708]">abierto</span>}
+                        <p className="mt-0.5 text-[#475467]">{c.text}</p>
+                      </span>
+                      <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
           <select
@@ -3053,66 +3079,6 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           </div>
         )}
       </div>
-      {crModal && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) setCrModal(false); }}>
-          <div className="w-full max-w-md rounded-md bg-white p-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#1D2939]"><AlertTriangle size={14} className="mr-1 inline align-[-2px] text-[#B54708]" /> Revisión y cambios{task.ref ? ` · ${task.ref}` : ""}</h3>
-              <button type="button" onClick={() => setCrModal(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]"><X size={16} /></button>
-            </div>
-            <p className="mt-0.5 text-xs text-[#667085]">El CEO (o el cliente) pide un cambio; la tarea vuelve a "en progreso" y se le avisa al empleado. Quedan registrados aquí.</p>
-
-            {task.status === "review" && (
-              <div className="mt-3 rounded-md border border-[#F2C879] bg-[#FFFCF5] p-2">
-                <p className="text-[11px] font-semibold text-[#8A6D3B]">El empleado la envió a revisión. Decide:</p>
-                <div className="mt-1.5 flex gap-2">
-                  <button type="button" onClick={() => { approveReview(); setCrModal(false); }} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-3 py-1.5 text-xs font-semibold text-white"><Check size={13} /> Aprobar</button>
-                  <button type="button" onClick={() => document.getElementById(`cr-input-modal-${task.id}`)?.focus()} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-3 py-1.5 text-xs font-semibold text-[#B54708]">Pedir cambios ↓</button>
-                </div>
-              </div>
-            )}
-
-            {/* Registrar un cambio: quién lo pide arriba, el texto (largo) abajo */}
-            <div className="mt-3">
-              <span className="text-xs font-semibold text-[#667085]">Pedir un cambio</span>
-              <label className="mt-1 block">
-                <span className="text-[11px] text-[#667085]">¿Quién lo pide?</span>
-                <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="mt-0.5 w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054]">
-                  <option value="ceo">CEO (revisión interna)</option>
-                  <option value="cliente">Cliente (trasladado)</option>
-                </select>
-              </label>
-              <textarea id={`cr-input-modal-${task.id}`} value={crText} onChange={(e) => setCrText(e.target.value)} rows={3}
-                placeholder="Describe el cambio que se pide…"
-                className="mt-2 w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
-              <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md px-2.5 py-2 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
-            </div>
-
-            {/* Historial */}
-            <div className="mt-3">
-              <span className="text-xs font-semibold text-[#667085]">Historial ({changeRequests.length})</span>
-              {changeRequests.length ? (
-                <ul className="mt-1 max-h-56 space-y-1.5 overflow-y-auto">
-                  {[...changeRequests].reverse().map((c) => (
-                    <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-60" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: "#fff" }}>
-                      <div className="flex items-start justify-between gap-2">
-                        <span>
-                          <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
-                          <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
-                          {c.resolved && <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto</span>}
-                          <p className="mt-0.5 text-[#475467]">{c.text}</p>
-                        </span>
-                        <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="mt-1 text-xs text-[#98A2B3]">Sin cambios registrados todavía.</p>}
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
       {doneModal && createPortal(
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setDoneModal(false); }}>
           <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-xl">

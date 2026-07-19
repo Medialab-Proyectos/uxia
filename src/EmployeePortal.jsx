@@ -27,7 +27,7 @@ function scoreTask(t) {
   return Math.min(100, s);
 }
 
-export default function EmployeePortal({ token, user, theme = "light" }) {
+export default function EmployeePortal({ token, user, theme = "light", onAlerts, focus = null, onFocusHandled }) {
   const email = String(user?.email || "").toLowerCase();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -40,12 +40,12 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [saveState, setSaveState] = React.useState({}); // { [taskId]: { kind, at, msg } }
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("active");
+  const [novFilter, setNovFilter] = React.useState("all"); // sub-filtro de novedad dentro de Activas
   const [q, setQ] = React.useState("");
   const [crResolve, setCrResolve] = React.useState(null); // { task, cr } al resolver un cambio
   const [crComment, setCrComment] = React.useState("");
   const [lastLoadedAt, setLastLoadedAt] = React.useState(null); // momento de la última carga de la BD
   const [staleWarn, setStaleWarn] = React.useState(false);      // aviso de refrescar tras horas
-  const [bellOpen, setBellOpen] = React.useState(false);        // centro de alertas (campana)
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -129,6 +129,29 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const done = tasks.filter((t) => t.status === "done");
   const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review").length;
 
+  // Reporta las alertas al shell (la campana vive en el header del shell, junto al tema).
+  const nNew = tasks.filter((t) => t.status !== "done" && isNew(t)).length;
+  const nCR = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t)).length;
+  const nUpd = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t)).length;
+  React.useEffect(() => {
+    if (!onAlerts) return;
+    const items = [
+      { key: "emp-cr", label: "Cambios solicitados", count: nCR, color: "#B54708", focus: "cr" },
+      { key: "emp-new", label: "Tareas nuevas", count: nNew, color: "#0D7A4F", focus: "new" },
+      { key: "emp-upd", label: "Actualizadas por el admin", count: nUpd, color: "#6D28D9", focus: "updated" },
+      { key: "emp-overdue", label: "Vencidas", count: overdue, color: "#B42318", focus: "vencidas" },
+    ].filter((it) => it.count > 0);
+    onAlerts(items);
+  }, [nNew, nCR, nUpd, overdue]);
+  // Foco desde la campana del shell → aplica el filtro (o sub-filtro de novedad) correspondiente.
+  React.useEffect(() => {
+    if (!focus) return;
+    if (focus === "vencidas") setStatusFilter("vencidas");
+    else if (["any", "new", "cr", "updated"].includes(focus)) { setStatusFilter("active"); setNovFilter(focus); }
+    else setStatusFilter(focus);
+    onFocusHandled?.();
+  }, [focus]);
+
   // Empresas presentes en MIS tareas (para el filtro).
   const myCompanies = [...new Set(tasks.map((t) => t.company_id))].map((id) => ({ id, name: nameOf(id) }));
 
@@ -141,7 +164,15 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
     // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
     if (statusFilter === "new") return (hasNovelty(t) || t.id === openId) && t.status !== "done";
     if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review";
-    if (statusFilter === "active") return t.status !== "done";
+    if (statusFilter === "active") {
+      if (t.status === "done") return false;
+      // Sub-filtro de novedades (solo dentro de Activas). La tarea abierta se mantiene visible.
+      if (novFilter === "any") return hasNovelty(t) || t.id === openId;
+      if (novFilter === "new") return isNew(t) || t.id === openId;
+      if (novFilter === "cr") return hasChangeRequest(t) || t.id === openId;
+      if (novFilter === "updated") return isUpdatedByAdmin(t) || t.id === openId;
+      return true;
+    }
     if (statusFilter === "all") return true;
     return t.status === statusFilter;
   });
@@ -246,51 +277,9 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   return (
     <div style={{ minHeight: "100vh", background: bg, color: text }}>
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-        {/* Header fijo: la campana de novedades queda SIEMPRE visible al hacer scroll. */}
+        {/* Saludo (la campana de alertas vive ahora en el header del shell). */}
         <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center justify-between gap-3 px-4 py-2 sm:-mx-6 sm:px-6" style={{ background: bg }}>
           <h1 className="truncate text-lg font-semibold">Hola, {me.name.split(" ")[0]}</h1>
-          {/* Campana = centro de alertas: novedades, cambios solicitados, vencidas */}
-          <div className="relative shrink-0">
-            <button type="button" onClick={() => setBellOpen((v) => !v)}
-              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border"
-              style={{ borderColor: noveltyCount ? "#6D28D9" : border, background: noveltyCount ? "#F5F3FF" : card, color: noveltyCount ? "#6D28D9" : dim }}
-              title="Centro de alertas">
-              <Bell size={18} />
-              {noveltyCount > 0 && (
-                <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[11px] font-bold text-white" style={{ background: "#6D28D9" }}>{noveltyCount}</span>
-              )}
-            </button>
-            {bellOpen && (() => {
-              const nNew = tasks.filter((t) => t.status !== "done" && isNew(t)).length;
-              const nCR = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t)).length;
-              const nUpd = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t)).length;
-              const items = [
-                ["Cambios solicitados", nCR, "#B54708", "new"],
-                ["Tareas nuevas", nNew, "#0D7A4F", "new"],
-                ["Actualizadas por el admin", nUpd, "#6D28D9", "new"],
-                ["Vencidas", overdue, "#B42318", "vencidas"],
-              ].filter(([, v]) => v > 0);
-              return (
-                <div className="fixed left-3 right-3 top-16 z-40 max-h-[70vh] overflow-y-auto rounded-md border p-3 text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72" style={{ background: card, borderColor: border, color: text }}>
-                  <p className="mb-2 font-semibold">Alertas</p>
-                  {items.length === 0 ? (
-                    <p className="text-xs" style={{ color: dim }}>Sin alertas por ahora. 🎉</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {items.map(([label, v, col, f]) => (
-                        <li key={label}>
-                          <button type="button" onClick={() => { setStatusFilter(f); setBellOpen(false); }} className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs" style={{ borderColor: border }}>
-                            <span className="inline-flex items-center gap-2"><span className="inline-block h-2 w-2 rounded-full" style={{ background: col }} />{label}</span>
-                            <span className="font-bold" style={{ color: col }}>{v}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
         </div>
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
           <span>Estas son tus tareas y su prioridad.</span>
@@ -303,10 +292,15 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
 
         {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono — clicables → filtran */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[["Novedades", noveltyCount, "#6D28D9", Bell, "new"], ["Activas", active.length, "#17727A", ListChecks, "active"], ["Vencidas", overdue, "#B42318", AlertTriangle, "vencidas"], ["Finalizadas", done.length, "#0D7A4F", CheckCircle2, "done"]].map(([l, v, col, Icon, f]) => (
-            <button key={l} type="button" onClick={() => setStatusFilter(f)} title={`Filtrar: ${l}`}
+          {[
+            { l: "Novedades", v: noveltyCount, col: "#6D28D9", Icon: Bell, on: statusFilter === "active" && novFilter === "any", go: () => { setStatusFilter("active"); setNovFilter("any"); } },
+            { l: "Activas", v: active.length, col: "#17727A", Icon: ListChecks, on: statusFilter === "active" && novFilter === "all", go: () => { setStatusFilter("active"); setNovFilter("all"); } },
+            { l: "Vencidas", v: overdue, col: "#B42318", Icon: AlertTriangle, on: statusFilter === "vencidas", go: () => setStatusFilter("vencidas") },
+            { l: "Finalizadas", v: done.length, col: "#0D7A4F", Icon: CheckCircle2, on: statusFilter === "done", go: () => setStatusFilter("done") },
+          ].map(({ l, v, col, Icon, on, go }) => (
+            <button key={l} type="button" onClick={go} title={`Filtrar: ${l}`}
               className="rounded-md border p-3 text-left transition-colors"
-              style={{ borderColor: statusFilter === f ? col : border, background: card }}>
+              style={{ borderColor: on ? col : border, background: card }}>
               <p className="flex items-center gap-1.5 text-xs" style={{ color: dim }}><Icon size={13} style={{ color: col }} />{l}</p>
               <p className="mt-1 text-2xl font-semibold" style={{ color: col }}>{v}</p>
             </button>
@@ -327,21 +321,40 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
         )}
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar tu tarea por palabras…"
           className="mb-2 w-full rounded-md border px-3 py-2 text-sm outline-none" style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
-        <div className={`mb-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 ${qLow ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-          {[["active", "Activas"], ["new", "Novedades"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
+        <div className={`mb-2 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 ${qLow ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+          {[["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
             const on = statusFilter === k;
-            const isNov = k === "new";
             return (
-            <button key={k} type="button" onClick={() => setStatusFilter(k)}
+            <button key={k} type="button" onClick={() => { setStatusFilter(k); if (k === "active") setNovFilter("all"); }}
               className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
-              style={on
-                ? (isNov ? { borderColor: "#6D28D9", background: "#F5F3FF", color: "#6D28D9" } : { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" })
-                : { borderColor: border, color: dim }}>
-              {l}{isNov && noveltyCount > 0 ? ` (${noveltyCount})` : ""}
+              style={on ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: dim }}>
+              {l}
             </button>
             );
           })}
         </div>
+        {/* Sub-filtro de novedades: SOLO aparece dentro de "Activas" (no es un filtro hermano). */}
+        {statusFilter === "active" && !qLow && (
+          <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+            <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: dim }}>Novedad:</span>
+            {[
+              ["all", "Todas", "#17727A"],
+              ["any", `Con novedad${noveltyCount ? ` (${noveltyCount})` : ""}`, "#6D28D9"],
+              ["new", "Nuevas", "#0D7A4F"],
+              ["cr", "Cambios solicitados", "#B54708"],
+              ["updated", "Actualizadas por el admin", "#6D28D9"],
+            ].map(([k, l, col]) => {
+              const on = novFilter === k;
+              return (
+                <button key={k} type="button" onClick={() => setNovFilter(k)}
+                  className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold"
+                  style={on ? { borderColor: col, background: `${col}14`, color: col } : { borderColor: border, color: dim }}>
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="space-y-2">
           {ranked.length ? ranked.map((t) => {

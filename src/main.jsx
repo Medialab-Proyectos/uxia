@@ -90,6 +90,21 @@ function AppShell() {
     });
   };
   const [notifs, setNotifs] = React.useState([]);
+  // Notificaciones vistas: mapa clave→conteo ya visto. Una alerta se oculta cuando el usuario la
+  // abre (se marca vista con su conteo actual) y solo reaparece si el conteo vuelve a subir.
+  const [notifSeen, setNotifSeen] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem("uxia.notifSeen") || "{}") || {}; } catch { return {}; }
+  });
+  // Foco pendiente para el Centro de Operaciones (al pulsar una notificación lleva a su filtro).
+  const [opsFocus, setOpsFocus] = React.useState(null);
+  function dismissNotif(n) {
+    setNotifSeen((prev) => {
+      const next = { ...prev, [n.key]: n.count };
+      try { localStorage.setItem("uxia.notifSeen", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+    setNotifs((list) => list.filter((x) => x.key !== n.key));
+  }
   const [session, setSession] = React.useState(() => readStoredSession());
 
   // Solo el CEO entra al Centro de Operaciones; el resto se queda en el Radar.
@@ -101,6 +116,21 @@ function AppShell() {
       try { localStorage.setItem("uxia.activeModule", "radar"); } catch { /* ignore */ }
     }
   }, [esCEO, module]);
+  // Campana del empleado en el shell: alertas reportadas por el portal + vistas persistentes.
+  const [empAlerts, setEmpAlerts] = React.useState([]);
+  const [empBellOpen, setEmpBellOpen] = React.useState(false);
+  const [empFocus, setEmpFocus] = React.useState(null);
+  const [empSeen, setEmpSeen] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem("uxia.empNotifSeen") || "{}") || {}; } catch { return {}; }
+  });
+  function empDismiss(a) {
+    setEmpSeen((prev) => {
+      const next = { ...prev, [a.key]: a.count };
+      try { localStorage.setItem("uxia.empNotifSeen", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+  const empVisible = empAlerts.filter((a) => (empSeen[a.key] || 0) < a.count);
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
   // Sesion con la base caida: null = ok; "refrescando" = intentando recuperar en silencio;
@@ -142,17 +172,20 @@ function AppShell() {
         const vencen = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate <= today).length;
         const bloq = tasks.filter((t) => t.status === "blocked").length;
         const enRevision = tasks.filter((t) => t.status === "review").length;
+        const verificando = tasks.filter((t) => t.status === "verificacion").length;
         const actualizadas = tasks.filter((t) => t.employeeTouchedAt).length;
-        if (enRevision) list.push({ kind: "operations", text: `${enRevision} tarea(s) por aprobar (en revisión)` });
-        if (actualizadas) list.push({ kind: "operations", text: `${actualizadas} tarea(s) actualizada(s) por revisar` });
-        if (vencen) list.push({ kind: "operations", text: `${vencen} tarea(s) vencen hoy o están vencidas` });
-        if (bloq) list.push({ kind: "operations", text: `${bloq} tarea(s) bloqueadas` });
+        if (enRevision) list.push({ kind: "operations", key: "ops-review", focus: "review", count: enRevision, text: `${enRevision} tarea(s) por aprobar (en revisión)` });
+        if (verificando) list.push({ kind: "operations", key: "ops-verif", focus: "verificacion", count: verificando, text: `${verificando} tarea(s) en verificación del cliente` });
+        if (actualizadas) list.push({ kind: "operations", key: "ops-updated", focus: "updated", count: actualizadas, text: `${actualizadas} tarea(s) actualizada(s) por revisar` });
+        if (vencen) list.push({ kind: "operations", key: "ops-today", focus: "today", count: vencen, text: `${vencen} tarea(s) vencen hoy o están vencidas` });
+        if (bloq) list.push({ kind: "operations", key: "ops-blocked", focus: "blocked", count: bloq, text: `${bloq} tarea(s) bloqueadas` });
         const viejas = (vacantes || []).filter((v) => {
           if (!v.createdAt) return false;
           return Math.floor((Date.now() - new Date(v.createdAt).getTime()) / 86400000) > 15;
         }).length;
-        if (viejas) list.push({ kind: "radar", text: `${viejas} empleo(s) con +15 días (revisa o elimina)` });
-        setNotifs(list);
+        if (viejas) list.push({ kind: "radar", key: "radar-old", count: viejas, text: `${viejas} empleo(s) con +15 días (revisa o elimina)` });
+        // Oculta las que ya se vieron con ese mismo conteo (o menor); reaparecen si el conteo sube.
+        setNotifs(list.filter((n) => (notifSeen[n.key] || 0) < n.count));
       } catch {
         setNotifs([]);
       }
@@ -247,6 +280,34 @@ function AppShell() {
         <nav className="sticky top-0 z-50 flex items-center justify-between border-b px-4 py-2" style={{ backgroundColor: dk ? "#151B23" : "#FFFCF7", borderColor: dk ? "#28313E" : "#E7E0D5" }}>
           <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-6 w-auto" />
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <button type="button" onClick={() => setEmpBellOpen((v) => !v)} aria-label={`Alertas${empVisible.length ? ` · ${empVisible.length}` : ""}`} aria-expanded={empBellOpen}
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: empVisible.length ? "#6D28D9" : (dk ? "#28313E" : "#E7E0D5"), background: empVisible.length ? (dk ? "#241C3A" : "#F5F3FF") : "transparent", color: empVisible.length ? "#8B5CF6" : (dk ? "#9FB0C3" : "#667085") }}>
+                <Bell size={18} />
+                {empVisible.length > 0 && (
+                  <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white" style={{ background: "#6D28D9" }}>{empVisible.length}</span>
+                )}
+              </button>
+              {empBellOpen && (
+                <div className="fixed left-3 right-3 top-16 z-40 max-h-[70vh] overflow-y-auto rounded-md border p-3 text-sm shadow-lg sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72" style={{ background: dk ? "#151B23" : "#FFFCF7", borderColor: dk ? "#28313E" : "#E7E0D5", color: dk ? "#E7EDF4" : "#1F2937" }}>
+                  <p className="mb-2 font-semibold">Alertas</p>
+                  {empVisible.length === 0 ? (
+                    <p className="text-xs" style={{ color: dk ? "#7C8B9C" : "#98A2B3" }}>Sin alertas por ahora. 🎉</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {empVisible.map((a) => (
+                        <li key={a.key}>
+                          <button type="button" onClick={() => { setEmpFocus(a.focus); empDismiss(a); setEmpBellOpen(false); }} className="flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-xs" style={{ borderColor: dk ? "#28313E" : "#E7E0D5" }}>
+                            <span className="inline-flex items-center gap-2"><span className="inline-block h-2 w-2 rounded-full" style={{ background: a.color }} />{a.label}</span>
+                            <span className="font-bold" style={{ color: a.color }}>{a.count}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
             <button type="button" onClick={toggleTheme} className="inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: dk ? "#28313E" : "#E7E0D5", color: "#E8751A" }} aria-label="Tema">
               {dk ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -255,7 +316,7 @@ function AppShell() {
             </button>
           </div>
         </nav>
-        <EmployeePortal token={session.access_token} user={session.user} theme={theme} />
+        <EmployeePortal token={session.access_token} user={session.user} theme={theme} onAlerts={setEmpAlerts} focus={empFocus} onFocusHandled={() => setEmpFocus(null)} />
       </div>
     );
   }
@@ -311,8 +372,8 @@ function AppShell() {
                     ) : (
                       <ul className="space-y-1.5">
                         {notifs.map((n, i) => (
-                          <li key={i}>
-                            <button type="button" onClick={() => { selectModule(n.kind); setNotifOpen(false); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs" style={{ border: `1px solid ${navBorder}`, color: navText }}>
+                          <li key={n.key || i}>
+                            <button type="button" onClick={() => { selectModule(n.kind); if (n.kind === "operations" && n.focus) setOpsFocus(n.focus); dismissNotif(n); setNotifOpen(false); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs" style={{ border: `1px solid ${navBorder}`, color: navText }}>
                               <span className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: n.kind === "radar" ? "#E8751A" : "#17727A" }} />
                               <span>{n.text} <span style={{ color: navDim }}>· {n.kind === "radar" ? "Radar" : "Centro"}</span></span>
                             </button>
@@ -387,7 +448,7 @@ function AppShell() {
           )}
         </div>
       )}
-      {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
+      {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} focus={opsFocus} onFocusHandled={() => setOpsFocus(null)} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
     </div>
   );
 }
