@@ -708,11 +708,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       companies: companies.length,
       // Actualizadas por un empleado y aún sin revisar (employeeTouchedAt presente).
       updatedPending: tasks.filter((task) => task.employeeTouchedAt).length,
+      // El empleado la envió a revisión: el admin debe aprobar / pedir cambios / devolver.
+      reviewPending: open.filter((task) => task.status === "review").length,
     };
   }, [companies.length, tasks]);
 
   // Si aparece algo nuevo por atender (sube el total pendiente), reabre el aviso.
-  const alertTotal = metrics.dueToday + metrics.blocked + metrics.updatedPending;
+  const alertTotal = metrics.dueToday + metrics.blocked + metrics.updatedPending + metrics.reviewPending;
   const prevAlertTotal = useRef(alertTotal);
   useEffect(() => {
     if (alertTotal > prevAlertTotal.current) setAlertDismissed(false);
@@ -1472,9 +1474,16 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           )}
         </div>
 
-        {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0) && !alertDismissed && (
+        {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0 || metrics.reviewPending > 0) && !alertDismissed && (
           <div className="relative mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 pr-10 text-sm">
             <span className="font-semibold uppercase tracking-[0.08em] text-[#B76E00]">Requiere tu atención hoy</span>
+            {metrics.reviewPending > 0 && (
+              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("review"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
+                className="inline-flex items-center gap-1 font-semibold text-[#17727A] underline-offset-2 hover:underline" title="Ver las tareas en revisión (por aprobar)">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#17727A" }} />
+                {metrics.reviewPending} por aprobar (revisión)
+              </button>
+            )}
             {metrics.updatedPending > 0 && (
               <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("updated"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
                 className="inline-flex items-center gap-1 font-semibold text-[#6D28D9] underline-offset-2 hover:underline" title="Ver las tareas actualizadas por revisar">
@@ -1496,17 +1505,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           </div>
         )}
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <Metric label="Tareas abiertas" value={metrics.open} tone="#17727A" icon={ListChecks} />
+          <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("review"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }} className="text-left" title="Ver las tareas en revisión (por aprobar / pedir cambios)">
+            <Metric label="Por aprobar (revisión)" value={metrics.reviewPending} tone="#17727A" icon={Clock} />
+          </button>
           <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("updated"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }} className="text-left" title="Ver las tareas actualizadas por revisar">
             <Metric label="Actualizadas por revisar" value={metrics.updatedPending} tone="#6D28D9" icon={MessageCircle} />
           </button>
           <Metric label="Vencen hoy" value={metrics.dueToday} tone="#B76E00" icon={CalendarDays} />
           <Metric label="Bloqueos" value={metrics.blocked} tone="#B42318" icon={AlertTriangle} />
-          {/* En móvil (2 col) "Empresas" queda sola: que ocupe todo el ancho, sin hueco. */}
-          <div className="col-span-2 lg:col-span-1">
-            <Metric label="Empresas" value={metrics.companies} tone="#344054" icon={Building2} />
-          </div>
+          <Metric label="Empresas" value={metrics.companies} tone="#344054" icon={Building2} />
         </section>
 
         <div className="mt-5 flex gap-2 overflow-x-auto border-b border-[#D9D2C7]">
