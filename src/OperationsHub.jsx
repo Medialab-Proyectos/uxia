@@ -2518,8 +2518,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           )}
           {!open && (
             <span className="flex w-full flex-col gap-1 text-xs font-medium text-[#667085]">
-              {/* Línea 1: estado + tipo en UNA sola línea (+ actualizada / comentarios) */}
-              <span className="flex flex-nowrap items-center gap-1.5 overflow-hidden">
+              {/* Línea 1: estado + tipo juntos y completos (shrink-0); si hay extras
+                  (actualizada/comentarios) bajan a otra línea, sin recortar el tipo. */}
+              <span className="flex flex-wrap items-center gap-1.5">
                 <span
                   className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold"
                   style={overdue
