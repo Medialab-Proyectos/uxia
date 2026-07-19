@@ -2128,10 +2128,16 @@ function TasksTable({
           <h2 className="text-lg font-semibold text-[#1D2939]">Todas las tareas</h2>
           <p className="text-sm text-[#667085]">Toca una tarea para desplegar y editar lo que se requiere.</p>
         </div>
-        {/* "Crear tarea manual" a lo ancho en responsive, con márgenes */}
-        <button onClick={onAddTask} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white sm:w-auto">
-          <Plus size={16} /> Crear tarea manual
-        </button>
+        {/* "Crear tarea manual" + "Ver archivo" (finalizadas) a lo ancho en responsive */}
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <button onClick={onAddTask} className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-[#17727A] px-3 py-2 text-sm font-semibold text-white sm:w-auto">
+            <Plus size={16} /> Crear tarea manual
+          </button>
+          <button onClick={() => onStatus(activeStatus === "done" ? "open" : "done")} className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold sm:w-auto"
+            style={activeStatus === "done" ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#475467" }}>
+            <Archive size={16} /> {activeStatus === "done" ? "Salir del archivo" : "Ver archivo (finalizadas)"}
+          </button>
+        </div>
         <input
           value={taskQuery}
           onChange={(event) => onTaskQuery(event.target.value)}
@@ -2683,6 +2689,15 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               <button type="button" onClick={() => setCrModal(true)} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-2.5 py-1 text-xs font-semibold text-[#B54708]"><AlertTriangle size={12} /> Pedir cambios</button>
               <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Devolver a en progreso</button>
             </div>
+          </div>
+        )}
+        {task.status === "done" && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#A6D9C4] bg-[#E5F5EE] px-2.5 py-1.5">
+            <span className="text-xs font-semibold text-[#0D7A4F]"><CheckCircle2 size={12} className="mr-1 inline align-[-2px]" /> Tarea finalizada (archivada){task.completedAt ? ` · ${new Date(task.completedAt).toLocaleDateString()}` : ""}</span>
+            <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })}
+              className="inline-flex items-center gap-1 rounded-md border border-[#17727A] px-2 py-0.5 text-[11px] font-semibold text-[#17727A]">
+              <LoaderCircle size={12} /> Reactivar
+            </button>
           </div>
         )}
         {task.employeeTouchedAt && (
