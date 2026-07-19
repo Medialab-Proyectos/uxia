@@ -2450,6 +2450,28 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [linkInput, setLinkInput] = useState("");
   const [openInternal, setOpenInternal] = useState(false);
   const [reply, setReply] = useState("");
+  // Change Requests: texto + origen (CEO/cliente) del cambio a pedir.
+  const [crText, setCrText] = useState("");
+  const [crBy, setCrBy] = useState("ceo");
+  const changeRequests = Array.isArray(task.changeRequests) ? task.changeRequests : [];
+  const openCRs = changeRequests.filter((c) => !c.resolved);
+  function addChangeRequest() {
+    const text = crText.trim();
+    if (!text) return;
+    const cr = { id: `cr-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, at: new Date().toISOString(), by: crBy, text, resolved: false };
+    // Pedir cambios devuelve la tarea a "en progreso" y avisa al empleado (adminTouchedAt).
+    onChangeTask(task.id, { changeRequests: [...changeRequests, cr], changeRequest: true, status: "doing" });
+    setCrText("");
+  }
+  function toggleCR(id, resolved) {
+    const next = changeRequests.map((c) => (c.id === id ? { ...c, resolved, resolvedAt: resolved ? new Date().toISOString() : "" } : c));
+    onChangeTask(task.id, { changeRequests: next, changeRequest: next.some((c) => !c.resolved) });
+  }
+  function approveReview() {
+    // Aprobar: resuelve los CR abiertos y abre el modal de cierre (satisfacción).
+    if (openCRs.length) onChangeTask(task.id, { changeRequests: changeRequests.map((c) => ({ ...c, resolved: true })), changeRequest: false });
+    openDoneModal();
+  }
   // Popup al finalizar: satisfacción (1-5) + recomendaciones + % de IA usada.
   const [doneModal, setDoneModal] = useState(false);
   const [mRating, setMRating] = useState(0);
@@ -2647,6 +2669,55 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             </button>
           </div>
         )}
+
+        {/* Revisión y Change Requests (ciclo empleado↔admin) */}
+        <div className="rounded-md border border-[#F2C879] bg-[#FFFCF5] p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#B76E00]">
+              <AlertTriangle size={12} className="mr-1 inline align-[-2px]" /> Revisión y cambios{openCRs.length ? ` · ${openCRs.length} abierto(s)` : ""}
+            </span>
+            {task.status === "review" && (
+              <span className="inline-flex gap-1.5">
+                <button type="button" onClick={approveReview} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Aprobar</button>
+                <button type="button" onClick={() => document.getElementById(`cr-input-${task.id}`)?.focus()} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-2.5 py-1 text-xs font-semibold text-[#B54708]">Pedir cambios</button>
+              </span>
+            )}
+          </div>
+          {task.status === "review" && (
+            <p className="mt-1 text-[11px] text-[#8A6D3B]">El empleado la envió a revisión. Apruébala o pide un cambio (queda registrado y vuelve a "en progreso").</p>
+          )}
+          {/* Historial de CRs */}
+          {changeRequests.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {changeRequests.map((c) => (
+                <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-60" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: "#fff" }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span>
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                      <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
+                      {c.resolved && <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto</span>}
+                      <p className="mt-0.5 text-[#475467]">{c.text}</p>
+                    </span>
+                    <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* Registrar un CR (CEO o cliente) */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <select value={crBy} onChange={(e) => setCrBy(e.target.value)} className="rounded-md border border-[#D0D5DD] bg-white px-1.5 py-1.5 text-xs font-semibold text-[#344054]">
+              <option value="ceo">CEO</option>
+              <option value="cliente">Cliente</option>
+            </select>
+            <input id={`cr-input-${task.id}`} value={crText} onChange={(e) => setCrText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && crText.trim()) { e.preventDefault(); addChangeRequest(); } }}
+              placeholder="¿Qué cambio se pide? (vuelve a 'en progreso' y avisa al empleado)"
+              className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#B54708]" />
+            <button type="button" disabled={!crText.trim()} onClick={addChangeRequest} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Pedir cambio</button>
+          </div>
+        </div>
+
         {Array.isArray(task.comments) && task.comments.length > 0 && (
           <div className="rounded-md border border-[#C4B5FD] bg-[#F5F3FF] p-2">
             <div className="mb-1 flex items-center justify-between">
@@ -2717,22 +2788,14 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             })}
           </div>
         </div>
-        {/* DesignOps ligero: puntos (los asigna el MD automáticamente; aquí se ven) y la
-            marca de Change Request con explicación. QA/IA/herramientas salen del cierre. */}
+        {/* DesignOps ligero: puntos (los asigna el análisis automáticamente; aquí se ven).
+            Los Change Requests se abren desde "Revisión y cambios" arriba, no aquí. */}
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
           <span className="inline-flex items-center gap-1 text-xs text-[#667085]" title="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea.">
             Puntos <HelpCircle size={12} className="text-[#98A2B3]" />:
             <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
-          <button type="button"
-            onClick={() => onChangeTask(task.id, { changeRequest: !task.changeRequest })}
-            title="Change Request: márcalo si el cliente pidió un cambio DESPUÉS de aprobar el diseño (no es alcance original). Alimenta el indicador de eficiencia."
-            className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-            style={task.changeRequest ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#667085" }}>
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: task.changeRequest ? "#B54708" : "#D0D5DD" }} />
-            Change Request <HelpCircle size={11} className="opacity-70" />
-          </button>
         </div>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
@@ -3670,7 +3733,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
   const deviationPct = devArr.length ? Math.round((devArr.reduce((a, b) => a + b, 0) / devArr.length) * 100) : null;
   const defTasks2 = companyTasks.filter((t) => t.qaDefects != null);
   const defectsPer10 = defTasks2.length && doneInPeriod.length ? +(defTasks2.reduce((a, t) => a + (Number(t.qaDefects) || 0), 0) / doneInPeriod.length * 10).toFixed(1) : null;
-  const crCount = companyTasks.filter((t) => t.changeRequest).length;
+  const crCount = companyTasks.reduce((a, t) => a + (Array.isArray(t.changeRequests) ? t.changeRequests.filter((c) => !c.resolved).length : (t.changeRequest ? 1 : 0)), 0);
   const toolFreq = {};
   for (const t of companyTasks) if (Array.isArray(t.tools)) for (const tool of t.tools) toolFreq[tool] = (toolFreq[tool] || 0) + 1;
   const toolsSorted = Object.entries(toolFreq).sort((a, b) => b[1] - a[1]);

@@ -82,7 +82,8 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   const defTasks = ct.filter((t) => t.qaDefects != null);
   const defectsTotal = defTasks.reduce((a, t) => a + (Number(t.qaDefects) || 0), 0);
   const defectsPer10 = defTasks.length && done.length ? +(defectsTotal / done.length * 10).toFixed(1) : null;
-  const crCount = ct.filter((t) => t.changeRequest).length;
+  // Change Requests abiertos (de la lista change_requests) + compat con el booleano viejo.
+  const crCount = ct.reduce((a, t) => a + (Array.isArray(t.changeRequests) ? t.changeRequests.filter((c) => !c.resolved).length : (t.changeRequest ? 1 : 0)), 0);
   // Uso/consumo de IA y herramientas por tarea (adopción — REACH: Ability/Efficiency).
   const aiTasks = ct.filter((t) => t.aiUsage != null);
   const avgAi = aiTasks.length ? Math.round(aiTasks.reduce((a, t) => a + Number(t.aiUsage), 0) / aiTasks.length) : null;

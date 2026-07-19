@@ -59,7 +59,7 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
       if (person) {
         const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref";
         // Intenta con las columnas de novedad; si la base aún no está migrada, carga sin ellas.
-        let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base},assignee_seen_at,admin_touched_at&order=due_date.asc`, { headers });
+        let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
         if (!tRes.ok) {
           setNoveltyReady(false);
           tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base}&order=due_date.asc`, { headers });
@@ -83,11 +83,14 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
 
   // Novedades por persona: "Nueva" = nunca vista; "Actualizada" = el admin la cambió
   // después de la última vez que la vi. Al abrirla se marca vista y el tag desaparece.
+  const openCRs = (t) => (Array.isArray(t.change_requests) ? t.change_requests : []).filter((c) => !c.resolved);
+  const hasChangeRequest = (t) => noveltyReady && openCRs(t).length > 0;
   const isNew = (t) => noveltyReady && !t.assignee_seen_at;
   const isUpdatedByAdmin = (t) => Boolean(
     noveltyReady && t.assignee_seen_at && t.admin_touched_at && new Date(t.admin_touched_at) > new Date(t.assignee_seen_at)
   );
-  const hasNovelty = (t) => isNew(t) || isUpdatedByAdmin(t);
+  // Una novedad puede ser: nueva, un cambio solicitado (CR) o una actualización del admin.
+  const hasNovelty = (t) => isNew(t) || hasChangeRequest(t) || isUpdatedByAdmin(t);
   const noveltyCount = tasks.filter((t) => t.status !== "done" && hasNovelty(t)).length;
 
   // Marca la tarea como vista (solo assignee_seen_at; NO toca employee_touched_at, así que
@@ -259,7 +262,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                     <span className="block truncate text-sm font-semibold">
                       {t.task_ref && <span className="mr-2 rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold" style={{ borderColor: border, color: dim }}>{t.task_ref}</span>}
                       {isNew(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#0D7A4F" }}>NUEVA</span>}
-                      {!isNew(t) && isUpdatedByAdmin(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#6D28D9" }}>ACTUALIZADA</span>}
+                      {!isNew(t) && hasChangeRequest(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#B54708" }}>CAMBIO SOLICITADO</span>}
+                      {!isNew(t) && !hasChangeRequest(t) && isUpdatedByAdmin(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#6D28D9" }}>ACTUALIZADA</span>}
                       {t.title}
                     </span>
                     <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
@@ -272,6 +276,22 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                 {isOpen && (
                   <div className="border-t px-3 py-3" style={{ borderColor: border }}>
                     {t.description && <p className="mb-3 whitespace-pre-line text-sm" style={{ color: dim }}>{t.description}</p>}
+
+                    {/* Cambios solicitados (CR) abiertos: lo que hay que ajustar antes de re-enviar */}
+                    {openCRs(t).length > 0 && (
+                      <div className="mb-3 rounded-md border p-2" style={{ borderColor: "#F2C879", background: dark ? "#241E12" : "#FFFCF5" }}>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "#B76E00" }}>⚠ Cambio(s) solicitado(s) — ajusta y vuelve a enviar a revisión</p>
+                        <ul className="mt-1.5 space-y-1.5">
+                          {openCRs(t).map((c) => (
+                            <li key={c.id} className="rounded-md border p-2 text-xs" style={{ borderColor: border, background: card }}>
+                              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                              <span className="ml-1.5" style={{ color: dim }}>{String(c.at || "").slice(0, 10)}</span>
+                              <p className="mt-0.5" style={{ color: text }}>{c.text}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {(() => {
                       const st = saveState[t.id];

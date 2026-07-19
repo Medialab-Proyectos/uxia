@@ -111,6 +111,10 @@ alter table tasks add column if not exists design_points numeric;   -- 1 | 2 | 4
 alter table tasks add column if not exists qa_defects numeric;      -- defectos UX/UI hallados
 alter table tasks add column if not exists change_request boolean not null default false;
 alter table tasks add column if not exists tools jsonb not null default '[]'::jsonb; -- herramientas usadas
+-- Historial de Change Requests por tarea: peticiones de cambio del CEO o del cliente
+-- durante la revisión. [{ id, at, by:'ceo'|'cliente', text, resolved, resolved_at }].
+-- El empleado NO lo edita (los abre/resuelve el admin); dispara la novedad "Cambio solicitado".
+alter table tasks add column if not exists change_requests jsonb not null default '[]'::jsonb;
 -- ai_usage (ya existe en 3e) = % de IA usada en la tarea (0..100). Con `tools` da la
 -- visibilidad de "uso y consumo de IA + herramientas" por tarea que pide negocio.
 
@@ -230,6 +234,7 @@ begin
     -- Instrumentación DesignOps: solo la fija el admin/MD, el empleado no.
     new.design_points := old.design_points; new.qa_defects := old.qa_defects;
     new.change_request := old.change_request; new.tools := old.tools; new.ai_usage := old.ai_usage;
+    new.change_requests := old.change_requests;
     if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then
       new.status := old.status;
     end if;
