@@ -2761,6 +2761,30 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             <AlertTriangle size={12} /> Revisión y cambios{openCRs.length ? ` · ${openCRs.length}` : ""}
           </button>
         </div>
+        {/* Historial de request review como colapsable (no acumulado en el popup) */}
+        {changeRequests.length > 0 && (
+          <details className="rounded-md border border-[#E4DED6] bg-white px-2 py-1.5">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-[#667085]">
+              <ChevronRight size={13} className="ops-caret transition-transform" />
+              Request review ({changeRequests.length}{openCRs.length ? ` · ${openCRs.length} abierto(s)` : " · todos resueltos"})
+            </summary>
+            <ul className="mt-1.5 space-y-1.5">
+              {[...changeRequests].reverse().map((c) => (
+                <li key={c.id} className={`rounded-md border p-2 text-xs ${c.resolved ? "opacity-70" : ""}`} style={{ borderColor: c.resolved ? "#E4DED6" : "#F2C879", background: c.resolved ? "#FBFAF7" : "#FFFCF5" }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span>
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                      <span className="ml-1.5 text-[#98A2B3]">{new Date(c.at).toLocaleDateString()}</span>
+                      {c.resolved ? <span className="ml-1.5 font-semibold text-[#0D7A4F]">✓ resuelto por el empleado</span> : <span className="ml-1.5 font-semibold text-[#B54708]">abierto</span>}
+                      <p className="mt-0.5 text-[#475467]">{c.text}</p>
+                    </span>
+                    <button type="button" onClick={() => toggleCR(c.id, !c.resolved)} className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: "#D0D5DD", color: "#475467" }}>{c.resolved ? "Reabrir" : "Resolver"}</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Ubicación (empresa · subproyecto)</span>
           <select

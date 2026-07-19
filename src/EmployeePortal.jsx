@@ -41,6 +41,8 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("active");
   const [q, setQ] = React.useState("");
+  const [crResolve, setCrResolve] = React.useState(null); // { task, cr } al resolver un cambio
+  const [crComment, setCrComment] = React.useState("");
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -180,6 +182,34 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
     }
   }
 
+  // Resolver un Change Request: lo marca resuelto, envía la tarea a REVISIÓN (para que el
+  // admin verifique) y agrega un comentario opcional. El admin ve el CR como resuelto.
+  async function confirmResolveCR() {
+    if (!crResolve) return;
+    const { task, cr } = crResolve;
+    const crs = (Array.isArray(task.change_requests) ? task.change_requests : [])
+      .map((c) => (c.id === cr.id ? { ...c, resolved: true, resolved_at: new Date().toISOString() } : c));
+    const body = { change_requests: crs, status: "review", employee_touched_at: new Date().toISOString() };
+    const text = crComment.trim();
+    if (text) {
+      const comments = Array.isArray(task.comments) ? task.comments : [];
+      body.comments = [...comments, { author: me?.name || email, role: "employee", text: `Resolví el cambio: ${text}`, at: new Date().toISOString() }];
+    }
+    setError("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${task.id}`, {
+        method: "PATCH",
+        headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`No se pudo guardar (código ${res.status}).`);
+      setCrResolve(null); setCrComment("");
+      await load();
+    } catch (e) {
+      setError(String(e?.message || "No se pudo resolver el cambio."));
+    }
+  }
+
   const dark = theme === "dark";
   const bg = dark ? "#0E1116" : "#F7F4EF";
   const card = dark ? "#151B23" : "#FFFFFF";
@@ -293,9 +323,17 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
                         <ul className="mt-1.5 space-y-1.5">
                           {openCRs(t).map((c) => (
                             <li key={c.id} className="rounded-md border p-2 text-xs" style={{ borderColor: border, background: card }}>
-                              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
-                              <span className="ml-1.5" style={{ color: dim }}>{String(c.at || "").slice(0, 10)}</span>
-                              <p className="mt-0.5" style={{ color: text }}>{c.text}</p>
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="min-w-0">
+                                  <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={c.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{c.by === "cliente" ? "Cliente" : "CEO"}</span>
+                                  <span className="ml-1.5" style={{ color: dim }}>{String(c.at || "").slice(0, 10)}</span>
+                                  <p className="mt-0.5" style={{ color: text }}>{c.text}</p>
+                                </span>
+                                <button type="button" onClick={() => { setCrResolve({ task: t, cr: c }); setCrComment(""); }}
+                                  className="shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-white" style={{ background: "#0D7A4F" }}>
+                                  <CheckCircle2 size={12} /> Resolver
+                                </button>
+                              </div>
                             </li>
                           ))}
                         </ul>
@@ -363,6 +401,26 @@ export default function EmployeePortal({ token, user, theme = "light" }) {
           }) : <p className="text-sm" style={{ color: dim }}>No hay tareas con estos filtros.</p>}
         </div>
       </div>
+
+      {/* Popup: resolver un cambio solicitado (marca resuelto + envía a revisión) */}
+      {crResolve && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) setCrResolve(null); }}>
+          <div className="w-full max-w-sm rounded-md p-4 shadow-xl" style={{ background: card, color: text }}>
+            <h3 className="text-sm font-semibold">Marcar cambio como resuelto</h3>
+            <p className="mt-0.5 text-xs" style={{ color: dim }}>Se enviará la tarea a revisión para que el administrador lo verifique.</p>
+            <div className="mt-2 rounded-md border p-2 text-xs" style={{ borderColor: border }}>
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={crResolve.cr.by === "cliente" ? { background: "#EAF2FB", color: "#1D5A99" } : { background: "#FFF7E6", color: "#B54708" }}>{crResolve.cr.by === "cliente" ? "Cliente" : "CEO"}</span>
+              <p className="mt-0.5" style={{ color: text }}>{crResolve.cr.text}</p>
+            </div>
+            <textarea value={crComment} onChange={(e) => setCrComment(e.target.value)} rows={3} placeholder="Comentario (opcional): cómo lo resolviste…"
+              className="mt-2 w-full rounded-md border px-2 py-1.5 text-sm outline-none" style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={confirmResolveCR} className="flex-1 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#0D7A4F" }}>Resuelto y enviar a revisión</button>
+              <button type="button" onClick={() => setCrResolve(null)} className="rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: border, color: dim }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

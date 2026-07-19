@@ -234,7 +234,8 @@ begin
     -- Instrumentación DesignOps: solo la fija el admin/MD, el empleado no.
     new.design_points := old.design_points; new.qa_defects := old.qa_defects;
     new.change_request := old.change_request; new.tools := old.tools; new.ai_usage := old.ai_usage;
-    new.change_requests := old.change_requests;
+    -- change_requests SÍ lo puede tocar el empleado en SUS tareas: para marcar un cambio
+    -- como RESUELTO al re-enviar a revisión. El admin tiene la última palabra (aprobar/re-pedir).
     if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then
       new.status := old.status;
     end if;
