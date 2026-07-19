@@ -130,6 +130,19 @@ function AppShell() {
       return next;
     });
   }
+  // Cuando una alerta desaparece (su conteo bajó a 0 y ya no la reporta el portal), se olvida su
+  // "visto": así, si el mismo tipo de alerta vuelve a aparecer (otro cambio solicitado), se muestra
+  // de nuevo aunque el conteo coincida con el anterior. Antes se quedaba oculta y "no aparecía".
+  React.useEffect(() => {
+    const keys = new Set(empAlerts.map((a) => a.key));
+    setEmpSeen((prev) => {
+      let changed = false; const next = {};
+      for (const k of Object.keys(prev)) { if (keys.has(k)) next[k] = prev[k]; else changed = true; }
+      if (!changed) return prev;
+      try { localStorage.setItem("uxia.empNotifSeen", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [empAlerts]);
   const empVisible = empAlerts.filter((a) => (empSeen[a.key] || 0) < a.count);
   const [authReady, setAuthReady] = React.useState(false);
   const [authNotice, setAuthNotice] = React.useState("");
@@ -184,6 +197,16 @@ function AppShell() {
           return Math.floor((Date.now() - new Date(v.createdAt).getTime()) / 86400000) > 15;
         }).length;
         if (viejas) list.push({ kind: "radar", key: "radar-old", count: viejas, text: `${viejas} empleo(s) con +15 días (revisa o elimina)` });
+        // Olvida el "visto" de las alertas que ya no están (conteo 0) para que, si vuelven a
+        // aparecer con el mismo conteo, se muestren de nuevo (antes se quedaban ocultas).
+        const activeKeys = new Set(list.map((n) => n.key));
+        setNotifSeen((prev) => {
+          let changed = false; const cleaned = {};
+          for (const k of Object.keys(prev)) { if (activeKeys.has(k)) cleaned[k] = prev[k]; else changed = true; }
+          if (!changed) return prev;
+          try { localStorage.setItem("uxia.notifSeen", JSON.stringify(cleaned)); } catch { /* ignore */ }
+          return cleaned;
+        });
         // Oculta las que ya se vieron con ese mismo conteo (o menor); reaparecen si el conteo sube.
         setNotifs(list.filter((n) => (notifSeen[n.key] || 0) < n.count));
       } catch {

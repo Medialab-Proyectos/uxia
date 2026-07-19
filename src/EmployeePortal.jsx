@@ -87,6 +87,22 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
 
   React.useEffect(() => { load(); }, [load]);
 
+  // Recarga al VOLVER a la pestaña/ventana: así los cambios del admin (p. ej. un request review
+  // recién enviado) aparecen sin tener que refrescar a mano. Se limita a 1 recarga cada 20s.
+  React.useEffect(() => {
+    let last = 0;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last < 20000) return;
+      last = now;
+      load();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [load]);
+
   // Si la pantalla lleva abierta +2h sin refrescar, sugiere actualizar (puede haber cambios).
   React.useEffect(() => {
     if (!lastLoadedAt) return undefined;
@@ -372,7 +388,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                       {t.title}
                     </span>
                     <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
-                      {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}{t.design_points != null ? ` · ${t.design_points} pts` : ""}
+                      {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}
                     </span>
                   </span>
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: PRIORITY_COLOR[t.priority] || "#98A2B3" }} title={`Prioridad ${t.priority || "media"}`} />

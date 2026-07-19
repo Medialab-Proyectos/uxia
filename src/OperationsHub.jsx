@@ -2718,19 +2718,19 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             Dos botones en la misma línea: Aprobar (manda al cliente) y Devolver. */}
         {task.status === "review" && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#B7D8D4] bg-[#EAF4F2] px-2.5 py-1.5">
-            <span className="min-w-0 text-[11px] font-semibold text-[#17727A]">El empleado la marcó lista (en revisión). Valídala y mándala a verificación, o devuélvela.</span>
+            <span className="min-w-0 text-[11px] font-semibold text-[#17727A]">El empleado la marcó lista (en revisión). Valídala y mándala a verificación, o devuélvela con un cambio.</span>
             <span className="flex shrink-0 gap-1.5">
               <button type="button" onClick={approveReview} className="inline-flex items-center gap-1 rounded-md bg-[#175CD3] px-2.5 py-1 text-xs font-semibold text-white"><Send size={12} /> Aprobar</button>
-              <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]">Devolver</button>
+              <button type="button" onClick={() => { setCrText(""); setCrBy("ceo"); setCrModal(true); }} title="Devolver = abrir un request review con el motivo del cambio" className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]">Devolver</button>
             </span>
           </div>
         )}
         {task.status === "verificacion" && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#9CC7E4] bg-[#EAF2FB] px-2.5 py-1.5">
-            <span className="min-w-0 text-[11px] font-semibold text-[#175CD3]">En verificación del cliente. Si aprueba, ciérrala; si pide ajustes, devuélvela.</span>
+            <span className="min-w-0 text-[11px] font-semibold text-[#175CD3]">En verificación del cliente. Si aprueba, ciérrala; si pide ajustes, devuélvela con un cambio.</span>
             <span className="flex shrink-0 gap-1.5">
               <button type="button" onClick={openDoneModal} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Finalizar</button>
-              <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]">Devolver</button>
+              <button type="button" onClick={() => { setCrText(""); setCrBy("cliente"); setCrModal(true); }} title="Devolver = abrir un request review con el motivo del cambio" className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]">Devolver</button>
             </span>
           </div>
         )}
@@ -2833,7 +2833,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
           <button type="button" onClick={() => { setCrText(""); setCrBy("ceo"); setCrModal(true); }}
-            className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold"
+            className="inline-flex w-full items-center justify-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold sm:w-auto sm:justify-start"
             style={openCRs.length ? { borderColor: "#B54708", background: "#FFF7E6", color: "#B54708" } : { borderColor: "#D0D5DD", color: "#475467" }}>
             <AlertTriangle size={12} /> Request review
           </button>
