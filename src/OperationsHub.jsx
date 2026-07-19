@@ -2664,6 +2664,18 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         )}
       </summary>
       <div className="mt-2 space-y-2">
+        {/* Estado del EMPLEADO: "en revisión" es su pre-aprobación (él cree que está lista),
+            NO la finalización del admin. El admin aprueba, pide cambios o la devuelve. */}
+        {task.status === "review" && (
+          <div className="rounded-md border border-[#B7D8D4] bg-[#EAF4F2] px-2.5 py-2">
+            <p className="text-xs font-semibold text-[#17727A]"><Clock size={12} className="mr-1 inline align-[-2px]" /> El empleado la marcó lista (en revisión). Es su aprobación, no la final — decide:</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <button type="button" onClick={openDoneModal} className="inline-flex items-center gap-1 rounded-md bg-[#0D7A4F] px-2.5 py-1 text-xs font-semibold text-white"><Check size={13} /> Aprobar</button>
+              <button type="button" onClick={() => setCrModal(true)} className="inline-flex items-center gap-1 rounded-md border border-[#B54708] px-2.5 py-1 text-xs font-semibold text-[#B54708]"><AlertTriangle size={12} /> Pedir cambios</button>
+              <button type="button" onClick={() => onChangeTask(task.id, { status: "doing" })} className="inline-flex items-center gap-1 rounded-md border border-[#1570EF] px-2.5 py-1 text-xs font-semibold text-[#1570EF]"><LoaderCircle size={12} /> Devolver a en progreso</button>
+            </div>
+          </div>
+        )}
         {task.employeeTouchedAt && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#C4B5FD] bg-[#F5F3FF] px-2.5 py-1.5">
             <span className="text-xs font-semibold text-[#6D28D9]">
