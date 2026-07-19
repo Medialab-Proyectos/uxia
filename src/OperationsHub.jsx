@@ -1485,12 +1485,15 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           </button>
           <Metric label="Vencen hoy" value={metrics.dueToday} tone="#B76E00" icon={CalendarDays} />
           <Metric label="Bloqueos" value={metrics.blocked} tone="#B42318" icon={AlertTriangle} />
-          <Metric label="Empresas" value={metrics.companies} tone="#344054" icon={Building2} />
+          {/* En móvil (2 col) "Empresas" queda sola: que ocupe todo el ancho, sin hueco. */}
+          <div className="col-span-2 lg:col-span-1">
+            <Metric label="Empresas" value={metrics.companies} tone="#344054" icon={Building2} />
+          </div>
         </section>
 
         <div className="mt-5 flex gap-2 overflow-x-auto border-b border-[#D9D2C7]">
           {[
-            ["companies", "Empresas y proyectos"],
+            ["companies", "Empresas"],
             ["tasks", "Todas las tareas"],
             ["priority", "Prioridad"],
           ].map(([key, label]) => (
@@ -2494,14 +2497,8 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           )}
           {!open && (
             <span className="flex w-full flex-col gap-1 text-xs font-medium text-[#667085]">
-              {/* Línea 1: tipo + estado (+ actualizada / comentarios) */}
+              {/* Línea 1: estado + tipo (+ actualizada / comentarios) */}
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                {task.category && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
-                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
-                    {task.category}
-                  </span>
-                )}
                 <span
                   className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold"
                   style={overdue
@@ -2511,6 +2508,12 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
                   {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
                 </span>
+                {task.category && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
+                    {task.category}
+                  </span>
+                )}
                 {task.employeeTouchedAt && (
                   <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
@@ -2522,15 +2525,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   </span>
                 )}
               </span>
-              {/* Línea 2: fecha + persona (+ horas si finalizada) */}
+              {/* Línea 2: persona + fecha en dos columnas (2×2) */}
               {(task.dueDate || assignedPerson || (task.status === "done" && task.workedHours != null)) && (
-                <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[#8b8272]">
-                  {task.dueDate && (
-                    <span className="inline-flex items-center gap-1"><CalendarDays size={11} />{displayDate(task.dueDate)}</span>
-                  )}
-                  {assignedPerson && (
-                    <span className="inline-flex items-center gap-1"><UserRound size={11} />{assignedPerson.name}</span>
-                  )}
+                <span className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[#8b8272]">
+                  <span className="inline-flex items-center gap-1 truncate">{assignedPerson ? <><UserRound size={11} className="shrink-0" />{assignedPerson.name}</> : <span className="text-[#B76E00]">Sin responsable</span>}</span>
+                  {task.dueDate && <span className="inline-flex items-center gap-1"><CalendarDays size={11} className="shrink-0" />{displayDate(task.dueDate)}</span>}
                   {task.status === "done" && task.workedHours != null && (
                     <span className="inline-flex items-center gap-1 font-semibold text-[#0D7A4F]"><Clock size={11} />{task.workedHours} h</span>
                   )}
@@ -2698,8 +2697,8 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         {/* DesignOps ligero: puntos (los asigna el MD automáticamente; aquí se ven) y la
             marca de Change Request con explicación. QA/IA/herramientas salen del cierre. */}
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
-          <span className="inline-flex items-center gap-1 text-xs text-[#667085]" title="Puntos de diseño por complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis del MD; miden esfuerzo para el tablero DesignOps.">
-            Puntos DesignOps <HelpCircle size={12} className="text-[#98A2B3]" />:
+          <span className="inline-flex items-center gap-1 text-xs text-[#667085]" title="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea.">
+            Puntos <HelpCircle size={12} className="text-[#98A2B3]" />:
             <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
             {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
           </span>
@@ -3319,9 +3318,11 @@ function CompanyPanel({
                         <button type="button" onClick={() => setEditClient({ old: client, value: client })} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md hover:bg-white/40" style={{ color: accent }} title="Editar nombre del subproyecto"><Pencil size={12} /></button>
                       </div>
                     )}
-                    <p className="mt-1 text-xs font-semibold text-[#667085]">
-                      <span className="text-[#17727A]">{projectTasks.length} tareas</span> · <span className="text-[#B76E00]">{pendingAssignment} sin asignar</span> · <span className={overdueTasks ? "text-[#B42318]" : "text-[#98A2B3]"}>{overdueTasks} vencidas</span>
-                    </p>
+                    <div className="mt-1 flex flex-nowrap items-center gap-1 overflow-hidden">
+                      <span className="whitespace-nowrap rounded-full bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
+                      <span className="whitespace-nowrap rounded-full bg-[#FFF7E6] px-1.5 py-0.5 text-[10px] font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
+                      <span className={`whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
@@ -3401,14 +3402,8 @@ function CompanyPanel({
                     >
                       <Plus size={15} /> Nueva tarea
                     </button>
-                    {getProjectBoardConfig(company, client).url && (
-                      <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer"
-                        title={`Abrir ${getProjectBoardConfig(company, client).tool}`}
-                        aria-label={`Abrir ${getProjectBoardConfig(company, client).tool}`}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E4DED6] text-[#98A2B3]">
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
+                    {/* El acceso a la plataforma (Jira/Trello…) vive junto a su link en
+                        "Ajustes y contexto del proyecto", no aquí (evita saturar). */}
                   </div>
 
                   <details className="border-t border-[#E4DED6] pt-2">
@@ -3435,12 +3430,21 @@ function CompanyPanel({
                         >
                           {BOARD_TOOLS.map((tool) => <option key={tool}>{tool}</option>)}
                         </select>
-                        <input
-                          value={getProjectBoardConfig(company, client).url}
-                          onChange={(event) => onUpdateProjectBoard(client, { url: event.target.value })}
-                          placeholder="Link del tablero o herramienta"
-                          className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            value={getProjectBoardConfig(company, client).url}
+                            onChange={(event) => onUpdateProjectBoard(client, { url: event.target.value })}
+                            placeholder="Link del tablero o herramienta"
+                            className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]"
+                          />
+                          {getProjectBoardConfig(company, client).url && (
+                            <a href={getProjectBoardConfig(company, client).url} target="_blank" rel="noopener noreferrer"
+                              title={`Ir a ${getProjectBoardConfig(company, client).tool}`}
+                              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-[#17727A] px-2 text-xs font-semibold text-[#17727A]">
+                              <ExternalLink size={13} /> Ir
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         <p className="text-xs font-semibold text-[#344054]">Documentos de contexto</p>
@@ -3491,8 +3495,10 @@ function CompanyPanel({
                         <ChevronRight size={16} className="ops-caret" style={{ color: accent }} />
                         <span className="text-xs font-semibold" style={{ color: accent }}>Tareas del subproyecto</span>
                       </span>
-                      <span className="text-xs font-semibold text-[#667085]">
-                        <span className="text-[#17727A]">{projectTasks.length} tareas</span> · <span className="text-[#B76E00]">{pendingAssignment} sin asignar</span> · <span className={overdueTasks ? "text-[#B42318]" : "text-[#98A2B3]"}>{overdueTasks} vencidas</span>
+                      <span className="flex flex-nowrap items-center gap-1 overflow-hidden">
+                        <span className="whitespace-nowrap rounded-full bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-semibold text-[#17727A]">{projectTasks.length} tareas</span>
+                        <span className="whitespace-nowrap rounded-full bg-[#FFF7E6] px-1.5 py-0.5 text-[10px] font-semibold text-[#B76E00]">{pendingAssignment} sin asignar</span>
+                        <span className={`whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${overdueTasks ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#475467]"}`}>{overdueTasks} vencidas</span>
                       </span>
                     </summary>
                     <div className="mt-2 space-y-2">
@@ -3745,10 +3751,10 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
                 ["Desviación de fechas", deviationPct == null ? "—" : `${deviationPct > 0 ? "+" : ""}${deviationPct}%`, "≤ 10%"],
                 ["Utilización por diseñador", avgUtil == null ? "—" : `${avgUtil}%`, "70–90%"],
                 ["Defectos UX/UI (por 10)", defectsPer10 == null ? "—" : `${defectsPer10}`, "≤ 2"],
-                ["Satisfacción del PO", avg == null ? "—" : `${avg.toFixed(1)} / 5`, "≥ 4,5"],
-                ["Change Requests", `${crCount}`, "documentar"],
-                ["Consumo de IA", avgAi == null ? "—" : `${avgAi}%`, "—"]].map(([k, v, m]) => (
-                <tr key={k} className="border-t border-[#F2F4F7]"><td className="py-1 pr-2">{k}</td><td className="py-1 pr-2 font-semibold text-[#1D2939]">{v}</td><td className="py-1 text-[#98A2B3]">{m}</td></tr>
+                ["Satisfacción del PO", avg == null ? "—" : `${avg.toFixed(1)} / 5`, "≥ 4,5", "Promedio de calificación del cliente al cerrar la tarea (1–5)."],
+                ["Change Requests", `${crCount}`, "documentar", "Cambios que pidió el cliente DESPUÉS de aprobar el diseño (no son alcance original). 'Documentar' = registrarlos siempre para no absorberlos gratis; se marcan en cada tarjeta de tarea."],
+                ["Consumo de IA", avgAi == null ? "—" : `${avgAi}%`, "—", "% promedio de IA usada, capturado al cerrar la tarea."]].map(([k, v, m, help]) => (
+                <tr key={k} className="border-t border-[#F2F4F7]"><td className="py-1 pr-2"><span className="inline-flex items-center gap-1">{k}{help && <HelpCircle size={11} className="text-[#98A2B3]" title={help} />}</span></td><td className="py-1 pr-2 font-semibold text-[#1D2939]">{v}</td><td className="py-1 text-[#98A2B3]">{m}</td></tr>
               ))}
             </tbody>
           </table>

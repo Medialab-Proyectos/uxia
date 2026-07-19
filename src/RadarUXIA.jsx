@@ -1543,20 +1543,21 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
               </summary>
               <div className="px-4 pb-4 space-y-2">
                 {buildOpportunitySources(query).map((s) => (
-                  <div key={s.name} className="flex items-center justify-between rounded-md px-4 py-3.5 gap-3" style={{ backgroundColor: C.bg, border: `1px solid ${C.coral}22` }}>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                  <div key={s.name} className="rounded-md px-4 py-3" style={{ backgroundColor: C.bg, border: `1px solid ${C.coral}22` }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-sm" style={{ color: C.text, fontFamily: FONT.display }}>{s.name}</span>
                         <Badge color={C.coral} bg={`${C.coral}14`}>{s.tag}</Badge>
                       </div>
-                      <p className="text-xs mt-0.5" style={{ color: C.dim }}>{s.desc}</p>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button onClick={() => copyLink(s.url, s.name)} className="text-xs px-2 py-1 rounded-md font-medium" style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}>
+                          {copied === s.name ? "Copiado ✓" : "Copiar"}
+                        </button>
+                        <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-1 rounded-md font-medium" style={{ color: C.coral, border: `1px solid ${C.coral}44`, textDecoration: "none" }}>Abrir →</a>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={() => copyLink(s.url, s.name)} className="text-xs px-2.5 py-1.5 rounded-md font-medium" style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}>
-                        {copied === s.name ? "Copiado ✓" : "Copiar"}
-                      </button>
-                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-sm" style={{ color: C.coral, textDecoration: "none" }}>Abrir →</a>
-                    </div>
+                    {/* Descripción a lo ancho de toda la tarjeta */}
+                    <p className="text-xs mt-1.5" style={{ color: C.dim }}>{s.desc}</p>
                   </div>
                 ))}
               </div>
@@ -1686,14 +1687,17 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-sm leading-snug truncate" style={{ fontFamily: FONT.display }}>{item.titulo}</h3>
                         <p className="text-xs mt-0.5 truncate" style={{ color: C.dim }}>{item.sub} · {item.kind}</p>
-                        <span className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={item.postulado ? { backgroundColor: `${C.green}18`, color: C.green } : { backgroundColor: `${C.amber}18`, color: C.amber }}>
+                        <span className="mt-1 inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold" style={item.postulado ? { backgroundColor: `${C.green}18`, color: C.green } : { backgroundColor: `${C.amber}18`, color: C.amber }}>
                           {item.postulado ? "✓ Postulado" : "Sin postular"}
                         </span>
                       </div>
-                      <div className="flex gap-1.5 items-center shrink-0">
-                        <button onClick={item.togglePost} title={item.postulado ? "Postulado — clic para quitar" : "Marcar postulado"} className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, backgroundColor: item.postulado ? C.green : `${C.green}14`, color: item.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}><Check size={16} /></button>
-                        <button onClick={item.unlike} title="Quitar me gusta" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, backgroundColor: C.coral, color: "#fff", border: `1px solid ${C.coral}` }}><Heart size={16} fill="#fff" /></button>
-                        {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" title="Ver" className="inline-flex items-center justify-center rounded-md" style={{ width: 36, height: 36, color: C.cyan, border: `1px solid ${C.cyan}44` }}><ExternalLink size={16} /></a>}
+                      {/* Botonera 2x2 a la derecha para no comerse la tarjeta. */}
+                      <div className="grid shrink-0 grid-cols-2 gap-1.5">
+                        <button onClick={item.togglePost} title={item.postulado ? "Postulado — clic para quitar" : "Marcar postulado"} className="inline-flex items-center justify-center rounded-md" style={{ width: 34, height: 34, backgroundColor: item.postulado ? C.green : `${C.green}14`, color: item.postulado ? "#fff" : C.green, border: `1px solid ${C.green}44` }}><Check size={15} /></button>
+                        <button onClick={item.unlike} title="Quitar me gusta" className="inline-flex items-center justify-center rounded-md" style={{ width: 34, height: 34, backgroundColor: C.coral, color: "#fff", border: `1px solid ${C.coral}` }}><Heart size={15} fill="#fff" /></button>
+                        {item.url
+                          ? <a href={item.url} target="_blank" rel="noopener noreferrer" title="Ver" className="inline-flex items-center justify-center rounded-md" style={{ width: 34, height: 34, color: C.cyan, border: `1px solid ${C.cyan}44` }}><ExternalLink size={15} /></a>
+                          : <span />}
                         {renderDelete(item.id, () => item.del())}
                       </div>
                     </div>
@@ -1792,8 +1796,8 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 <option value="quincena">Últimos 15 días</option>
               </select>
             </div>
-            {/* Filtros */}
-            <div className="flex flex-wrap gap-2 mb-4">
+            {/* Filtros: carrusel horizontal (scroll con el dedo) en responsive. */}
+            <div className="mb-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
               {[
                 ["todas", "Todas"],
                 ["remotas", "Solo remotas"],
@@ -1804,7 +1808,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 <button
                   key={key}
                   onClick={() => setFilter(key)}
-                  className="text-xs px-3 py-1.5 rounded-full font-medium transition-colors"
+                  className="shrink-0 whitespace-nowrap text-xs px-3 py-1.5 rounded-full font-medium transition-colors"
                   style={{
                     border: `1px solid ${filter === key ? C.amber : C.border}`,
                     color: filter === key ? C.amber : C.dim,
@@ -1829,12 +1833,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {[...postSources, ...sources].map((s) => (
-                    <div key={s.name} className="flex items-center justify-between gap-2 rounded-md px-3 py-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
-                      <div className="min-w-0">
+                    <div key={s.name} className="flex min-w-0 items-center justify-between gap-2 rounded-md px-3 py-2" style={{ backgroundColor: C.bg, border: `1px solid ${C.border}` }}>
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold truncate" style={{ color: C.text, fontFamily: FONT.display }}>{s.name}</div>
                         <div className="text-[11px] truncate" style={{ color: C.faint }}>{s.tag}</div>
                       </div>
-                      <div className="flex gap-2 shrink-0">
+                      <div className="flex gap-1.5 shrink-0">
                         <button onClick={() => copyLink(s.url, s.name)} className="text-xs px-2 py-1 rounded-md" style={{ color: copied === s.name ? C.green : C.dim, border: `1px solid ${C.border}` }}>
                           {copied === s.name ? "Copiado" : "Copiar"}
                         </button>
