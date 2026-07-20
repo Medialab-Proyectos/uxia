@@ -1051,10 +1051,14 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     // Orden claro de MAYOR a MENOR por score; el encaje geográfico solo desempata.
     .sort((a, b) => (b.score - a.score) || (jobRank(a) - jobRank(b)));
 
+  // Los INDICADORES deben reflejar lo que se ve en la lista de empleos: sin listados, sin
+  // favoritos (esos viven en "Me gusta") y sin aplicadas/descartadas. Antes usaban jobs.length
+  // (todo) y por eso mostraban "4" con la lista vacía.
+  const activeJobs = jobs.filter((j) => !esListado(j) && j.estado !== "me_interesa" && j.estado !== "aplicada" && j.estado !== "descartada");
   const stats = {
-    total: jobs.length,
-    remotas: jobs.filter((j) => j.remoto === "remoto").length,
-    colombia: jobs.filter((j) => j.esColombia).length,
+    total: activeJobs.length,
+    remotas: activeJobs.filter((j) => j.remoto === "remoto").length,
+    colombia: activeJobs.filter((j) => j.esColombia).length,
     megusta: jobs.filter((j) => j.estado === "me_interesa").length,
   };
 
@@ -1219,7 +1223,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
         <nav className="mb-6 grid grid-cols-3" style={{ borderBottom: `1px solid ${C.border}` }}>
           {[
             ["oportunidades", "Oportunidades"],
-            ["tablero", `Vacantes${jobs.length ? ` · ${jobs.length}` : ""}`],
+            ["tablero", `Vacantes${stats.total ? ` · ${stats.total}` : ""}`],
             ["interes", `Me gusta${likedCount ? ` · ${likedCount}` : ""}`],
           ].map(([key, label]) => (
             <button
