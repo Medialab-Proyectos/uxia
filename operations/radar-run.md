@@ -31,12 +31,20 @@ El radar corre **una vez al día, en la mañana**.
      app (pestaña Radar). Solo se curan **ofertas/propuestas concretas** con URL directa.
      Si por alguna razón se incluye un listado, márcalo `"esListado": true` para que la app lo
      oculte de la lista de empleos.
-3. **Inserta las nuevas** en Supabase (dedup contra activas + archivo; no pisa seguimiento):
+3. **Inserta SOLO las nuevas** en Supabase (dedup; no pisa el seguimiento del CEO):
    ```bash
    npm run radar:fetch    # oportunidades
    npm run radar:jobs     # vacantes
    # (o npm run radar:all, que ya corre clean + fetch + jobs en orden)
    ```
+   - **El dedup compara el id de cada candidato contra TODAS las filas que ya existen en la tabla
+     (activas Y archivadas) + `archivo-radar.json`.** Por eso, lo que el CEO **archivó/eliminó** de
+     la lista (estado `archivada`) NO se vuelve a traer: sigue en la base como memoria de "ya
+     analizado". Nunca borres las archivadas para conservar esa memoria (solo la caducidad de +5d
+     hace borrado duro, y antes guarda el id en el archivo).
+   - **NO pongas un `id` aleatorio** en el JSON curado: si el objeto no trae `id`, el script lo
+     deriva determinista con `hash(url|empresa)`, así el mismo empleo/propuesta recibe SIEMPRE el
+     mismo id y el dedup por id funciona entre corridas (y respeta lo archivado). Deja `id` vacío.
 4. El CEO abre **Radar → Oportunidades / Empleos**, recarga, prioriza por score y marca
    "me gusta"; dentro de "me gusta" marca **"Postulado"** cuando ya aplicó.
 
