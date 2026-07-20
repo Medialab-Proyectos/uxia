@@ -63,6 +63,15 @@ ideal de una oferta es **máximo 3 días**:
   Colombia por defecto; la app muestra la ubicación real de cada oferta.
 - **Orden por score**: tanto Oportunidades como Empleos se presentan ordenados por `score`
   (mayor probabilidad de encaje primero).
+- **"Eliminar" = ARCHIVAR (soft), no borrar**: cuando el CEO elimina una oferta/propuesta de la
+  lista, NO se borra la fila: se marca `estado = 'archivada'`. Así sale de la vista pero queda como
+  **memoria anti-duplicados** — el fetch dedup compara contra TODOS los ids existentes (incluidas
+  las archivadas), de modo que ese empleo/propuesta **no se vuelve a traer** en la próxima corrida.
+  Usa UPDATE (persiste con la RLS actual). El borrado DURO solo lo hace la caducidad (`radar:clean`,
+  >5 días), que además guarda el id en `archivo-radar.json` antes de borrar.
+- **Indicadores = lista visible**: los tiles (Empleos/Remotos/Colombia) y el contador de la pestaña
+  "Vacantes · N" cuentan solo las vacantes ACTIVAS de la lista (sin favoritos, listados, archivadas
+  ni aplicadas), no el total de filas.
 
 ## Nota honesta
 La búsqueda web de Claude Code es US-first, así que para leads con **contacto

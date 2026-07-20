@@ -906,24 +906,22 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     if (opsData.opsDataReady()) opsData.updateOportunidad(token, id, { postulado }).catch(() => {});
   };
 
+  // "Eliminar" = ARCHIVAR (soft): la fila se mantiene en la base (estado 'archivada') para que
+  // el próximo run sepa que ese empleo ya se analizó y NO lo vuelva a traer. Sale de la lista
+  // pero queda como registro. Usa UPDATE (persiste con la RLS actual).
   const removeJob = async (id) => {
     const prev = jobs;
-    persist(jobs.filter((j) => j.id !== id)); // optimista
+    persist(jobs.map((j) => (j.id === id ? { ...j, estado: "archivada" } : j))); // optimista: archiva
     if (opsData.opsDataReady()) {
       try {
-        const borradas = await opsData.deleteVacante(token, id);
-        if (!borradas) { // RLS lo bloqueó en silencio (0 filas): reaparecería al recargar
-          persist(prev);
-          setRadarNotice("No se pudo eliminar en la base (permisos). Corre supabase/setup.sql para las políticas RLS de 'vacantes'.");
-          return;
-        }
-        setRadarNotice("Empleo eliminado.");
+        await opsData.updateVacante(token, id, { estado: "archivada" });
+        setRadarNotice("Empleo archivado (queda como visto; no reaparece en próximas corridas).");
       } catch (e) {
-        persist(prev); // revertir: la BD no lo borró
-        setRadarNotice(`No se pudo eliminar en la base: ${e.message}. Verifica que corriste supabase/setup.sql (políticas RLS de 'vacantes').`);
+        persist(prev); // revertir: la BD no lo archivó
+        setRadarNotice(`No se pudo archivar en la base: ${e.message}.`);
       }
     } else {
-      setRadarNotice("Empleo eliminado (solo en este navegador: falta configurar Supabase).");
+      setRadarNotice("Empleo archivado (solo en este navegador: falta configurar Supabase).");
     }
   };
 
@@ -932,24 +930,21 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     setOppResults((current) => current.map((o) => (o.id === id ? { ...o, estado } : o)));
     if (opsData.opsDataReady()) opsData.updateOportunidad(token, id, { estado }).catch(() => {});
   };
+  // "Eliminar" propuesta = ARCHIVAR (soft): la fila queda en la base (estado 'archivada') como
+  // memoria anti-duplicados; sale de la lista pero el próximo run no la vuelve a traer.
   const removeOpp = async (id) => {
     const prev = oppResults;
-    setOppResults((current) => current.filter((o) => o.id !== id)); // optimista
+    setOppResults((current) => current.map((o) => (o.id === id ? { ...o, estado: "archivada" } : o))); // optimista: archiva
     if (opsData.opsDataReady()) {
       try {
-        const borradas = await opsData.deleteOportunidad(token, id);
-        if (!borradas) { // RLS lo bloqueó en silencio (0 filas): reaparecería al recargar
-          setOppResults(prev);
-          setRadarNotice("No se pudo eliminar en la base (permisos). Corre supabase/setup.sql para las políticas RLS de 'oportunidades'.");
-          return;
-        }
-        setRadarNotice("Propuesta eliminada.");
+        await opsData.updateOportunidad(token, id, { estado: "archivada" });
+        setRadarNotice("Propuesta archivada (queda como vista; no reaparece en próximas corridas).");
       } catch (e) {
-        setOppResults(prev); // revertir: la BD no lo borró
-        setRadarNotice(`No se pudo eliminar en la base: ${e.message}. Verifica que corriste supabase/setup.sql (políticas RLS de 'oportunidades').`);
+        setOppResults(prev); // revertir: la BD no lo archivó
+        setRadarNotice(`No se pudo archivar en la base: ${e.message}.`);
       }
     } else {
-      setRadarNotice("Propuesta eliminada (solo en este navegador: falta configurar Supabase).");
+      setRadarNotice("Propuesta archivada (solo en este navegador: falta configurar Supabase).");
     }
   };
 
@@ -1029,6 +1024,8 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
   useEffect(() => { loadRadarInsumos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const visible = jobs
+    // Archivadas (eliminadas por el usuario): quedan como memoria anti-dup, fuera de la vista.
+    .filter((j) => j.estado !== "archivada")
     // Los "listados" (enlaces de búsqueda de plataforma) NO son ofertas: se acceden por
     // los botones de plataforma (pestaña Radar), no en la lista de empleos.
     .filter((j) => !esListado(j))
@@ -1054,7 +1051,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
   // Los INDICADORES deben reflejar lo que se ve en la lista de empleos: sin listados, sin
   // favoritos (esos viven en "Me gusta") y sin aplicadas/descartadas. Antes usaban jobs.length
   // (todo) y por eso mostraban "4" con la lista vacía.
-  const activeJobs = jobs.filter((j) => !esListado(j) && j.estado !== "me_interesa" && j.estado !== "aplicada" && j.estado !== "descartada");
+  const activeJobs = jobs.filter((j) => !esListado(j) && j.estado !== "me_interesa" && j.estado !== "aplicada" && j.estado !== "descartada" && j.estado !== "archivada");
   const stats = {
     total: activeJobs.length,
     remotas: activeJobs.filter((j) => j.remoto === "remoto").length,
