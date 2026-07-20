@@ -184,14 +184,21 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
    research) y la `category` (tipo) de las tareas activas, y corregir las que estén mal estimadas o
    mal clasificadas. Las tareas que no son de diseño (gestión, apoyo, comercial, desarrollo, producto)
    NO llevan puntos.
-7. **Definir y REPORTAR qué tareas tocó la IA (obligatorio)**: al terminar la corrida, el MD debe
-   decir explícitamente, por empresa/subproyecto:
-   - Tareas **creadas** por la IA (nuevas, con su tipo y peso).
-   - Tareas **complementadas** por la IA con la nueva información (enriquecidas): se marcan con
-     **`mdTouchedAt`** = ahora, para que el admin las vea con el tag "Tocada por el MD" y accione.
-   - Cambios de **peso/tipo** aplicados (metadata; NO llevan `mdTouchedAt` para no saturar al empleado).
-   - Insumos que se **pudieron/ no se pudieron** convertir en tareas (corruptos, vacíos), sin inventar.
-   El objetivo es trazabilidad total: con solo leer el reporte se sabe qué cambió la IA y por qué.
+7. **Tags de IA en la tarjeta (obligatorio) + REPORTE**: cada tarea debe dejar VISIBLE en la app quién
+   la tocó, y el MD debe además reportarlo por empresa/subproyecto:
+   - **Tag "IA" (origen, persistente):** toda tarea que crea el MD lleva `source` = "Run diario …" /
+     "Insumo global …" (nunca "Manual"). La tarjeta pinta un tag **"IA"** (teal) cuando `source` no es
+     "Manual". Es el sello de que la historia la generó la IA. Las tareas hechas a mano llevan
+     `source: "Manual"` y NO muestran el tag.
+   - **Tag "IA actualizó" (`mdTouchedAt`):** cuando el MD **complementa** una tarea que YA existía, setea
+     `mdTouchedAt` = ahora; la tarjeta muestra el tag **"IA actualizó"** + banner para que el admin lo
+     revise y marque Visto. Es distinto del tag de origen: marca que la IA enriqueció algo existente.
+   - **Peso/tipo:** los cambios de `designPoints`/`category` son metadata y **NO** llevan `mdTouchedAt`
+     (no saturan al empleado); se reportan en el resumen, no como novedad.
+   - **Reporte final**, por empresa/subproyecto: tareas **creadas** (con tipo y peso), tareas
+     **complementadas** (mdTouchedAt), **cambios de peso/tipo**, e insumos que **no** se pudieron
+     convertir (corruptos/vacíos, sin inventar). Trazabilidad total: con leer el reporte se sabe qué
+     hizo la IA y por qué.
 
 **Honestidad (obligatoria):** el MD solo pone datos que puede sustentar en el insumo o en una
 estimacion de complejidad razonable. Lo que no se puede derivar se deja vacio y se reporta como

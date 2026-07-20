@@ -2477,6 +2477,10 @@ function contactFor(person, message, subject) {
 }
 
 function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onSaveTask, onUploadAttachment, onDeleteAttachment }) {
+  // Tag "IA": la tarea la generó/creó el MD (run diario a partir de un insumo). Todo lo que NO
+  // sea "Manual" (ni fuente vacía) viene del pipeline de IA. Es un sello de ORIGEN persistente
+  // (aparte de "Tocada por el MD" = mdTouchedAt, que marca que la IA ACTUALIZÓ una tarea ya existente).
+  const aiCreated = Boolean(task.source && !/^\s*manual\s*$/i.test(task.source));
   const [taskSave, setTaskSave] = useState("idle"); // idle | saving | saved | error
   const doSaveTask = async () => {
     if (!onSaveTask) return;
@@ -2690,16 +2694,21 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 )}
               </span>
             )}
-            {(task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
+            {(aiCreated || task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
               <span className="flex flex-wrap items-center gap-1.5">
+                {aiCreated && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD) · ${task.source}`}>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
+                  </span>
+                )}
                 {task.employeeTouchedAt && (
                   <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#8B5CF6", background: "#EDE9FE", color: "#6D28D9" }} title="El empleado la actualizó; falta que la revises">
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#6D28D9" }} /> Actualizada
                   </span>
                 )}
                 {task.mdTouchedAt && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#F2A93B", background: "#FFF7E6", color: "#B76E00" }} title="El MD complementó esta tarea; revísala">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#B76E00" }} /> Tocada por el MD
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#F2A93B", background: "#FFF7E6", color: "#B76E00" }} title="La IA (MD) complementó esta tarea existente; revísala">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#B76E00" }} /> IA actualizó
                   </span>
                 )}
                 {Array.isArray(task.comments) && task.comments.length > 0 && (
@@ -2746,7 +2755,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#F2C879] bg-[#FFF7E6] px-2.5 py-1.5">
             <span className="text-xs font-semibold text-[#B76E00]">
               <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: "#B76E00" }} />
-              El MD complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString()}
+La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString()}
             </span>
             <button type="button" onClick={() => onChangeTask(task.id, { mdTouchedAt: "" })}
               className="rounded border border-[#B76E00] px-2 py-0.5 text-[11px] font-semibold text-[#B76E00]">
