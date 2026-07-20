@@ -870,9 +870,11 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         next.workedHours = null;
       }
       // Sello de "el admin tocó esta tarea" → el empleado la verá "Actualizada" y le
-      // sonará la campanita.
+      // sonará la campanita. Excepción: cambios de METADATA (puntos/tipo) NO son novedad para el
+      // empleado (no los ve), así que no sellan adminTouchedAt.
       const keys = Object.keys(patch);
-      next.adminTouchedAt = new Date().toISOString();
+      const metaOnly = keys.length > 0 && keys.every((k) => k === "designPoints" || k === "category");
+      if (!metaOnly) next.adminTouchedAt = new Date().toISOString();
       // "Actualizada por el empleado" (employeeTouchedAt) se limpia sola en cuanto el admin
       // ACCIONA sobre la tarea (cambia estado, categoría/tipo o pide un cambio); ya no hay
       // botón manual "marcar revisada": el estado de la tarea refleja lo que pasó.
@@ -2855,12 +2857,22 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             })}
           </div>
         </div>
-        {/* DesignOps ligero: puntos + botón Request review (abre popup para describir el cambio). */}
+        {/* DesignOps ligero: puntos (la IA los estima, el admin los puede ajustar) + Request review. */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
-          <span className="inline-flex items-center gap-1 text-xs text-[#667085]">
-            Puntos <InfoTip text="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los asigna el análisis automáticamente; miden el esfuerzo de la tarea." />:
-            <b className="text-[#17727A]">{task.designPoints != null ? task.designPoints : "—"}</b>
-            {task.designPoints == null && <span className="text-[#98A2B3]">(los estima el análisis)</span>}
+          <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-[#667085]">
+            <span className="inline-flex items-center gap-1">Puntos <InfoTip text="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los estima la IA automáticamente; el admin los puede ajustar." />:</span>
+            {[1, 2, 4].map((n) => {
+              const on = task.designPoints === n;
+              return (
+                <button key={n} type="button" onClick={() => onChangeTask(task.id, { designPoints: on ? null : n })}
+                  title={n === 1 ? "Simple" : n === 2 ? "Media" : "Compleja"}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold"
+                  style={on ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: "#D0D5DD", color: "#667085", background: "#fff" }}>
+                  {n}
+                </button>
+              );
+            })}
+            {task.designPoints == null && <span className="text-[#98A2B3]">(sin estimar)</span>}
           </span>
           <button type="button" onClick={() => { setCrText(""); setCrBy("ceo"); setCrModal(true); }}
             className="inline-flex w-full items-center justify-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold sm:w-auto sm:justify-start"
