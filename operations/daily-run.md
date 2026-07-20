@@ -164,11 +164,16 @@ MediaLab se posiciona como **DesignOps**: el tablero de indicadores (solo del ad
 alimentan de datos que el MD debe **capturar y validar en CADA corrida, sin preguntar**.
 Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE:
 
-1. **Estimar los puntos de diseño** (`designPoints`) de cada tarea de diseño segun su
-   complejidad funcional, con el modelo de la propuesta: **1 = simple** (una interaccion:
-   login, error, splash), **2 = media** (formulario, listado, filtros), **4 = compleja**
-   (dashboard, multi-step, validaciones encadenadas). Si una tarea no es de diseño (gestion,
-   comercial, apoyo) se deja sin puntos. Alimenta velocidad (pts/sem) y utilizacion.
+1. **Estimar los puntos de esfuerzo** (`designPoints`) de **TODA** tarea vigente (regla del CEO:
+   ninguna activa queda sin estimación), con la escala **1 = simple** · **2 = media** · **4 = compleja**:
+   - Tareas de **diseño** (UX/UI, gráfico, research): por complejidad funcional — 1 una interacción
+     (login, error), 2 formulario/listado/filtros, 4 dashboard/multi-step/validaciones encadenadas.
+     Alimenta la velocidad de diseño (pts/sem) y utilización.
+   - Tareas de **gestión/apoyo/comercial**: por esfuerzo — 1 un mensaje/reunión/gestión corta,
+     2 un reporte/revisión/coordinación con entregable, 4 un entregable grande (p. ej. preparar un curso).
+   - Tareas de **desarrollo/producto**: por esfuerzo técnico — 1 cambio pequeño/config, 2 ajuste acotado,
+     4 feature grande (auditoría de logs, generación de documentos, panel completo).
+   La velocidad DesignOps sigue mirando solo las de diseño; el resto puntúa para tener el esfuerzo total.
 2. **Marcar Change Requests** (`changeRequest: true`) cuando el insumo indica que el cliente
    pidio un cambio DESPUES de aprobar el diseño (no es alcance original). Alimenta eficiencia.
 3. **Registrar defectos de QA** (`qaDefects`, entero) cuando el insumo trae defectos UX/UI
@@ -176,14 +181,13 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
 4. **Registrar uso de IA y herramientas** cuando el insumo lo evidencia: `aiUsage` (0..100,
    % de IA usada en la tarea) y `tools` (arreglo, ej. `["Figma","Claude"]`). Da la visibilidad
    de "uso y consumo de IA + herramientas" que pide negocio. Si no hay señal clara, se deja vacio.
-5. **Validar la cobertura**: reportar explicitamente cuantas tareas de diseño quedaron SIN
-   puntos estimados, y que empresas no tienen datos suficientes para los indicadores del
-   reporte (velocidad, utilizacion, defectos, consumo de IA). No inventar numeros.
+5. **Validar la cobertura**: al terminar, reportar que **NINGUNA tarea activa quedó sin puntos**
+   (cero sin estimar) y qué empresas no tienen datos suficientes para los demás indicadores del
+   reporte (utilización, defectos, consumo de IA). No inventar numeros.
 6. **Actualizar peso y tipo de TODAS las tareas vigentes**: en cada corrida, revisar el
-   `designPoints` (peso: 1 simple · 2 media · 4 compleja, SOLO tareas de diseño — UX/UI, gráfico,
-   research) y la `category` (tipo) de las tareas activas, y corregir las que estén mal estimadas o
-   mal clasificadas. Las tareas que no son de diseño (gestión, apoyo, comercial, desarrollo, producto)
-   NO llevan puntos.
+   `designPoints` (peso 1/2/4 por esfuerzo, en TODAS las tareas activas) y la `category` (tipo), y
+   corregir las que estén mal estimadas o mal clasificadas. El admin puede ajustar los puntos a mano
+   desde la tarjeta (selector 1·2·4); esos cambios son metadata y no avisan al empleado.
 7. **Tags de IA en la tarjeta (obligatorio) + REPORTE**: cada tarea debe dejar VISIBLE en la app quién
    la tocó, y el MD debe además reportarlo por empresa/subproyecto:
    - **Píldora "IA" (generada por IA, pendiente de revisar):** toda tarea que crea el MD lleva `source`
