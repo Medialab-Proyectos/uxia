@@ -2722,6 +2722,23 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
         )}
       </summary>
       <div className="mt-2 space-y-2">
+        {/* Tags de origen SIEMPRE visibles al abrir la tarea (no solo en la colapsada): así al
+            cambiar persona/estado el sello "IA" no desaparece de la vista. */}
+        {(aiCreated || task.category) && (
+          <span className="flex flex-wrap items-center gap-1.5">
+            {aiCreated && (
+              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD) · ${task.source}`}>
+                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
+              </span>
+            )}
+            {task.category && (
+              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
+                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
+                {task.category}{task.designPoints != null ? ` · ${task.designPoints} pts` : ""}
+              </span>
+            )}
+          </span>
+        )}
         {/* Nota antes del título: el empleado marcó lista (en revisión) — NO es un request review.
             Dos botones en la misma línea: Aprobar (manda al cliente) y Devolver. */}
         {task.status === "review" && (
