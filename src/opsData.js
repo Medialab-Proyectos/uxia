@@ -434,9 +434,14 @@ export async function updateVacante(token, id, patch) {
   });
 }
 
+// Devuelve las filas efectivamente borradas (return=representation). Si RLS bloquea el DELETE
+// en silencio, PostgREST responde 200 con [] (0 filas): así el llamador detecta que NO se borró
+// y no finge éxito (era lo que dejaba el indicador "en 4" tras borrar de la lista).
 export async function deleteVacante(token, id) {
-  await rest(token, `vacantes?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+  const rows = await rest(token, `vacantes?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=representation" });
+  return asArray(rows).length;
 }
 export async function deleteOportunidad(token, id) {
-  await rest(token, `oportunidades?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
+  const rows = await rest(token, `oportunidades?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=representation" });
+  return asArray(rows).length;
 }

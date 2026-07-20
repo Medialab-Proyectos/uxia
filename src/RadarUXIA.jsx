@@ -911,7 +911,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     persist(jobs.filter((j) => j.id !== id)); // optimista
     if (opsData.opsDataReady()) {
       try {
-        await opsData.deleteVacante(token, id);
+        const borradas = await opsData.deleteVacante(token, id);
+        if (!borradas) { // RLS lo bloqueó en silencio (0 filas): reaparecería al recargar
+          persist(prev);
+          setRadarNotice("No se pudo eliminar en la base (permisos). Corre supabase/setup.sql para las políticas RLS de 'vacantes'.");
+          return;
+        }
         setRadarNotice("Empleo eliminado.");
       } catch (e) {
         persist(prev); // revertir: la BD no lo borró
@@ -932,7 +937,12 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
     setOppResults((current) => current.filter((o) => o.id !== id)); // optimista
     if (opsData.opsDataReady()) {
       try {
-        await opsData.deleteOportunidad(token, id);
+        const borradas = await opsData.deleteOportunidad(token, id);
+        if (!borradas) { // RLS lo bloqueó en silencio (0 filas): reaparecería al recargar
+          setOppResults(prev);
+          setRadarNotice("No se pudo eliminar en la base (permisos). Corre supabase/setup.sql para las políticas RLS de 'oportunidades'.");
+          return;
+        }
         setRadarNotice("Propuesta eliminada.");
       } catch (e) {
         setOppResults(prev); // revertir: la BD no lo borró
