@@ -186,14 +186,16 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
    NO llevan puntos.
 7. **Tags de IA en la tarjeta (obligatorio) + REPORTE**: cada tarea debe dejar VISIBLE en la app quién
    la tocó, y el MD debe además reportarlo por empresa/subproyecto:
-   - **Tag "IA" (origen, persistente):** toda tarea que crea el MD lleva `source` = "Run diario …" /
-     "Insumo global …" (nunca "Manual"). La tarjeta pinta un tag **"IA"** (teal) cuando `source` no es
-     "Manual". Es el sello de que la historia la generó la IA. Las tareas hechas a mano llevan
-     `source: "Manual"` y NO muestran el tag.
+   - **Píldora "IA" (generada por IA, pendiente de revisar):** toda tarea que crea el MD lleva `source`
+     = "Run diario …" / "Insumo global …" (nunca "Manual"). La tarjeta muestra la píldora **"IA"** (teal)
+     mientras el admin **no la haya revisado** (sin `adminTouchedAt`). En cuanto el admin la toca (cambia
+     estado/persona/fecha…) o pulsa **Guardar tarea**, se sella `adminTouchedAt` y la píldora desaparece
+     (ya fue revisada). Las tareas hechas a mano (`source: "Manual"`) nunca muestran la píldora. Si la
+     tarea ya lleva "IA actualizó", tampoco se muestra "IA" (no se duplica).
    - **Tag "IA actualizó" (`mdTouchedAt`):** cuando el MD **complementa** una tarea que YA existía, setea
      `mdTouchedAt` = ahora; la tarjeta muestra el tag **"IA actualizó"** + banner para que el admin lo
-     revise y marque Visto. Es distinto del tag de origen: marca que la IA enriqueció algo existente.
-     En "Todas las tareas" hay un filtro **"Tocadas por IA"** que lista exactamente estas (mdTouchedAt).
+     revise y marque Visto. En "Todas las tareas" hay un filtro **"Tocadas por IA"** que lista estas
+     (mdTouchedAt).
    - **Peso/tipo:** los cambios de `designPoints`/`category` son metadata y **NO** llevan `mdTouchedAt`
      (no saturan al empleado); se reportan en el resumen, no como novedad.
    - **Reporte final**, por empresa/subproyecto: tareas **creadas** (con tipo y peso), tareas
