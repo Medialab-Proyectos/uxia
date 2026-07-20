@@ -2699,7 +2699,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             )}
             {(aiCreated || task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
               <span className="flex flex-wrap items-center gap-1.5">
-                {aiCreated && (
+                {aiCreated && !task.mdTouchedAt && (
                   <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD) · ${task.source}`}>
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
                   </span>
@@ -2727,9 +2727,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
       <div className="mt-2 space-y-2">
         {/* Tags de origen SIEMPRE visibles al abrir la tarea (no solo en la colapsada): así al
             cambiar persona/estado el sello "IA" no desaparece de la vista. */}
-        {(aiCreated || task.category) && (
+        {((aiCreated && !task.mdTouchedAt) || task.category) && (
           <span className="flex flex-wrap items-center gap-1.5">
-            {aiCreated && (
+            {aiCreated && !task.mdTouchedAt && (
               <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD) · ${task.source}`}>
                 <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
               </span>
