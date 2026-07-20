@@ -709,6 +709,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done";
     // "updated" = tocadas por un empleado y aún sin revisar por el admin.
     if (activeStatus === "updated") return Boolean(task.employeeTouchedAt);
+    // "mdtouched" = la IA (MD) complementó la tarea (mdTouchedAt) y falta que el admin la revise.
+    if (activeStatus === "mdtouched") return Boolean(task.mdTouchedAt);
     return task.status === activeStatus;
   });
 
@@ -2188,6 +2190,7 @@ function TasksTable({
           {[
             ["open", "Abiertas"],
             ["updated", "Actualizadas"],
+            ["mdtouched", "Tocadas por IA"],
             ["today", "Por vencer"],
             ["blocked", "Bloqueadas"],
             ["review", "En revisión"],

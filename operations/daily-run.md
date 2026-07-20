@@ -193,6 +193,7 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
    - **Tag "IA actualizó" (`mdTouchedAt`):** cuando el MD **complementa** una tarea que YA existía, setea
      `mdTouchedAt` = ahora; la tarjeta muestra el tag **"IA actualizó"** + banner para que el admin lo
      revise y marque Visto. Es distinto del tag de origen: marca que la IA enriqueció algo existente.
+     En "Todas las tareas" hay un filtro **"Tocadas por IA"** que lista exactamente estas (mdTouchedAt).
    - **Peso/tipo:** los cambios de `designPoints`/`category` son metadata y **NO** llevan `mdTouchedAt`
      (no saturan al empleado); se reportan en el resumen, no como novedad.
    - **Reporte final**, por empresa/subproyecto: tareas **creadas** (con tipo y peso), tareas
