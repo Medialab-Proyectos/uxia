@@ -2482,14 +2482,17 @@ function contactFor(person, message, subject) {
 }
 
 function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onSaveTask, onUploadAttachment, onDeleteAttachment }) {
-  // Tag "IA": la tarea la generó/creó el MD (run diario a partir de un insumo). Todo lo que NO
-  // sea "Manual" (ni fuente vacía) viene del pipeline de IA. Es un sello de ORIGEN persistente
-  // (aparte de "Tocada por el MD" = mdTouchedAt, que marca que la IA ACTUALIZÓ una tarea ya existente).
+  // Tag "IA": la tarea la generó el MD (source ≠ Manual) y el admin AÚN NO la ha revisado. Es un
+  // aviso de "historia de IA pendiente de revisar": desaparece en cuanto el admin la toca o la
+  // GUARDA (adminTouchedAt). No se muestra si ya lleva "IA actualizó" (mdTouchedAt).
   const aiCreated = Boolean(task.source && !/^\s*manual\s*$/i.test(task.source));
+  const showIA = aiCreated && !task.mdTouchedAt && !task.adminTouchedAt;
   const [taskSave, setTaskSave] = useState("idle"); // idle | saving | saved | error
   const doSaveTask = async () => {
     if (!onSaveTask) return;
     setTaskSave("saving");
+    // Guardar la tarea = el admin la revisó → sella adminTouchedAt y quita la píldora "IA".
+    if (aiCreated && !task.adminTouchedAt) onChangeTask(task.id, { adminTouchedAt: new Date().toISOString() });
     try { await onSaveTask(task.id); setTaskSave("saved"); setTimeout(() => setTaskSave("idle"), 2500); }
     catch { setTaskSave("error"); }
   };
@@ -2699,10 +2702,10 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 )}
               </span>
             )}
-            {(aiCreated || task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
+            {(showIA || task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
               <span className="flex flex-wrap items-center gap-1.5">
-                {aiCreated && !task.mdTouchedAt && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD) · ${task.source}`}>
+                {showIA && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD), pendiente de revisar · ${task.source}`}>
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
                   </span>
                 )}
@@ -2729,10 +2732,10 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
       <div className="mt-2 space-y-2">
         {/* Tags de origen SIEMPRE visibles al abrir la tarea (no solo en la colapsada): así al
             cambiar persona/estado el sello "IA" no desaparece de la vista. */}
-        {((aiCreated && !task.mdTouchedAt) || task.category) && (
+        {(showIA || task.category) && (
           <span className="flex flex-wrap items-center gap-1.5">
-            {aiCreated && !task.mdTouchedAt && (
-              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD) · ${task.source}`}>
+            {showIA && (
+              <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD), pendiente de revisar · ${task.source}`}>
                 <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
               </span>
             )}
