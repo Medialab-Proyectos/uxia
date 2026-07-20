@@ -179,6 +179,19 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
 5. **Validar la cobertura**: reportar explicitamente cuantas tareas de diseño quedaron SIN
    puntos estimados, y que empresas no tienen datos suficientes para los indicadores del
    reporte (velocidad, utilizacion, defectos, consumo de IA). No inventar numeros.
+6. **Actualizar peso y tipo de TODAS las tareas vigentes**: en cada corrida, revisar el
+   `designPoints` (peso: 1 simple · 2 media · 4 compleja, SOLO tareas de diseño — UX/UI, gráfico,
+   research) y la `category` (tipo) de las tareas activas, y corregir las que estén mal estimadas o
+   mal clasificadas. Las tareas que no son de diseño (gestión, apoyo, comercial, desarrollo, producto)
+   NO llevan puntos.
+7. **Definir y REPORTAR qué tareas tocó la IA (obligatorio)**: al terminar la corrida, el MD debe
+   decir explícitamente, por empresa/subproyecto:
+   - Tareas **creadas** por la IA (nuevas, con su tipo y peso).
+   - Tareas **complementadas** por la IA con la nueva información (enriquecidas): se marcan con
+     **`mdTouchedAt`** = ahora, para que el admin las vea con el tag "Tocada por el MD" y accione.
+   - Cambios de **peso/tipo** aplicados (metadata; NO llevan `mdTouchedAt` para no saturar al empleado).
+   - Insumos que se **pudieron/ no se pudieron** convertir en tareas (corruptos, vacíos), sin inventar.
+   El objetivo es trazabilidad total: con solo leer el reporte se sabe qué cambió la IA y por qué.
 
 **Honestidad (obligatoria):** el MD solo pone datos que puede sustentar en el insumo o en una
 estimacion de complejidad razonable. Lo que no se puede derivar se deja vacio y se reporta como
