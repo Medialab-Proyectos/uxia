@@ -123,8 +123,10 @@ alter table tasks add column if not exists md_touched_at timestamptz;
 -- visibilidad de "uso y consumo de IA + herramientas" por tarea que pide negocio.
 
 -- 3d-sexies) Trazabilidad del vencimiento: cuando se cambia `due_date`, se conserva la fecha
--- ANTERIOR al cambio como soporte (queda a la vista en la tarjeta: "antes: dd/mm/aaaa").
+-- ANTERIOR al cambio como soporte (queda a la vista en la tarjeta: "antes: dd/mm/aaaa") y el
+-- MOTIVO del cambio (obligatorio en un popup antes de aceptar el nuevo vencimiento).
 alter table tasks add column if not exists prev_due_date date;
+alter table tasks add column if not exists due_change_reason text;
 
 -- 3e) Satisfacción tras entrega (opcional, por tarea finalizada) -------------------
 alter table tasks add column if not exists rating numeric;         -- 1..5 estrellas
@@ -269,7 +271,7 @@ begin
     new.company_id := old.company_id; new.client := old.client; new.title := old.title;
     new.priority := old.priority; new.role := old.role; new.owner := old.owner;
     new.assignee_id := old.assignee_id; new.due_date := old.due_date;
-    new.prev_due_date := old.prev_due_date;
+    new.prev_due_date := old.prev_due_date; new.due_change_reason := old.due_change_reason;
     new.delivery_date := old.delivery_date; new.source := old.source;
     new.audience := old.audience; new.sync_mode := old.sync_mode; new.evidence := old.evidence;
     new.description := old.description; new.user_story := old.user_story;

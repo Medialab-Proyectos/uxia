@@ -586,6 +586,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
   const [sortRecent, setSortRecent] = useState(false);    // ordenar por últimas incluidas
   const [activeView, setActiveView] = useState("companies");
+  const [finalizeTask, setFinalizeTask] = useState(null); // tarea a finalizar desde la vista de prioridad
   const [alertDismissed, setAlertDismissed] = useState(false);
   // Foco desde una notificación del shell: abre "Todas las tareas" en el filtro indicado.
   useEffect(() => {
@@ -1804,7 +1805,12 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             tasks={tasks}
             companies={companies}
             people={people}
-            onChangeStatus={(id, status) => updateTask(id, { status })}
+            onChangeStatus={(id, status) => {
+              // Finalizar desde prioridad abre el popup de satisfacción (igual que en la tarjeta),
+              // no cierra en silencio.
+              if (status === "done") { const t = tasks.find((x) => x.id === id); if (t && t.status !== "done") { setFinalizeTask(t); return; } }
+              updateTask(id, { status });
+            }}
             onOpenTask={(t) => {
               setCompanyFilter("all");
               setAssignFilter("all");
@@ -1816,6 +1822,15 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           />
         )}
       </main>
+      {/* Popup de satisfacción al finalizar desde la vista de PRIORIDAD (la tarjeta usa el suyo). */}
+      {finalizeTask && (
+        <DoneFeedbackModal
+          task={finalizeTask}
+          onSave={(patch) => { updateTask(finalizeTask.id, { status: "done", ...patch }); setFinalizeTask(null); }}
+          onDirect={() => { updateTask(finalizeTask.id, { status: "done" }); setFinalizeTask(null); }}
+          onClose={() => setFinalizeTask(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2507,6 +2522,65 @@ function contactFor(person, message, subject) {
   return { href: "", medium: "Sin medio" };
 }
 
+// Popup de satisfacción/feedback al FINALIZAR una tarea. Reutilizable: sale tanto desde la
+// tarjeta como desde la vista de prioridad. `onSave(patch)` recibe rating/feedback/ia/tools;
+// `onDirect()` finaliza sin feedback; `onClose()` cierra sin finalizar.
+function DoneFeedbackModal({ task, onSave, onDirect, onClose }) {
+  const [mRating, setMRating] = useState(task?.rating || 0);
+  const [mFeedback, setMFeedback] = useState(task?.ratingComment || "");
+  const [mAi, setMAi] = useState(task?.aiUsage || 0);
+  const [mTools, setMTools] = useState(Array.isArray(task?.tools) ? task.tools : []);
+  if (!task) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-xl">
+        <h3 className="text-sm font-semibold text-[#1D2939]">¿Cómo fue esta tarea?</h3>
+        <p className="mt-0.5 text-xs text-[#667085]">Antes de finalizar, cuéntanos tu experiencia (opcional).</p>
+        <div className="mt-3">
+          <span className="text-xs font-semibold text-[#667085]">Experiencia (1–5)</span>
+          <div className="mt-1 flex gap-0.5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" onClick={() => setMRating(n === mRating ? 0 : n)} className="p-0.5">
+                <Star size={24} style={{ color: "#F2A93B" }} fill={n <= mRating ? "#F2A93B" : "none"} />
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="mt-3 block">
+          <span className="text-xs font-semibold text-[#667085]">Recomendaciones de mejora / feedback</span>
+          <textarea value={mFeedback} onChange={(e) => setMFeedback(e.target.value)} rows={3} placeholder="¿Qué se puede mejorar en tareas de este tipo?" className="mt-1 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm text-[#344054] outline-none focus:border-[#17727A]" />
+        </label>
+        <label className="mt-3 block">
+          <span className="text-xs font-semibold text-[#667085]">¿Cuánta IA se usó? <b className="text-[#6941C6]">{mAi}%</b></span>
+          <input type="range" min="0" max="100" step="5" value={mAi} onChange={(e) => setMAi(Number(e.target.value))} className="mt-1 w-full" style={{ accentColor: "#6941C6" }} />
+        </label>
+        <div className="mt-3">
+          <span className="text-xs font-semibold text-[#667085]">¿Con qué herramientas se trabajó?</span>
+          <div className="mt-1 -mx-1 flex gap-1 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+            {TOOL_OPTIONS.map((tool) => {
+              const on = mTools.includes(tool);
+              return (
+                <button key={tool} type="button"
+                  onClick={() => setMTools((cur) => (on ? cur.filter((x) => x !== tool) : [...cur, tool]))}
+                  className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+                  style={on ? { borderColor: "#6941C6", background: "#F4F1FD", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#667085" }}>
+                  {tool}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => onSave({ rating: mRating || null, ratingComment: mFeedback || "", aiUsage: mAi || null, tools: mTools })} className="flex-1 rounded-md bg-[#0D7A4F] px-3 py-2 text-sm font-semibold text-white">Guardar y finalizar</button>
+          <button type="button" onClick={onDirect} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Solo finalizar</button>
+        </div>
+        <button type="button" onClick={onClose} className="mt-2 w-full rounded-md px-3 py-2 text-sm font-semibold text-[#667085] hover:bg-[#F2F4F7]">Cancelar — no finalizar</button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onSaveTask, onUploadAttachment, onDeleteAttachment }) {
   // Tag "IA": la tarea la generó el MD (source ≠ Manual) y el admin AÚN NO la ha revisado. Es un
   // aviso de "historia de IA pendiente de revisar": desaparece en cuanto el admin la toca o la
@@ -2561,12 +2635,14 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   }
   // Popup al finalizar: satisfacción (1-5) + recomendaciones + % de IA usada.
   const [doneModal, setDoneModal] = useState(false);
-  const [mRating, setMRating] = useState(0);
-  const [mFeedback, setMFeedback] = useState("");
-  const [mAi, setMAi] = useState(0);
-  const [mTools, setMTools] = useState([]);
-  const openDoneModal = () => { setMRating(task.rating || 0); setMFeedback(task.ratingComment || ""); setMAi(task.aiUsage || 0); setMTools(Array.isArray(task.tools) ? task.tools : []); setDoneModal(true); };
-  const saveDone = () => { onChangeTask(task.id, { status: "done", rating: mRating || null, ratingComment: mFeedback || "", aiUsage: mAi || null, tools: mTools }); setDoneModal(false); };
+  const openDoneModal = () => setDoneModal(true);
+  // Cambio de fecha con motivo: dueDraft = nueva fecha pendiente de confirmar; dueReason = por qué.
+  const [dueDraft, setDueDraft] = useState("");
+  const [dueReason, setDueReason] = useState("");
+  const confirmDueChange = () => {
+    onChangeTask(task.id, { dueDate: dueDraft, prevDueDate: task.dueDate, dueChangeReason: dueReason.trim() });
+    setDueDraft("");
+  };
   // Acordeón controlado por la lista (solo una tarea abierta a la vez) o autónomo si no.
   const controlled = typeof onOpenChange === "function";
   const open = controlled ? Boolean(openProp) : openInternal;
@@ -3011,17 +3087,24 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             <input
               type="date"
               value={task.dueDate || ""}
-              onChange={(event) => onChangeTask(task.id, { dueDate: event.target.value })}
+              onChange={(event) => {
+                const nueva = event.target.value;
+                // Primera fecha (la tarea no tenía) → se pone directo. CAMBIAR una fecha existente
+                // exige motivo: se abre el popup y NO se aplica hasta aceptar.
+                if (!task.dueDate) onChangeTask(task.id, { dueDate: nueva });
+                else if (nueva && nueva !== task.dueDate) { setDueDraft(nueva); setDueReason(""); }
+              }}
               className="min-w-0 flex-1 bg-transparent text-xs text-[#344054] outline-none"
               title="Vencimiento"
             />
           </label>
         </div>
-        {/* Soporte del corrimiento: fecha ANTERIOR al último cambio de vencimiento. */}
+        {/* Soporte del corrimiento: fecha ANTERIOR + MOTIVO del último cambio de vencimiento. */}
         {task.prevDueDate && task.prevDueDate !== task.dueDate && (
           <p className="-mt-1 text-[11px] text-[#B76E00]">
             <CalendarDays size={11} className="mr-1 inline align-[-1px]" />
             Fecha movida · antes vencía el <b>{displayDate(task.prevDueDate)}</b>
+            {task.dueChangeReason ? <> · motivo: {task.dueChangeReason}</> : null}
           </p>
         )}
         {assignedPerson ? (
@@ -3147,51 +3230,26 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
           </div>
         )}
       </div>
-      {doneModal && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setDoneModal(false); }}>
+      {doneModal && (
+        <DoneFeedbackModal
+          task={task}
+          onSave={(patch) => { onChangeTask(task.id, { status: "done", ...patch }); setDoneModal(false); }}
+          onDirect={() => { onChangeTask(task.id, { status: "done" }); setDoneModal(false); }}
+          onClose={() => setDoneModal(false)}
+        />
+      )}
+      {dueDraft && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setDueDraft(""); }}>
           <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-xl">
-            <h3 className="text-sm font-semibold text-[#1D2939]">¿Cómo fue esta tarea?</h3>
-            <p className="mt-0.5 text-xs text-[#667085]">Antes de finalizar, cuéntanos tu experiencia (opcional).</p>
-            <div className="mt-3">
-              <span className="text-xs font-semibold text-[#667085]">Experiencia (1–5)</span>
-              <div className="mt-1 flex gap-0.5">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <button key={n} type="button" onClick={() => setMRating(n === mRating ? 0 : n)} className="p-0.5">
-                    <Star size={24} style={{ color: "#F2A93B" }} fill={n <= mRating ? "#F2A93B" : "none"} />
-                  </button>
-                ))}
-              </div>
+            <h3 className="text-sm font-semibold text-[#1D2939]"><CalendarDays size={14} className="mr-1 inline align-[-2px] text-[#B76E00]" /> Cambiar fecha de entrega</h3>
+            <p className="mt-1 text-xs text-[#667085]">De <b>{task.dueDate ? displayDate(task.dueDate) : "sin fecha"}</b> a <b className="text-[#B76E00]">{displayDate(dueDraft)}</b>. Un cambio de fecha se hace por un request review o por algo externo a la tarea: <b>di por qué</b> antes de aceptar. Se guarda la fecha anterior como soporte.</p>
+            <textarea value={dueReason} onChange={(e) => setDueReason(e.target.value)} rows={3} autoFocus placeholder="Motivo del cambio de fecha (ej. el cliente pidió más tiempo, dependencia externa, request review #…)"
+              className="mt-3 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm text-[#344054] outline-none focus:border-[#B76E00]" />
+            <div className="mt-3 flex gap-2">
+              <button type="button" disabled={!dueReason.trim()} onClick={confirmDueChange}
+                className="flex-1 rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#B76E00" }}>Aceptar cambio de fecha</button>
+              <button type="button" onClick={() => setDueDraft("")} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Cancelar</button>
             </div>
-            <label className="mt-3 block">
-              <span className="text-xs font-semibold text-[#667085]">Recomendaciones de mejora / feedback</span>
-              <textarea value={mFeedback} onChange={(e) => setMFeedback(e.target.value)} rows={3} placeholder="¿Qué se puede mejorar en tareas de este tipo?" className="mt-1 w-full rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm text-[#344054] outline-none focus:border-[#17727A]" />
-            </label>
-            <label className="mt-3 block">
-              <span className="text-xs font-semibold text-[#667085]">¿Cuánta IA se usó? <b className="text-[#6941C6]">{mAi}%</b></span>
-              <input type="range" min="0" max="100" step="5" value={mAi} onChange={(e) => setMAi(Number(e.target.value))} className="mt-1 w-full" style={{ accentColor: "#6941C6" }} />
-            </label>
-            <div className="mt-3">
-              <span className="text-xs font-semibold text-[#667085]">¿Con qué herramientas se trabajó?</span>
-              {/* Carrusel horizontal (scroll con el dedo) en responsive */}
-              <div className="mt-1 -mx-1 flex gap-1 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-                {TOOL_OPTIONS.map((tool) => {
-                  const on = mTools.includes(tool);
-                  return (
-                    <button key={tool} type="button"
-                      onClick={() => setMTools((cur) => (on ? cur.filter((x) => x !== tool) : [...cur, tool]))}
-                      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                      style={on ? { borderColor: "#6941C6", background: "#F4F1FD", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#667085" }}>
-                      {tool}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={saveDone} className="flex-1 rounded-md bg-[#0D7A4F] px-3 py-2 text-sm font-semibold text-white">Guardar y finalizar</button>
-              <button type="button" onClick={() => { onChangeTask(task.id, { status: "done" }); setDoneModal(false); }} className="rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-semibold text-[#344054]">Solo finalizar</button>
-            </div>
-            <button type="button" onClick={() => setDoneModal(false)} className="mt-2 w-full rounded-md px-3 py-2 text-sm font-semibold text-[#667085] hover:bg-[#F2F4F7]">Cancelar — no finalizar</button>
           </div>
         </div>,
         document.body,

@@ -317,13 +317,24 @@ Cuando el MD va a complementar una tarea que ya existe, **primero valida en qué
     pendiente genuinamente distinto. Así queda el rastro de por qué se movió algo ya entregado.
 - Si la tarea está en `ready`/`doing`/`blocked`, se complementa normal (enriquecer + `mdTouchedAt`).
 
-### Cambios de fecha de entrega: se conserva la anterior (obligatorio)
+### Cambios de fecha de entrega: con MOTIVO y se conserva la anterior (obligatorio)
 
-Cuando se cambia el **vencimiento** de una tarea (lo haga el admin o el MD), **NO se pierde la fecha
-previa**: se guarda en **`prev_due_date`** y la tarjeta muestra *"Fecha movida · antes vencía el
-dd/mm/aaaa"*. Es el soporte para justificar el corrimiento ante el cliente y para analizar
-predictibilidad. El empleado no puede alterarla (la protege el trigger). Requiere la columna
-`prev_due_date` → correr `supabase/migration-prev-due-date.sql` (ya incluida en `setup.sql`).
+Cambiar el **vencimiento** de una tarea NO es libre: un cambio de fecha viene de un **request review**
+o de algo **externo** a la tarea, así que **hay que decir por qué**.
+- **Poner la PRIMERA fecha** (la tarea no tenía) se hace directo, sin popup.
+- **Cambiar una fecha existente** abre un **popup que pide el MOTIVO**; hasta que no se escribe y se
+  pulsa "Aceptar cambio de fecha", el cambio NO se aplica.
+- Al aceptar se guarda la **fecha previa** en `prev_due_date` y el **motivo** en `due_change_reason`;
+  la tarjeta muestra *"Fecha movida · antes vencía el dd/mm/aaaa · motivo: …"*. Es el soporte para
+  justificar el corrimiento ante el cliente y alimenta el indicador de "compromisos movidos".
+- El empleado no puede alterar estas columnas (las protege el trigger). Requiere
+  `supabase/migration-prev-due-date.sql` (incluye `prev_due_date` + `due_change_reason`; ya está en `setup.sql`).
+
+### Finalizar una tarea SIEMPRE abre el popup de satisfacción
+
+Pasar una tarea a **Finalizada** (desde la tarjeta o desde la **vista de prioridad**) abre el popup de
+satisfacción tras entrega (experiencia 1–5, feedback, % de IA, herramientas) antes de cerrarla. Ese
+`rating` es el que alimenta la satisfacción empresarial (ver 4-bis). No se finaliza en silencio.
    - **Peso/tipo:** los cambios de `designPoints`/`category` son metadata y **NO** llevan `mdTouchedAt`
      (no saturan al empleado); se reportan en el resumen, no como novedad.
    - **Reporte final**, por empresa/subproyecto: tareas **creadas** (con tipo y peso), tareas
