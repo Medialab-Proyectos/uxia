@@ -2893,15 +2893,15 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
         {/* DesignOps ligero: puntos (la IA los estima, el admin los puede ajustar) + Request review. */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
           <span className="inline-flex flex-wrap items-center gap-1.5 text-xs text-[#667085]">
-            <span className="inline-flex items-center gap-1">Puntos <InfoTip text="Puntos de complejidad (1 simple · 2 media · 4 compleja). Los estima la IA automáticamente; el admin los puede ajustar." />:</span>
-            {[1, 2, 4].map((n) => {
+            <span className="inline-flex items-center gap-1">Puntos <InfoTip text="Puntos de ESFUERZO (0,5 trámite ≤10 min · 1 simple · 2 media · 4 compleja). El esfuerzo no es la prioridad: un trámite de 0,5 que desbloquea a alguien va primero. Los estima la IA; el admin los puede ajustar." />:</span>
+            {[0.5, 1, 2, 4].map((n) => {
               const on = task.designPoints === n;
               return (
                 <button key={n} type="button" onClick={() => onChangeTask(task.id, { designPoints: on ? null : n })}
-                  title={n === 1 ? "Simple" : n === 2 ? "Media" : "Compleja"}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold"
+                  title={n === 0.5 ? "Trámite (≤10 min)" : n === 1 ? "Simple" : n === 2 ? "Media" : "Compleja"}
+                  className="inline-flex h-6 items-center justify-center rounded-full border px-1.5 text-[11px] font-bold"
                   style={on ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: "#D0D5DD", color: "#667085", background: "#fff" }}>
-                  {n}
+                  {n === 0.5 ? "½" : n}
                 </button>
               );
             })}

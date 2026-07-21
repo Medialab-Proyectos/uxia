@@ -157,6 +157,86 @@ foco de la semana. La priorizacion se apoya en marcos probados de eficiencia y e
 La priorizacion tambien retroalimenta el modelo MDSSP: tareas vitales sin avanzar o el
 cuello de botella se reflejan como fuerzas mas fuertes hacia los bordes de riesgo.
 
+### Tareas trámite (0,5) y apalancamiento — el esfuerzo NO es la prioridad
+
+Regla base: **`designPoints` mide ESFUERZO; `priority` mide IMPACTO.** Son ejes independientes.
+Una tarea de 0,5 puntos puede ser la MÁS prioritaria del día. Fundamento en los marcos:
+
+- **GTD — regla de los 2 minutos (Allen):** si algo se hace en menos de 2 minutos, se hace YA;
+  diferirlo cuesta más que ejecutarlo (el costo de administrarlo supera el de hacerlo).
+- **Teoría de Restricciones (Goldratt):** una hora perdida en el cuello de botella es una hora
+  perdida para TODO el sistema. Si un trámite de 5 minutos destraba a alguien, va primero que
+  cualquier tarea grande.
+- **High Output Management (Grove):** el apalancamiento es la salida del equipo dividida por tu
+  tiempo. Agendar la reunión que desbloquea a 3 personas es el acto de mayor apalancamiento
+  disponible: 5 minutos que liberan días-persona.
+- **Pareto (Koch):** el 20% vital muchas veces está disfrazado de tarea pequeña (un acceso, una
+  confirmación, un espacio creado). No confundir "pequeño" con "trivial".
+- **Deep Work (Newport):** los trámites son trabajo superficial → se **agrupan en un bloque**
+  (una sola tanda al día), NO se riegan entre bloques de trabajo profundo.
+- **Atomic Habits (Clear):** cerrar trámites a diario sostiene el ritmo y evita que se acumulen.
+
+**Cómo se prioriza un 0,5 (aplicar SIEMPRE):**
+
+| Situación del trámite | `priority` | Cuándo |
+|---|---|---|
+| Desbloquea a otra persona o al cuello de botella | **alta** | mismo día |
+| Habilita el inicio de una tarea vital (FOCO de la semana) | **alta** | mismo día |
+| Es administrativo/cumplimiento (ver sección siguiente) | **alta / media** | según fecha legal |
+| Trámite suelto, no bloquea a nadie | **baja** | se agrupa en el bloque de trámites |
+
+Al reportar, los 0,5 se listan como **"Bloque de trámites (N tareas · X pts)"** para que se vea
+que son minutos, no días, y no compitan visualmente con las tareas grandes.
+
+### Salud administrativa de MediaLab — prioridad por RIESGO, no por esfuerzo
+
+Además de los proyectos de cliente, MediaLab tiene obligaciones propias cuyo incumplimiento
+tiene **costo no lineal**: multas, sanciones, demandas laborales, derechos de petición vencidos,
+inconformidad del equipo. Estas tareas se clasifican con `category: "Administrativo"` y se
+priorizan por **riesgo de incumplimiento**, no por lo que cuesten en tiempo.
+
+Entran aquí: **DIAN** (declaraciones, retenciones, IVA, renta), **seguridad social y planillas**,
+**nómina/primas/cesantías**, **peticiones y solicitudes de empleados** (permisos, certificados,
+derechos de petición), **contador** (estado de la empresa, cierres), **cámara de comercio y
+renovaciones**, **contratos y otrosíes por firmar**, **facturación y cuentas de cobro del mes**.
+
+Reglas (obligatorias):
+
+1. Una tarea `Administrativo` **nunca queda en `baja`**. Piso mínimo: `media`.
+2. Sube a **`alta`** si: faltan **≤ 5 días hábiles** para la fecha legal/límite, o **ya venció**,
+   o involucra a un **empleado esperando respuesta** (petición, certificado, pago).
+3. Se trata como **cuello de botella del sistema** (Goldratt) cuando está vencida: bloquea la
+   operación completa aunque no bloquee ninguna tarea de proyecto.
+4. En Covey: el objetivo es mantenerlas en **Importante–No urgente** (cuadrante II, preventivo).
+   Si una obligación administrativa llega a urgente de forma recurrente, el MD lo reporta como
+   **falla de proceso**, no como tarea suelta.
+5. Estas tareas también alimentan el MDSSP como señal en el eje **económica** (`dependencias`
+   para obligaciones normativas) cuando están vencidas.
+
+### Fecha de vencimiento automática (el MD la propone; el admin la ajusta)
+
+Ninguna tarea se entrega sin `dueDate`. El MD la calcula a partir de **esfuerzo + prioridad +
+categoría**, contando **días hábiles** (sin sábados, domingos ni festivos colombianos):
+
+| Esfuerzo | Base | Razón |
+|---|---|---|
+| **0,5** trámite | **mismo día** (o siguiente hábil si ya pasó la jornada) | regla de los 2 minutos (GTD) |
+| **1** simple | **+2 días hábiles** | cabe en una sesión corta |
+| **2** media | **+5 días hábiles** | una semana laboral (Atomic Habits: cerrable) |
+| **4** compleja | **+10 días hábiles** | dos semanas, coherente con el 12-Week-Year |
+
+Ajustes sobre la base:
+
+- `priority: alta` o **cuello de botella** → **la mitad** del plazo (mínimo: siguiente día hábil).
+- `priority: baja` → se puede extender hasta el doble, nunca más allá del trimestre en curso.
+- `category: "Administrativo"` con **fecha legal** (DIAN, planilla, nómina) → **manda la fecha
+  legal**, nunca se propone una posterior. Si la fecha legal ya pasó → vence **hoy** y sube a `alta`.
+- Tarea que **depende de otra** → su fecha nunca es anterior a la de su predecesora.
+
+El admin puede redefinir la fecha desde la tarjeta; al hacerlo se conserva la anterior en
+`prev_due_date` (ver sección de cambios de fecha). La fecha propuesta por el MD es un punto de
+partida con criterio, no una imposición.
+
 ## Instrumentacion DesignOps (SIEMPRE, en cada run — automatico)
 
 MediaLab se posiciona como **DesignOps**: el tablero de indicadores (solo del admin) y el
@@ -165,7 +245,13 @@ alimentan de datos que el MD debe **capturar y validar en CADA corrida, sin preg
 Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE:
 
 1. **Estimar los puntos de esfuerzo** (`designPoints`) de **TODA** tarea vigente (regla del CEO:
-   ninguna activa queda sin estimación), con la escala **1 = simple** · **2 = media** · **4 = compleja**:
+   ninguna activa queda sin estimación), con la escala **0,5 = trámite** · **1 = simple** ·
+   **2 = media** · **4 = compleja**:
+   - **0,5 = trámite (≤ 5–10 min, sin entregable).** Agendar/crear una reunión, entrar a una
+     reunión corta, abrir un espacio de trabajo, definir horarios, mandar un mensaje o un link,
+     confirmar una decisión, pedir un acceso. **El esfuerzo es mínimo, pero la prioridad NO:**
+     ver "Tareas trámite (0,5) y apalancamiento" más abajo. Ojo: *hacer* la reunión es 0,5;
+     lo que SALE de la reunión (p. ej. **establecer el roadmap**) es una tarea aparte de 2 o 4.
    - Tareas de **diseño** (UX/UI, gráfico, research): por complejidad funcional — 1 una interacción
      (login, error), 2 formulario/listado/filtros, 4 dashboard/multi-step/validaciones encadenadas.
      Alimenta la velocidad de diseño (pts/sem) y utilización.
@@ -561,6 +647,14 @@ de `supabase/schema-insumos-pendientes.sql`).
      y debe revisarla/accionar. NO cambies el responsable ni el estado del empleado al
      complementar.
    - Cada tarea con `priority` (alta = vital 20% / cuello de botella / urgente).
+   - **`designPoints` en TODA tarea**, escala `0.5` · `1` · `2` · `4` (ver DesignOps). Recordar:
+     esfuerzo ≠ prioridad. Un trámite de `0.5` que desbloquea a alguien lleva `priority: alta`.
+   - **`dueDate` SIEMPRE calculada** con la tabla de "Fecha de vencimiento automática"
+     (0,5 → hoy · 1 → +2 hábiles · 2 → +5 hábiles · 4 → +10 hábiles; alta = la mitad;
+     `Administrativo` con fecha legal = manda la fecha legal). Contar días HÁBILES en Colombia.
+   - **Obligaciones propias de MediaLab** (DIAN, planillas, nómina/primas/cesantías, peticiones
+     de empleados, contador, renovaciones) → `category: "Administrativo"`, nunca `priority: baja`,
+     y `alta` si faltan ≤5 días hábiles, ya venció, o hay un empleado esperando respuesta.
    - **Tipo de tarea por CONTEXTO** (`category`): a partir de lo que pide el insumo, clasifica
      la tarea en una categoría del alcance (ej. Diseño UX/UI, Desarrollo, Gestión de proyecto,
      QA, Infraestructura, Comercial…). Ponla en `category` y coherente con `role`.
