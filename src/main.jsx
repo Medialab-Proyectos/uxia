@@ -282,7 +282,7 @@ function AppShell() {
   }
 
   if (!session?.access_token) {
-    return <LoginScreen notice={authNotice} onLogin={handleLogin} />;
+    return <LoginScreen notice={authNotice} onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />;
   }
 
   // EMPLEADO (no CEO): portal restringido — solo SUS tareas e indicadores. Sin Radar,
@@ -467,7 +467,7 @@ function AppShell() {
   );
 }
 
-function LoginScreen({ notice, onLogin }) {
+function LoginScreen({ notice, onLogin, theme = "light", onToggleTheme }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
@@ -487,29 +487,48 @@ function LoginScreen({ notice, onLogin }) {
     }
   }
 
+  // El login usa la MISMA paleta que la app (según el tema) para que no cambie de oscuro a claro
+  // al entrar. Incluye el botón claro/oscuro, igual que el header.
+  const dk = theme === "dark";
+  const C = dk
+    ? { bg: "#0E1116", panel: "#151B23", border: "#28313E", text: "#E8EDF3", dim: "#8B97A6", input: "#1B232E" }
+    : { bg: "#F7F4EF", panel: "#FFFCF7", border: "#E7E0D5", text: "#1F2937", dim: "#667085", input: "#FFFFFF" };
+
   return (
-    <main className="flex min-h-screen items-center justify-center px-5 text-[#E8EDF3]" style={{ background: "#0E1116" }}>
-      <form onSubmit={submit} className="w-full max-w-sm rounded-md border p-6 shadow-lg" style={{ background: "#151B23", borderColor: "#28313E" }}>
+    <main className="relative flex min-h-screen items-center justify-center px-5" style={{ background: C.bg, color: C.text }}>
+      {onToggleTheme && (
+        <button
+          type="button"
+          onClick={onToggleTheme}
+          aria-label={dk ? "Modo claro" : "Modo oscuro"}
+          title={dk ? "Modo claro" : "Modo oscuro"}
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md border"
+          style={{ borderColor: C.border, backgroundColor: C.panel, color: "#E8751A" }}
+        >
+          {dk ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      )}
+      <form onSubmit={submit} className="w-full max-w-sm rounded-md border p-6 shadow-lg" style={{ background: C.panel, borderColor: C.border }}>
         <div className="mb-5 flex flex-col items-center text-center">
           <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-10 w-auto" />
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "#8B97A6" }}>MediaLab Ingeniería</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: C.dim }}>MediaLab Ingeniería</p>
           <h1 className="mt-1 text-2xl font-semibold">Centro operativo</h1>
         </div>
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: "#8B97A6" }}>Correo</span>
+            <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: C.dim }}>Correo</span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
               className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-[#2AABB3]"
-              style={{ background: "#1B232E", borderColor: "#28313E", color: "#E8EDF3" }}
+              style={{ background: C.input, borderColor: C.border, color: C.text }}
               required
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: "#8B97A6" }}>Contraseña</span>
+            <span className="mb-1 block text-xs font-semibold uppercase" style={{ color: C.dim }}>Contraseña</span>
             <div className="relative">
               <input
                 value={password}
@@ -517,7 +536,7 @@ function LoginScreen({ notice, onLogin }) {
                 type={showPwd ? "text" : "password"}
                 autoComplete="current-password"
                 className="w-full rounded-md border px-3 py-2 pr-10 text-sm outline-none focus:border-[#2AABB3]"
-                style={{ background: "#1B232E", borderColor: "#28313E", color: "#E8EDF3" }}
+                style={{ background: C.input, borderColor: C.border, color: C.text }}
                 required
               />
               <button
@@ -525,15 +544,16 @@ function LoginScreen({ notice, onLogin }) {
                 onClick={() => setShowPwd((v) => !v)}
                 aria-label={showPwd ? "Ocultar contraseña" : "Ver contraseña"}
                 title={showPwd ? "Ocultar contraseña" : "Ver contraseña"}
-                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-[#8B97A6] hover:text-[#E8EDF3]"
+                className="absolute inset-y-0 right-0 flex w-10 items-center justify-center hover:opacity-80"
+                style={{ color: C.dim }}
               >
                 {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </label>
         </div>
-        {notice && <p className="mt-3 rounded-md border border-[#E8751A55] bg-[#E8751A22] p-2 text-xs font-semibold text-[#F0A968]">{notice}</p>}
-        {error && <p className="mt-3 rounded-md border border-[#B4231855] bg-[#B4231822] p-2 text-xs font-semibold text-[#F08A80]">{error}</p>}
+        {notice && <p className="mt-3 rounded-md border border-[#E8751A55] bg-[#E8751A22] p-2 text-xs font-semibold text-[#B76E00]">{notice}</p>}
+        {error && <p className="mt-3 rounded-md border border-[#B4231855] bg-[#B4231822] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
         <button
           type="submit"
           disabled={loading}
