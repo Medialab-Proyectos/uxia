@@ -873,11 +873,9 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         next.completedAt = "";
         next.workedHours = null;
       }
-      // Cambio de VENCIMIENTO: se conserva la fecha ANTERIOR como soporte del corrimiento
-      // (la tarjeta la muestra como "antes: dd/mm/aaaa"). No se pisa si la fecha no cambió.
-      if (patch.dueDate !== undefined && task.dueDate && patch.dueDate !== task.dueDate) {
-        next.prevDueDate = task.dueDate;
-      }
+      // OJO: `prevDueDate` NO se sella aquí. Lo fija SOLO el popup de motivo (la primera vez que
+      // se cambia una fecha ya guardada), para que los reajustes posteriores —mientras la tarjeta
+      // sigue SIN guardar— no pisen la fecha original con un valor intermedio.
       // Sello de "el admin tocó esta tarea" → el empleado la verá "Actualizada" y le
       // sonará la campanita. Excepción: cambios de METADATA (puntos/tipo) NO son novedad para el
       // empleado (no los ve), así que no sellan adminTouchedAt.
@@ -2597,8 +2595,12 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     if (aiCreated && !task.adminTouchedAt) patch.adminTouchedAt = new Date().toISOString();
     if (task.mdTouchedAt) patch.mdTouchedAt = "";
     if (Object.keys(patch).length) onChangeTask(task.id, patch);
-    try { await onSaveTask(task.id); setTaskSave("saved"); setTimeout(() => setTaskSave("idle"), 2500); }
-    catch { setTaskSave("error"); }
+    try {
+      await onSaveTask(task.id);
+      // Guardada: el próximo cambio de fecha vuelve a pedir motivo (nuevo ciclo).
+      setDueJustified(false);
+      setTaskSave("saved"); setTimeout(() => setTaskSave("idle"), 2500);
+    } catch { setTaskSave("error"); }
   };
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [linkInput, setLinkInput] = useState("");
@@ -2637,10 +2639,16 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [doneModal, setDoneModal] = useState(false);
   const openDoneModal = () => setDoneModal(true);
   // Cambio de fecha con motivo: dueDraft = nueva fecha pendiente de confirmar; dueReason = por qué.
+  // El motivo se pide UNA VEZ POR CICLO DE GUARDADO: si ya se justificó (o si es la primera fecha)
+  // y la tarjeta AÚN NO se ha guardado, se puede seguir corrigiendo la fecha sin volver a pedirlo.
+  // Al guardar se reinicia, así un cambio posterior vuelve a exigir motivo.
   const [dueDraft, setDueDraft] = useState("");
   const [dueReason, setDueReason] = useState("");
+  const [dueJustified, setDueJustified] = useState(false);
   const confirmDueChange = () => {
+    // prevDueDate = la fecha que estaba guardada al abrir el cambio (no un valor intermedio).
     onChangeTask(task.id, { dueDate: dueDraft, prevDueDate: task.dueDate, dueChangeReason: dueReason.trim() });
+    setDueJustified(true);
     setDueDraft("");
   };
   // Acordeón controlado por la lista (solo una tarea abierta a la vez) o autónomo si no.
@@ -3089,10 +3097,14 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
               value={task.dueDate || ""}
               onChange={(event) => {
                 const nueva = event.target.value;
-                // Primera fecha (la tarea no tenía) → se pone directo. CAMBIAR una fecha existente
-                // exige motivo: se abre el popup y NO se aplica hasta aceptar.
-                if (!task.dueDate) onChangeTask(task.id, { dueDate: nueva });
-                else if (nueva && nueva !== task.dueDate) { setDueDraft(nueva); setDueReason(""); }
+                if (nueva === task.dueDate) return;
+                // Se pone directo (sin pedir motivo) cuando: es la PRIMERA fecha, o ya se justificó
+                // el cambio en este ciclo y la tarjeta todavía NO se ha guardado (corregir un error
+                // no debe volver a pedir feedback).
+                if (!task.dueDate) { onChangeTask(task.id, { dueDate: nueva }); setDueJustified(true); return; }
+                if (dueJustified) { onChangeTask(task.id, { dueDate: nueva }); return; }
+                // Cambiar una fecha YA GUARDADA exige motivo: se abre el popup y no se aplica aún.
+                if (nueva) { setDueDraft(nueva); setDueReason(""); }
               }}
               className="min-w-0 flex-1 bg-transparent text-xs text-[#344054] outline-none"
               title="Vencimiento"

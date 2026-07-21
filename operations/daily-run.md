@@ -322,8 +322,13 @@ Cuando el MD va a complementar una tarea que ya existe, **primero valida en qué
 Cambiar el **vencimiento** de una tarea NO es libre: un cambio de fecha viene de un **request review**
 o de algo **externo** a la tarea, así que **hay que decir por qué**.
 - **Poner la PRIMERA fecha** (la tarea no tenía) se hace directo, sin popup.
-- **Cambiar una fecha existente** abre un **popup que pide el MOTIVO**; hasta que no se escribe y se
+- **Cambiar una fecha ya guardada** abre un **popup que pide el MOTIVO**; hasta que no se escribe y se
   pulsa "Aceptar cambio de fecha", el cambio NO se aplica.
+- **El motivo se pide UNA VEZ POR CICLO DE GUARDADO.** Si te equivocaste al elegir la fecha, puedes
+  volver a corregirla las veces que necesites **sin que se pida otra vez**, mientras la tarjeta siga
+  SIN guardar. Al pulsar **"Guardar tarea"** se cierra el ciclo: un cambio de fecha posterior vuelve a
+  exigir motivo. La `prev_due_date` guarda siempre la **última fecha guardada**, nunca un valor
+  intermedio de la corrección.
 - Al aceptar se guarda la **fecha previa** en `prev_due_date` y el **motivo** en `due_change_reason`;
   la tarjeta muestra *"Fecha movida · antes vencía el dd/mm/aaaa · motivo: …"*. Es el soporte para
   justificar el corrimiento ante el cliente y alimenta el indicador de "compromisos movidos".
