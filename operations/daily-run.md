@@ -269,16 +269,20 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
    de "uso y consumo de IA + herramientas" que pide negocio. Si no hay señal clara, se deja vacio.
 4-bis. **Mantener fresca la SATISFACCIÓN EMPRESARIAL** que consume el **portal MediaLab**. El panel
    CEO del portal de empleados de MediaLab (proyecto *MediLab/Version 1*) muestra el indicador
-   **"Satisfacción empresarial"** y lo lee **EN VIVO desde este Centro de Operaciones**: consulta la
-   vista `satisfaccion_general` de UXIA (con su `OPERACIONES_SERVICE_KEY`) y la lleva a 0–100
-   (`satisfaccion_promedio × 20`). O sea, ese número es el promedio de `rating` de las tareas de UXIA.
-   - La vista se recalcula **sola** en cada consulta: NO hay que refrescarla ni sincronizar nada.
-   - Lo que el MD debe mantener al día es el **DATO FUENTE**: cuando un insumo traiga feedback del
-     cliente sobre un entregable, registrar el `rating` (1–5) de esa tarea (y `aiUsage` si aplica).
-     Si no se califican tareas, el indicador del portal se queda "congelado" en el último promedio.
-   - **Validar** en cada run que el indicador tiene base real: cuántas tareas calificadas alimentan
-     `satisfaccion_general` y qué empresas con entregas recientes siguen sin calificación (reportarlo
-     como "por instrumentar", NO inventar puntajes).
+   **"Satisfacción empresarial"** y lo lee **EN VIVO desde este Centro de Operaciones** (vista
+   `indice_proyectos`, con su `OPERACIONES_SERVICE_KEY`). **No es solo el rating** (lo que dicen los
+   clientes): es un índice GENERAL de **cómo van los proyectos** (0–100) que combina:
+   - **satisfacción declarada** (rating 1–5) · peso 0.40 — solo si hay calificaciones,
+   - **cumplimiento / predictibilidad** (entregas a tiempo) · peso 0.35 — solo si hay entregas con fecha,
+   - **salud de flujo** (sin vencidas ni bloqueos) · peso 0.25 — siempre presente.
+   Si un componente no tiene datos, su peso se redistribuye. La vista se recalcula **sola**; no hay
+   que sincronizar nada. Lo que el MD mantiene al día es el **DATO FUENTE** de cada componente:
+   - registrar el `rating` (1–5) cuando un insumo trae feedback del cliente sobre un entregable;
+   - mantener `due_date`/`completed_at` correctos (alimentan cumplimiento) y sin vencidas/bloqueos
+     acumulados (alimentan flujo).
+   **Validar** en cada run que el índice tiene base real y reportar cuántas tareas calificadas +
+   entregas con fecha lo alimentan (lo que falte, "por instrumentar", NO inventar).
+   Requiere `migration-indice-proyectos.sql`.
 5. **Validar la cobertura**: al terminar, reportar que **NINGUNA tarea activa quedó sin puntos**
    (cero sin estimar) y qué empresas no tienen datos suficientes para los demás indicadores del
    reporte (utilización, defectos, consumo de IA). No inventar numeros.
