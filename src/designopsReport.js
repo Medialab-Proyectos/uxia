@@ -82,8 +82,29 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   const defTasks = ct.filter((t) => t.qaDefects != null);
   const defectsTotal = defTasks.reduce((a, t) => a + (Number(t.qaDefects) || 0), 0);
   const defectsPer10 = defTasks.length && done.length ? +(defectsTotal / done.length * 10).toFixed(1) : null;
-  // Change Requests abiertos (de la lista change_requests) + compat con el booleano viejo.
-  const crCount = ct.reduce((a, t) => a + (Array.isArray(t.changeRequests) ? t.changeRequests.filter((c) => !c.resolved).length : (t.changeRequest ? 1 : 0)), 0);
+  // --- RETRABAJO (Request Review) — indicador de gestión, no solo un conteo suelto ---
+  // Un request review es un cambio pedido DESPUÉS de mostrar el trabajo: mide cuánto se rehace y
+  // de dónde viene (cliente = alcance mal cerrado; interno/CEO = calidad antes de mostrar).
+  const crList = (t) => (Array.isArray(t.changeRequests) ? t.changeRequests : []);
+  const crCount = ct.reduce((a, t) => a + (crList(t).filter((c) => !c.resolved).length || (crList(t).length === 0 && t.changeRequest ? 1 : 0)), 0);
+  const crAll = ct.flatMap(crList);
+  const crTotal = crAll.length;
+  const crResueltos = crAll.filter((c) => c.resolved).length;
+  const crCliente = crAll.filter((c) => c.by === "cliente").length;
+  const crInterno = crTotal - crCliente;
+  const tareasConCR = ct.filter((t) => crList(t).length > 0 || t.changeRequest).length;
+  // Tasa de retrabajo: % de tareas que necesitaron al menos un request review.
+  const reworkPct = ct.length ? Math.round((tareasConCR / ct.length) * 100) : null;
+
+  // --- CORRIMIENTOS DE FECHA (predictibilidad del compromiso) ---
+  // prev_due_date guarda la fecha anterior al último cambio: cuántos compromisos se movieron.
+  const movidas = ct.filter((t) => t.prevDueDate && t.prevDueDate !== t.dueDate);
+  const conFecha = ct.filter((t) => t.dueDate).length;
+  const movidasPct = conFecha ? Math.round((movidas.length / conFecha) * 100) : null;
+  const movidasTop = movidas
+    .filter((t) => t.status !== "done")
+    .sort((a, b) => String(a.prevDueDate).localeCompare(String(b.prevDueDate)))
+    .slice(0, 5);
   // Uso/consumo de IA y herramientas por tarea (adopción — REACH: Ability/Efficiency).
   const aiTasks = ct.filter((t) => t.aiUsage != null);
   const avgAi = aiTasks.length ? Math.round(aiTasks.reduce((a, t) => a + Number(t.aiUsage), 0) / aiTasks.length) : null;
@@ -125,7 +146,16 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   const velChip = velocity == null ? PENDIENTE : velocity >= 8 && velocity <= 12 ? chip("g", "En rango") : chip("a", "Ajustar");
   const utilChip = avgUtil == null ? PENDIENTE : avgUtil >= 70 && avgUtil <= 90 ? chip("g", "Óptima") : avgUtil > 90 ? chip("r", "Sobrecarga") : chip("a", "Holgura");
   const defChip = defectsPer10 == null ? PENDIENTE : defectsPer10 <= 2 ? chip("g", "En meta") : defectsPer10 <= 4 ? chip("a", "Atención") : chip("r", "Alto");
-  const crChip = crCount ? chip("a", `${crCount} registrado(s)`) : chip("g", "Ninguno");
+  const crChip = crCount ? chip("a", `${crCount} abierto(s)`) : crTotal ? chip("g", "Todos resueltos") : chip("g", "Ninguno");
+  // Retrabajo: cuánto se rehace tras mostrar el trabajo. Meta ≤20% de las tareas.
+  const reworkChip = reworkPct == null ? PENDIENTE : reworkPct <= 20 ? chip("g", "En meta") : reworkPct <= 35 ? chip("a", "Atención") : chip("r", "Alto");
+  // Origen: si el cliente pide más cambios que la revisión interna, el alcance se está cerrando mal.
+  const origenChip = crTotal === 0 ? chip("g", "Sin retrabajo")
+    : crCliente > crInterno ? chip("r", "Alcance flojo") : chip("g", "Filtro interno OK");
+  // Compromisos movidos: mide estabilidad de la planeación (usa prev_due_date).
+  const movChip = conFecha === 0 ? PENDIENTE
+    : movidasPct <= 15 ? chip("g", "Estable") : movidasPct <= 30 ? chip("a", "Inestable") : chip("r", "Muy inestable");
+  const overdueChip = overdue.length === 0 ? chip("g", "Al día") : overdue.length <= 3 ? chip("a", `${overdue.length} vencida(s)`) : chip("r", `${overdue.length} vencidas`);
 
   // Resumen ejecutivo dinámico
   const focos = [];
@@ -140,6 +170,9 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   if (review.length >= 4) recs.push(`<b>Vaciar la cola de revisión</b> (${review.length} tareas): agendar un bloque de revisión/aprobación antes de tomar trabajo nuevo.`);
   if (overdue.length) recs.push(`<b>Priorizar las ${overdue.length} vencidas</b>${overdueTop[0] ? ` (la más antigua venció el ${fmtDate(overdueTop[0].dueDate)})` : ""}.`);
   if (blocked.length) recs.push(`<b>Destrabar ${blocked.length} bloqueada(s)</b>: resolver el acceso, decisión o dependencia que las frena.`);
+  if (reworkPct != null && reworkPct > 20) recs.push(`<b>Bajar el retrabajo (${reworkPct}% de las tareas con request review)</b>: ${crCliente > crInterno ? "el cliente pide más cambios que la revisión interna — cerrar mejor el alcance y los criterios ANTES de diseñar." : "la mayoría son ajustes internos — reforzar la autorrevisión antes de mostrar."}`);
+  if (crCount) recs.push(`<b>Cerrar los ${crCount} request review abiertos</b>: cada uno es trabajo comprometido que aún no se resolvió y bloquea la aprobación.`);
+  if (movidasPct != null && movidasPct > 15) recs.push(`<b>Estabilizar la planeación</b>: al ${movidasPct}% de las tareas con fecha se le corrió el vencimiento. Revisar si la estimación inicial o las dependencias externas son la causa (cada corrimiento tiene su fecha anterior guardada como soporte).`);
   recs.push(`<b>Instrumentar puntos de diseño</b> en los proyectos activos para reportar velocidad y utilización reales el próximo corte.`);
   recs.push(`<b>Formalizar Change Requests</b> desde la aprobación del diseño, para que los ajustes del cliente no se absorban en el alcance.`);
 
@@ -217,9 +250,13 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   <h2>1. Tablero de indicadores DesignOps</h2>
   <p class="muted small">Cuatro categorías que responden a lo que negocio pregunta sobre el área, alineadas al marco <b>REACH</b> (NN/g): Results, Efficiency, Ability, Clarity, Health. Los indicadores ${PENDIENTE} requieren capturar un dato que aún no se registra.</p>
   <table class="avoid"><thead><tr><th>Categoría</th><th>Indicador</th><th class="center">Valor</th><th class="center">Meta</th><th class="center">Estado</th></tr></thead><tbody>
-    <tr><td rowspan="2"><b>Predictibilidad</b></td><td>Entregas en fecha ÷ comprometidas</td><td class="center">${predictPct == null ? "—" : predictPct + "%"}</td><td class="center">≥ 85%</td><td class="center">${predChip}</td></tr>
+    <tr><td rowspan="4"><b>Predictibilidad</b></td><td>Entregas en fecha ÷ comprometidas</td><td class="center">${predictPct == null ? "—" : predictPct + "%"}</td><td class="center">≥ 85%</td><td class="center">${predChip}</td></tr>
     <tr><td>Desviación promedio de fechas</td><td class="center">${deviationPct == null ? "—" : sign(deviationPct)}</td><td class="center">≤ 10%</td><td class="center">${devChip}</td></tr>
-    <tr><td rowspan="2"><b>Eficiencia</b></td><td>Change Requests registrados</td><td class="center">${crCount}</td><td class="center">documentar</td><td class="center">${crChip}</td></tr>
+    <tr><td>Compromisos movidos (fecha corrida)</td><td class="center">${movidas.length}${movidasPct == null ? "" : ` · ${movidasPct}%`}</td><td class="center">≤ 15%</td><td class="center">${movChip}</td></tr>
+    <tr><td>Tareas vencidas sin cerrar</td><td class="center">${overdue.length}</td><td class="center">0</td><td class="center">${overdueChip}</td></tr>
+    <tr><td rowspan="4"><b>Eficiencia</b></td><td>Tasa de retrabajo (tareas con request review)</td><td class="center">${reworkPct == null ? "—" : reworkPct + "%"}</td><td class="center">≤ 20%</td><td class="center">${reworkChip}</td></tr>
+    <tr><td>Request review abiertos ÷ totales</td><td class="center">${crCount} / ${crTotal}</td><td class="center">0 abiertos</td><td class="center">${crChip}</td></tr>
+    <tr><td>Origen del retrabajo (cliente ÷ interno)</td><td class="center">${crCliente} / ${crInterno}</td><td class="center">cliente ≤ interno</td><td class="center">${origenChip}</td></tr>
     <tr><td>Tareas en revisión (cola)</td><td class="center">${review.length}</td><td class="center">≤ 4</td><td class="center">${reviewChip}</td></tr>
     <tr><td rowspan="2"><b>Capacidad</b></td><td>Velocidad real de diseño (pts/sem)</td><td class="center">${velocity == null ? "—" : velocity}</td><td class="center">8–12</td><td class="center">${velChip}</td></tr>
     <tr><td>Utilización por diseñador</td><td class="center">${avgUtil == null ? "—" : avgUtil + "%"}</td><td class="center">70–90%</td><td class="center">${utilChip}</td></tr>
@@ -244,6 +281,7 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
 
   <h2>3. Predictibilidad y cumplimiento</h2>
   <p>De las entregas con fecha comprometida, <b>${onTime} de ${dueDone.length}</b> salieron a tiempo${predictPct != null ? ` (<b>${predictPct}%</b>)` : ""}. Hay <b>${overdue.length}</b> tarea(s) vencida(s) sin cerrar; las más urgentes:</p>
+  ${movidas.length ? `<p><b>Compromisos movidos:</b> a <b>${movidas.length}</b> tarea(s)${movidasPct != null ? ` (${movidasPct}% de las que tienen fecha)` : ""} se les corrió el vencimiento al menos una vez. Cada corrimiento queda con su fecha anterior como soporte, así el cambio se puede sustentar ante el cliente en vez de discutirse de memoria.${movidasTop.length ? ` Abiertas con fecha movida: ${movidasTop.map((t) => `<b>${esc(t.title)}</b> (antes ${fmtDate(t.prevDueDate)} → ahora ${t.dueDate ? fmtDate(t.dueDate) : "sin fecha"})`).join(" · ")}.` : ""}</p>` : `<p class="muted">Ningún compromiso de fecha se ha movido en el periodo: la planeación se está sosteniendo.</p>`}
   <table class="avoid"><thead><tr><th>Ref</th><th>Tarea</th><th>Subproyecto</th><th class="center">Venció</th></tr></thead><tbody>${overdueRows}</tbody></table>
   ${review.length >= 4 || overdue.length ? `<div class="callout red"><b>Cuello de botella (Teoría de Restricciones):</b> ${review.length >= 4 ? `${review.length} tareas terminadas esperan revisión/aprobación — la salida, no la entrada.` : `${overdue.length} vencidas acumuladas.`} Destrabar esa cola libera avance sin agregar carga nueva.</div>` : ""}
 

@@ -229,6 +229,19 @@ predictibilidad. El empleado no puede alterarla (la protege el trigger). Requier
      convertir (corruptos/vacíos, sin inventar). Trazabilidad total: con leer el reporte se sabe qué
      hizo la IA y por qué.
 
+**Vencidas y Request Review SÍ son indicadores DesignOps (no solo un tag en la tarjeta).** El
+reporte y el tablero los convierten en gestión:
+- **Predictibilidad:** entregas en fecha ÷ comprometidas · desviación de fechas · **compromisos
+  movidos** (`prev_due_date`: cuántas veces se corrió el vencimiento, con la fecha anterior como
+  soporte ante el cliente) · **vencidas sin cerrar** (con las más urgentes listadas y una
+  recomendación de priorización).
+- **Eficiencia / retrabajo:** **tasa de retrabajo** (% de tareas con al menos un request review,
+  meta ≤20%) · **abiertos ÷ totales** · **origen del retrabajo (cliente ÷ interno)** — si el cliente
+  pide más cambios que la revisión interna, el alcance se está cerrando mal; si son internos, falta
+  autorrevisión. Cada uno con su recomendación accionable.
+Por eso el MD debe mantener limpios `due_date`/`prev_due_date` y `change_requests`: son la materia
+prima de esos indicadores.
+
 **Honestidad (obligatoria):** el MD solo pone datos que puede sustentar en el insumo o en una
 estimacion de complejidad razonable. Lo que no se puede derivar se deja vacio y se reporta como
 "por instrumentar" — NUNCA se rellena con cifras inventadas. Las metricas que ya salen solas de
