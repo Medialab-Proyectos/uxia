@@ -31,7 +31,9 @@ for (const insumo of insumos) {
     storagePath: insumo.storagePath,
     rawText: insumo.rawText || "",
   };
-  if (insumo.kind === "imagen" && insumo.url) {
+  // Se descargan localmente los insumos BINARIOS (imagen y PDF) para que Claude los lea:
+  // las imágenes se ven directo; los PDF se leen por páginas con la herramienta Read.
+  if ((insumo.kind === "imagen" || insumo.kind === "pdf") && insumo.url) {
     try {
       const res = await fetch(insumo.url);
       if (res.ok) {

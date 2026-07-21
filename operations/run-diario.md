@@ -30,8 +30,13 @@ da seguimiento. Nada depende de servidores extra.
 npm run daily:fetch          # baja insumos pendientes de Supabase (imágenes Y textos)
 ```
 - Los insumos de **texto** (`.md`/`.txt` subidos por subproyecto) llegan con
-  `kind:"texto"` y su contenido en `raw_text`; las **imágenes** con `kind:"imagen"`.
-  **Nada se convierte en tarea al subirlo** — todo queda pendiente hasta esta corrida.
+  `kind:"texto"` y su contenido en `raw_text`; las **imágenes** con `kind:"imagen"` y los
+  **PDF** con `kind:"pdf"`. **Nada se convierte en tarea al subirlo** — todo queda pendiente
+  hasta esta corrida.
+- **PDF (hasta 8 MB):** `daily:fetch` los descarga a `operations/_run/` igual que las imágenes y
+  deja su ruta en `localPath`. Claude los lee con la herramienta **Read** usando el parámetro
+  `pages` (máx. 20 páginas por llamada; obligatorio para PDF de más de 10 páginas). Si el PDF es
+  largo, se lee por bloques y se resume por sección antes de crear tareas.
 - Claude lee `operations/_run/insumos.json` (texto en `raw_text` + las imágenes
   descargadas), arma tareas claras y escribe `operations/_run/tasks.json`
   (`{tasks, processedInsumoIds, keepFileInsumoIds}`).

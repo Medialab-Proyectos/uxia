@@ -169,6 +169,9 @@ const SAMPLE_CLIENTS = new Set(["Por clasificar", "FarmaNova", "RetailX", "Finte
 const DEMO_COMPANY_IDS = new Set(["notion-client", "jira-client"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_TASK_UPLOAD_BYTES = 1024 * 1024;
+// Los PDF se suben sin comprimir (no son imágenes): se permite más peso porque el run diario
+// los descarga y Claude los lee página por página.
+const MAX_PDF_INSUMO_BYTES = 8 * 1024 * 1024;
 const IMAGE_UPLOAD_MAX_SIDE = 1600;
 
 const starterText = `# Brief diario - Metrics Lab
@@ -1178,13 +1181,26 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   async function uploadSourceDocument(client, file) {
     if (!file || !company) return;
     const isText = /\.(md|txt)$/i.test(file.name);
+    const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
     const isImage = isTaskImageFile(file);
-    if (!isText && !isImage) {
-      setNotice("Sube tareas como .md, .txt o imagen. Máximo 1 MB.");
+    if (!isText && !isImage && !isPdf) {
+      setNotice("Sube insumos como .md, .txt, .pdf o imagen.");
       return;
     }
     if (!opsData.opsDataReady()) { setNotice("Configura Supabase para subir insumos."); return; }
     try {
+      // PDF: se sube TAL CUAL (sin comprimir) como insumo pendiente; el run diario lo descarga
+      // y Claude lo lee página por página.
+      if (isPdf) {
+        if (file.size > MAX_PDF_INSUMO_BYTES) {
+          setNotice(`El PDF pesa ${formatFileSize(file.size)}. Debe quedar por debajo de 8 MB.`);
+          return;
+        }
+        await opsData.saveInsumo(token, { companyId: company.id, client, file, kind: "pdf" });
+        setNotice(`Insumo (PDF) guardado para ${client}. Se convierte en tareas cuando corra el MD diario.`);
+        loadInsumos();
+        return;
+      }
       if (isText) {
         // El texto NO se convierte en tareas al instante: queda como insumo pendiente
         // (con su contenido en raw_text) y la corrida diaria del MD lo interpreta.
@@ -1217,16 +1233,21 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     try {
       if (file) {
         const isTextFile = /\.(md|txt)$/i.test(file.name);
+        const isPdfFile = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
         if (isTextFile) {
           const content = await file.text();
           await opsData.saveInsumo(token, { companyId: "global", client: "", file, kind: "texto", rawText: content });
+        } else if (isPdfFile) {
+          // PDF tal cual: el run diario lo descarga y Claude lo lee página por página.
+          if (file.size > MAX_PDF_INSUMO_BYTES) { setNotice(`El PDF pesa ${formatFileSize(file.size)}. Debe ser menor a 8 MB.`); return; }
+          await opsData.saveInsumo(token, { companyId: "global", client: "", file, kind: "pdf" });
         } else if (isTaskImageFile(file)) {
           const prepared = await prepareTaskUploadFile(file);
           if (prepared.size > MAX_TASK_UPLOAD_BYTES) { setNotice(`La imagen pesa ${formatFileSize(prepared.size)}. Debe ser menor a 1 MB.`); return; }
           const named = prepared instanceof File ? prepared : new File([prepared], file.name, { type: prepared.type || file.type });
           await opsData.saveInsumo(token, { companyId: "global", client: "", file: named, kind: "imagen" });
         } else {
-          setNotice("El archivo debe ser .txt, .md o una imagen (jpg, png, webp…).");
+          setNotice("El archivo debe ser .txt, .md, .pdf o una imagen (jpg, png, webp…).");
           return;
         }
       } else {
@@ -1471,7 +1492,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 <Paperclip size={15} /> Adjuntar archivo
                 <input
                   type="file"
-                  accept=".md,.txt,image/*"
+                  accept=".md,.txt,.pdf,image/*"
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
@@ -3620,7 +3641,7 @@ function CompanyPanel({
                       <Plus size={15} /> Subir insumo
                       <input
                         type="file"
-                        accept=".md,.txt,image/*"
+                        accept=".md,.txt,.pdf,image/*"
                         className="hidden"
                         onChange={(event) => {
                           const file = event.target.files?.[0];

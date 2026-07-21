@@ -38,7 +38,10 @@ const idSet = new Set(archivo.ids || (archivo.items || []).map((x) => x.id));
 
 let totalBorradas = 0;
 for (const tabla of ["oportunidades", "vacantes"]) {
-  const viejas = await sb(`${tabla}?select=id,data,created_at&created_at=lt.${encodeURIComponent(cutoff)}`);
+  // La caducidad NO toca lo que el CEO está rastreando: "me gusta" (me_interesa), aplicadas ni
+  // postuladas se conservan aunque sean viejas. Solo caducan las desatendidas: nueva/descartada/
+  // archivada (su id queda en archivo-radar.json, así el dedup sigue evitando que reaparezcan).
+  const viejas = await sb(`${tabla}?select=id,data,created_at,estado,postulado&created_at=lt.${encodeURIComponent(cutoff)}&estado=in.(nueva,descartada,archivada)&postulado=is.false`);
   if (!viejas || !viejas.length) { console.log(`${tabla}: 0 caducadas (> ${DIAS}d).`); continue; }
   for (const r of viejas) {
     if (!idSet.has(r.id)) {
