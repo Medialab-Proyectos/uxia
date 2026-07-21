@@ -149,6 +149,12 @@ create or replace view satisfaccion_por_empresa as
   from tasks t left join companies c on c.id = t.company_id
   group by t.company_id, c.name;
 
+-- Las vistas de satisfacción se comparten con el portal (empleado y admin): datos agregados
+-- de empresa, sin detalle de tarea. Se recalculan solas; el dato fuente (rating/ai_usage) lo
+-- mantiene el admin/MD al día.
+grant select on satisfaccion_general to anon, authenticated;
+grant select on satisfaccion_por_empresa to anon, authenticated;
+
 -- 4) Políticas RLS POR ROL --------------------------------------------------------
 -- El ADMIN (CEO) gestiona TODO. El EMPLEADO (Supabase Auth con user_metadata.role =
 -- 'employee', que crea api/employee.js) solo ve/actualiza SUS tareas, ve su propio

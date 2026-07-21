@@ -267,6 +267,15 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
 4. **Registrar uso de IA y herramientas** cuando el insumo lo evidencia: `aiUsage` (0..100,
    % de IA usada en la tarea) y `tools` (arreglo, ej. `["Figma","Claude"]`). Da la visibilidad
    de "uso y consumo de IA + herramientas" que pide negocio. Si no hay señal clara, se deja vacio.
+4-bis. **Mantener fresca la SATISFACCIÓN empresarial** (`rating` + `aiUsage`). Las vistas
+   `satisfaccion_general` y `satisfaccion_por_empresa` son la base del indicador que el **portal del
+   empleado** muestra ("Satisfacción del cliente en tus empresas") y del reporte DesignOps. Son
+   vistas SQL: se recalculan solas, no hay que "refrescarlas" — lo que hay que actualizar es el DATO
+   fuente. En cada run, cuando un insumo traiga feedback del cliente sobre un entregable, registrar el
+   `rating` (1–5) de esa tarea (y `aiUsage` si aplica). **Validar** además que ninguna empresa con
+   entregas recientes se quede en satisfacción `null` sin razón (si no hay calificación, decirlo como
+   "por instrumentar", NO inventar). Requiere `migration-satisfaccion-grants.sql` para que el portal
+   pueda leer las vistas.
 5. **Validar la cobertura**: al terminar, reportar que **NINGUNA tarea activa quedó sin puntos**
    (cero sin estimar) y qué empresas no tienen datos suficientes para los demás indicadores del
    reporte (utilización, defectos, consumo de IA). No inventar numeros.
