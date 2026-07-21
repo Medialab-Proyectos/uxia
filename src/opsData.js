@@ -59,7 +59,8 @@ function normalizeBoardConfig(value) {
 const rowToTask = (row) => ({
   id: row.id, companyId: row.company_id, client: row.client || "", title: row.title,
   status: row.status, priority: row.priority, role: row.role || "", owner: row.owner || "",
-  assigneeId: row.assignee_id || "", dueDate: row.due_date || "", deliveryDate: row.delivery_date || "",
+  assigneeId: row.assignee_id || "", dueDate: row.due_date || "", prevDueDate: row.prev_due_date || "",
+  deliveryDate: row.delivery_date || "",
   source: row.source || "", audience: row.audience || "Interno MediaLab", syncMode: row.sync_mode || "Manual",
   evidence: row.evidence || "", description: row.description || "", userStory: row.user_story || "",
   acceptanceCriteria: asArray(row.acceptance_criteria), attachments: asArray(row.attachments),
@@ -78,7 +79,8 @@ const taskToRow = (task) => ({
   id: task.id, company_id: task.companyId || "metrics-lab", client: task.client || "",
   title: task.title || "Tarea sin titulo", status: task.status || "ready", priority: task.priority || "media",
   role: task.role || "", owner: task.owner || "", assignee_id: task.assigneeId || null,
-  due_date: task.dueDate || null, delivery_date: task.deliveryDate || null, source: task.source || "",
+  due_date: task.dueDate || null, prev_due_date: task.prevDueDate || null,
+  delivery_date: task.deliveryDate || null, source: task.source || "",
   audience: task.audience || "Interno MediaLab", sync_mode: task.syncMode || "Manual", evidence: task.evidence || "",
   description: task.description || "", user_story: task.userStory || "", acceptance_criteria: asArray(task.acceptanceCriteria),
   attachments: asArray(task.attachments), email_to: task.emailTo || "", email_subject: task.emailSubject || "",
@@ -232,7 +234,7 @@ export async function saveState(token, state) {
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at"]);
+    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba
@@ -265,7 +267,7 @@ export async function saveState(token, state) {
 export async function saveTask(token, task) {
   if (!task?.id) return;
   await upsertResilient(token, "tasks?on_conflict=id", [taskToRow(task)],
-    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at"]);
+    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date"]);
 }
 
 // Borrado EXPLÍCITO (una tarea/persona a la vez) — sustituye al deleteMissing masivo.

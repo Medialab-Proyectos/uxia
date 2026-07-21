@@ -872,6 +872,11 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         next.completedAt = "";
         next.workedHours = null;
       }
+      // Cambio de VENCIMIENTO: se conserva la fecha ANTERIOR como soporte del corrimiento
+      // (la tarjeta la muestra como "antes: dd/mm/aaaa"). No se pisa si la fecha no cambió.
+      if (patch.dueDate !== undefined && task.dueDate && patch.dueDate !== task.dueDate) {
+        next.prevDueDate = task.dueDate;
+      }
       // Sello de "el admin tocó esta tarea" → el empleado la verá "Actualizada" y le
       // sonará la campanita. Excepción: cambios de METADATA (puntos/tipo) NO son novedad para el
       // empleado (no los ve), así que no sellan adminTouchedAt.
@@ -2512,8 +2517,12 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const doSaveTask = async () => {
     if (!onSaveTask) return;
     setTaskSave("saving");
-    // Guardar la tarea = el admin la revisó → sella adminTouchedAt y quita la píldora "IA".
-    if (aiCreated && !task.adminTouchedAt) onChangeTask(task.id, { adminTouchedAt: new Date().toISOString() });
+    // Guardar la tarea = el admin la REVISÓ: sella adminTouchedAt (quita la píldora "IA") y
+    // limpia mdTouchedAt (quita el tag "IA actualizó"): ya se revisó lo que complementó la IA.
+    const patch = {};
+    if (aiCreated && !task.adminTouchedAt) patch.adminTouchedAt = new Date().toISOString();
+    if (task.mdTouchedAt) patch.mdTouchedAt = "";
+    if (Object.keys(patch).length) onChangeTask(task.id, patch);
     try { await onSaveTask(task.id); setTaskSave("saved"); setTimeout(() => setTaskSave("idle"), 2500); }
     catch { setTaskSave("error"); }
   };
@@ -3008,6 +3017,13 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             />
           </label>
         </div>
+        {/* Soporte del corrimiento: fecha ANTERIOR al último cambio de vencimiento. */}
+        {task.prevDueDate && task.prevDueDate !== task.dueDate && (
+          <p className="-mt-1 text-[11px] text-[#B76E00]">
+            <CalendarDays size={11} className="mr-1 inline align-[-1px]" />
+            Fecha movida · antes vencía el <b>{displayDate(task.prevDueDate)}</b>
+          </p>
+        )}
         {assignedPerson ? (
           reportHref ? (
             <a

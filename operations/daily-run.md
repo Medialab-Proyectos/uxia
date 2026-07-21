@@ -198,8 +198,30 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
      tarea ya lleva "IA actualizó", tampoco se muestra "IA" (no se duplica).
    - **Tag "IA actualizó" (`mdTouchedAt`):** cuando el MD **complementa** una tarea que YA existía, setea
      `mdTouchedAt` = ahora; la tarjeta muestra el tag **"IA actualizó"** + banner para que el admin lo
-     revise y marque Visto. En "Todas las tareas" hay un filtro **"Tocadas por IA"** que lista estas
-     (mdTouchedAt).
+     revise. **Al pulsar "Guardar tarea" el tag se limpia** (`mdTouchedAt` = vacío): guardar = el admin
+     ya revisó lo que complementó la IA. En "Todas las tareas" hay un filtro **"Tocadas por IA"**.
+
+### Antes de complementar una tarea existente: VALIDAR el estado (obligatorio)
+
+Cuando el MD va a complementar una tarea que ya existe, **primero valida en qué punto del ciclo está**:
+
+- **Si la tarea YA fue enviada al cliente** (`verificacion`) **o está en revisión** (`review`), NO se
+  puede cambiar el alcance por debajo: lo que está en manos del cliente debe quedar como está.
+  - Si el contexto nuevo es **el mismo trabajo** (más detalle, evidencia, una decisión) → se enriquece
+    la `description` y se sella `mdTouchedAt`, sin tocar el estado.
+  - Si el contexto nuevo es **otro alcance / otra tarea** → **NO** se mete en esa tarea: se abre un
+    **Request Review** (entrada en `change_requests`, `by:'cliente'` o `'ceo'` según el origen) que
+    describe el cambio, con lo que la tarea vuelve a **`doing`**; o se crea una **tarea nueva** si es un
+    pendiente genuinamente distinto. Así queda el rastro de por qué se movió algo ya entregado.
+- Si la tarea está en `ready`/`doing`/`blocked`, se complementa normal (enriquecer + `mdTouchedAt`).
+
+### Cambios de fecha de entrega: se conserva la anterior (obligatorio)
+
+Cuando se cambia el **vencimiento** de una tarea (lo haga el admin o el MD), **NO se pierde la fecha
+previa**: se guarda en **`prev_due_date`** y la tarjeta muestra *"Fecha movida · antes vencía el
+dd/mm/aaaa"*. Es el soporte para justificar el corrimiento ante el cliente y para analizar
+predictibilidad. El empleado no puede alterarla (la protege el trigger). Requiere la columna
+`prev_due_date` → correr `supabase/migration-prev-due-date.sql` (ya incluida en `setup.sql`).
    - **Peso/tipo:** los cambios de `designPoints`/`category` son metadata y **NO** llevan `mdTouchedAt`
      (no saturan al empleado); se reportan en el resumen, no como novedad.
    - **Reporte final**, por empresa/subproyecto: tareas **creadas** (con tipo y peso), tareas
