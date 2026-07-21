@@ -148,12 +148,10 @@ create or replace view satisfaccion_por_empresa as
     round(avg(t.ai_usage) filter (where t.ai_usage is not null), 1) as ia_promedio
   from tasks t left join companies c on c.id = t.company_id
   group by t.company_id, c.name;
-
--- Las vistas de satisfacción se comparten con el portal (empleado y admin): datos agregados
--- de empresa, sin detalle de tarea. Se recalculan solas; el dato fuente (rating/ai_usage) lo
--- mantiene el admin/MD al día.
-grant select on satisfaccion_general to anon, authenticated;
-grant select on satisfaccion_por_empresa to anon, authenticated;
+-- Nota: el portal MediaLab (Version 1) lee `satisfaccion_general` con SERVICE KEY
+-- (OPERACIONES_SERVICE_KEY) para su indicador "Satisfacción empresarial" del panel CEO, así que
+-- no necesita GRANT al rol autenticado. La vista se recalcula sola; el dato fuente (rating de
+-- tareas) lo mantiene fresco el admin/MD en cada corrida.
 
 -- 4) Políticas RLS POR ROL --------------------------------------------------------
 -- El ADMIN (CEO) gestiona TODO. El EMPLEADO (Supabase Auth con user_metadata.role =

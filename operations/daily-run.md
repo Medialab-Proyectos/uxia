@@ -267,15 +267,18 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
 4. **Registrar uso de IA y herramientas** cuando el insumo lo evidencia: `aiUsage` (0..100,
    % de IA usada en la tarea) y `tools` (arreglo, ej. `["Figma","Claude"]`). Da la visibilidad
    de "uso y consumo de IA + herramientas" que pide negocio. Si no hay señal clara, se deja vacio.
-4-bis. **Mantener fresca la SATISFACCIÓN empresarial** (`rating` + `aiUsage`). Las vistas
-   `satisfaccion_general` y `satisfaccion_por_empresa` son la base del indicador que el **portal del
-   empleado** muestra ("Satisfacción del cliente en tus empresas") y del reporte DesignOps. Son
-   vistas SQL: se recalculan solas, no hay que "refrescarlas" — lo que hay que actualizar es el DATO
-   fuente. En cada run, cuando un insumo traiga feedback del cliente sobre un entregable, registrar el
-   `rating` (1–5) de esa tarea (y `aiUsage` si aplica). **Validar** además que ninguna empresa con
-   entregas recientes se quede en satisfacción `null` sin razón (si no hay calificación, decirlo como
-   "por instrumentar", NO inventar). Requiere `migration-satisfaccion-grants.sql` para que el portal
-   pueda leer las vistas.
+4-bis. **Mantener fresca la SATISFACCIÓN EMPRESARIAL** que consume el **portal MediaLab**. El panel
+   CEO del portal de empleados de MediaLab (proyecto *MediLab/Version 1*) muestra el indicador
+   **"Satisfacción empresarial"** y lo lee **EN VIVO desde este Centro de Operaciones**: consulta la
+   vista `satisfaccion_general` de UXIA (con su `OPERACIONES_SERVICE_KEY`) y la lleva a 0–100
+   (`satisfaccion_promedio × 20`). O sea, ese número es el promedio de `rating` de las tareas de UXIA.
+   - La vista se recalcula **sola** en cada consulta: NO hay que refrescarla ni sincronizar nada.
+   - Lo que el MD debe mantener al día es el **DATO FUENTE**: cuando un insumo traiga feedback del
+     cliente sobre un entregable, registrar el `rating` (1–5) de esa tarea (y `aiUsage` si aplica).
+     Si no se califican tareas, el indicador del portal se queda "congelado" en el último promedio.
+   - **Validar** en cada run que el indicador tiene base real: cuántas tareas calificadas alimentan
+     `satisfaccion_general` y qué empresas con entregas recientes siguen sin calificación (reportarlo
+     como "por instrumentar", NO inventar puntajes).
 5. **Validar la cobertura**: al terminar, reportar que **NINGUNA tarea activa quedó sin puntos**
    (cero sin estimar) y qué empresas no tienen datos suficientes para los demás indicadores del
    reporte (utilización, defectos, consumo de IA). No inventar numeros.

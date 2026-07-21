@@ -34,7 +34,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [me, setMe] = React.useState(null); // registro en people
   const [companies, setCompanies] = React.useState([]);
   const [tasks, setTasks] = React.useState([]);
-  const [satEmpresa, setSatEmpresa] = React.useState([]); // satisfacción del cliente por empresa (vista)
   const [openId, setOpenId] = React.useState(null);
   const [draft, setDraft] = React.useState("");
   const [pending, setPending] = React.useState({}); // { [taskId]: { status } } cambios locales sin guardar
@@ -77,12 +76,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       } else {
         setTasks([]);
       }
-      // Satisfacción del cliente por empresa (vista agregada). Si la base aún no tiene el GRANT
-      // (migration-satisfaccion-grants.sql), simplemente no se muestra el indicador.
-      try {
-        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/satisfaccion_por_empresa?select=company_id,satisfaccion_promedio,tareas_calificadas`, { headers });
-        setSatEmpresa(sRes.ok ? await sRes.json() : []);
-      } catch { setSatEmpresa([]); }
       setLastLoadedAt(Date.now());
       setStaleWarn(false);
     } catch (e) {
@@ -320,25 +313,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             </button>
           )}
         </div>
-
-        {/* Satisfacción del cliente en TUS empresas (vista agregada, se actualiza sola con las
-            calificaciones que registra el admin). Solo se muestra si hay datos y GRANT. */}
-        {(() => {
-          const mine = new Set(tasks.map((t) => t.company_id));
-          const rows = satEmpresa.filter((r) => mine.has(r.company_id) && r.satisfaccion_promedio != null && r.tareas_calificadas > 0);
-          if (!rows.length) return null;
-          const calif = rows.reduce((a, r) => a + Number(r.tareas_calificadas), 0);
-          const prom = rows.reduce((a, r) => a + Number(r.satisfaccion_promedio) * Number(r.tareas_calificadas), 0) / calif;
-          const col = prom >= 4.5 ? "#0D7A4F" : prom >= 3.5 ? "#B76E00" : "#B42318";
-          return (
-            <div className="mb-4 flex items-center justify-between gap-3 rounded-md border p-3" style={{ borderColor: border, background: card }}>
-              <span className="flex items-center gap-2 text-xs" style={{ color: dim }}>
-                <CheckCircle2 size={14} style={{ color: col }} /> Satisfacción del cliente en tus empresas
-              </span>
-              <span className="text-lg font-semibold" style={{ color: col }}>{prom.toFixed(1)}<span className="text-xs" style={{ color: dim }}>/5 · {calif} calificada{calif === 1 ? "" : "s"}</span></span>
-            </div>
-          );
-        })()}
 
         {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono — clicables → filtran */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
