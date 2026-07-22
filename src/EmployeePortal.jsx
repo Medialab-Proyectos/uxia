@@ -58,18 +58,12 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [pwdSaving, setPwdSaving] = React.useState(false);
   const [myLeads, setMyLeads] = React.useState([]);             // subproyectos que lidera (si aplica)
   const [allPeople, setAllPeople] = React.useState([]);         // personas (para asignar; líder puede leerlas)
-  const [leadCompany, setLeadCompany] = React.useState("");     // empresa seleccionada en coordinación
+  const [leadCompany, setLeadCompany] = React.useState("");     // empresa seleccionada (para crear/subir)
   const [leadClient, setLeadClient] = React.useState("");       // subproyecto seleccionado ("" = todos los que lidera)
-  const [leadScopeTasks, setLeadScopeTasks] = React.useState([]); // tareas del alcance seleccionado
   const [createOpen, setCreateOpen] = React.useState(false);    // modal "crear actividad" abierto
   const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "" }); // form nueva actividad
   const [leadBusy, setLeadBusy] = React.useState(false);
   const [leadMsg, setLeadMsg] = React.useState("");
-  const [dueEdit, setDueEdit] = React.useState(null);           // { id, date, old } popup de motivo de cambio de fecha
-  const [dueReason, setDueReason] = React.useState("");
-  const [crFor, setCrFor] = React.useState("");                 // id de la tarea para escribir un request review
-  const [crDraft, setCrDraft] = React.useState("");
-  const [openScope, setOpenScope] = React.useState("");         // tarea del alcance expandida (comentarios)
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -100,10 +94,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         } else {
           setNoveltyReady(true);
         }
-        setTasks(tRes.ok ? await tRes.json() : []);
+        const assigned = tRes.ok ? await tRes.json() : [];
 
-        // ¿Lidera subproyectos? (RLS devuelve solo SUS liderazgos). Si sí, carga personas y sus
-        // tareas creadas para el panel de líder.
+        // ¿Lidera subproyectos? (RLS devuelve solo SUS liderazgos).
         const leadRes = await fetch(`${SUPABASE_URL}/rest/v1/subproject_leads?select=id,company_id,client`, { headers });
         const leadRows = leadRes.ok ? await leadRes.json() : [];
         setMyLeads(leadRows);
@@ -111,7 +104,16 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           const pplRes = await fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type`, { headers });
           setAllPeople(pplRes.ok ? await pplRes.json() : []);
           setLeadCompany((cur) => cur || leadRows[0].company_id); // empresa por defecto
-        } else { setAllPeople([]); }
+          // Las tareas que el líder CREÓ se suman a su lista activa (aunque estén asignadas a otro).
+          const mineRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?created_by=eq.${encodeURIComponent(email)}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
+          const mine = mineRes.ok ? await mineRes.json() : [];
+          const byId = new Map(assigned.map((t) => [t.id, t]));
+          for (const t of mine) if (!byId.has(t.id)) byId.set(t.id, t);
+          setTasks([...byId.values()]);
+        } else {
+          setAllPeople([]);
+          setTasks(assigned);
+        }
       } else {
         setTasks([]);
       }
@@ -344,20 +346,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   //      subir insumos y editar SOLO las tareas que él crea. ----
   const leadKey = (l) => `${l.company_id}|||${l.client}`;
   const companyNameOf = (id) => (companies.find((c) => c.id === id)?.name || id);
-  const scopeSelect = "id,title,description,client,company_id,status,priority,due_date,prev_due_date,assignee_id,created_by,comments,change_requests";
   const ledCompanies = React.useMemo(() => {
     const ids = [...new Set(myLeads.map((l) => l.company_id))];
     return ids.map((id) => ({ id, name: companyNameOf(id) }));
   }, [myLeads, companies]);
   const ledClients = React.useMemo(() => myLeads.filter((l) => l.company_id === leadCompany).map((l) => l.client), [myLeads, leadCompany]);
-
-  const loadLeadScope = React.useCallback(async () => {
-    if (!leadCompany) { setLeadScopeTasks([]); return; }
-    const cf = leadClient ? `&client=eq.${encodeURIComponent(leadClient)}` : "";
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?company_id=eq.${encodeURIComponent(leadCompany)}${cf}&select=${scopeSelect}&order=due_date.asc`, { headers });
-    setLeadScopeTasks(res.ok ? await res.json() : []);
-  }, [leadCompany, leadClient, headers]);
-  React.useEffect(() => { if (myLeads.length) loadLeadScope(); }, [loadLeadScope, myLeads.length]);
 
   async function createLeadTask() {
     const key = lf.key || (leadClient ? `${leadCompany}|||${leadClient}` : (myLeads[0] && leadKey(myLeads[0])));
@@ -380,7 +373,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setLeadMsg("Actividad creada ✓");
       setLf((f) => ({ ...f, title: "", description: "", dueDate: "", assigneeId: "" }));
       setCreateOpen(false);
-      loadLeadScope(); load();
+      load(); // la actividad creada se suma a la lista activa
     } catch (e) { setLeadMsg(String(e?.message || "No se pudo crear la actividad.")); }
     finally { setLeadBusy(false); }
   }
@@ -393,44 +386,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setLeadMsg(`Insumo subido a ${client} ✓`);
     } catch (e) { setLeadMsg(String(e?.message || "No se pudo subir el insumo.")); }
     finally { setLeadBusy(false); }
-  }
-  const iCreated = (t) => String(t.created_by || "").toLowerCase() === email; // ¿la creé yo? (editable)
-  async function patchMyTask(id, patch) {
-    setLeadScopeTasks((cur) => cur.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, {
-        method: "PATCH", headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      if (patch.status === "review") notifyEvent(token, { type: "review", taskId: id }); // finalizar → admin
-      if (patch.assignee_id) notifyEvent(token, { type: "assigned", taskId: id });
-    } catch (e) { setLeadMsg(String(e?.message || "No se pudo guardar el cambio.")); }
-  }
-  async function deleteMyTask(id) {
-    setLeadScopeTasks((cur) => cur.filter((t) => t.id !== id));
-    try { await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, { method: "DELETE", headers: { ...headers, Prefer: "return=minimal" } }); }
-    catch { /* ignore */ }
-  }
-  // Cambio de fecha con MOTIVO (igual que el admin): si ya tenía fecha, pide el porqué.
-  function onDueChange(t, newDate) {
-    if (t.due_date && newDate && newDate !== t.due_date) { setDueEdit({ id: t.id, date: newDate, old: t.due_date }); setDueReason(""); }
-    else patchMyTask(t.id, { due_date: newDate || null });
-  }
-  function confirmDueChange() {
-    if (!dueEdit || !dueReason.trim()) return;
-    patchMyTask(dueEdit.id, { due_date: dueEdit.date, prev_due_date: dueEdit.old || null, due_change_reason: dueReason.trim() });
-    setDueEdit(null); setDueReason("");
-  }
-  // El líder pide un cambio (request review) sobre SU actividad: la devuelve a "en progreso" y avisa.
-  async function addRequestReview(t) {
-    const txt = crDraft.trim();
-    if (!txt) return;
-    const crs = Array.isArray(t.change_requests) ? t.change_requests : [];
-    const cr = { id: `cr-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, at: new Date().toISOString(), by: "lead", text: txt, resolved: false };
-    await patchMyTask(t.id, { change_requests: [...crs, cr], change_request: true, status: "doing" });
-    notifyEvent(token, { type: "cr-opened", taskId: t.id });
-    setCrFor(""); setCrDraft("");
   }
 
   const dark = theme === "dark";
@@ -509,27 +464,23 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             sube insumos y edita SOLO las actividades que él crea. Va DEBAJO de los indicadores. */}
         {myLeads.length > 0 && (
           <div className="mb-4">
-            {/* Fila: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] */}
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              {ledCompanies.length > 1 ? (
-                <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
-                  className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Empresa">
-                  {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              ) : (
-                <span className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }}>{companyNameOf(leadCompany)}</span>
-              )}
+            {/* UNA sola línea: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] (scroll horizontal en móvil) */}
+            <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+              <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
+                className="shrink-0 rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Empresa">
+                {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
               <select value={leadClient} onChange={(e) => setLeadClient(e.target.value)}
-                className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Subproyecto">
+                className="shrink-0 rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Subproyecto">
                 <option value="">Todos los subproyectos</option>
                 {ledClients.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <button type="button"
                 onClick={() => { setCreateOpen(true); setLf({ key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : ""), title: "", description: "", dueDate: "", assigneeId: "" }); }}
-                className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
                 <Send size={14} /> Crear actividad
               </button>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Sube al subproyecto activo"}>
+              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Sube al subproyecto activo"}>
                 <Paperclip size={14} /> Subir insumo
                 <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
               </label>
@@ -574,97 +525,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                 </div>
               )}
 
-              {/* Actividades del alcance. Las que YO creé son editables; el resto, solo lectura. */}
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>
-                Actividades {leadClient ? `· ${leadClient}` : "· todos"} ({leadScopeTasks.length})
-              </p>
-              {leadScopeTasks.length === 0 ? (
-                <p className="text-xs" style={{ color: dim }}>Sin actividades en este alcance todavía.</p>
-              ) : (
-                <div className="space-y-2">
-                  {leadScopeTasks.map((t) => (iCreated(t) ? (
-                    <div key={t.id} className="rounded-md border p-2" style={{ borderColor: "#17727A" }}>
-                      <div className="mb-1 flex items-center gap-1.5">
-                        <span className="rounded bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-bold text-[#17727A]">Mía</span>
-                        <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
-                          className="min-w-0 flex-1 rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
-                      </div>
-                      <textarea value={t.description || ""} onChange={(e) => patchMyTask(t.id, { description: e.target.value })} rows={2} placeholder="Descripción"
-                        className="w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
-                        <select value={`${t.company_id}|||${t.client}`} onChange={(e) => { const [cid, cli] = e.target.value.split("|||"); patchMyTask(t.id, { company_id: cid, client: cli }); }}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
-                          {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
-                        </select>
-                        <input type="date" value={t.due_date || ""} onChange={(e) => onDueChange(t, e.target.value)}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Fecha de finalización" />
-                        <select value={t.status === "done" ? "review" : t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Estado (el cierre lo da el admin)">
-                          {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                        </select>
-                        <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
-                          <option value="">Sin responsable</option>
-                          {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <button type="button" onClick={() => deleteMyTask(t.id)} className="font-semibold" style={{ color: "#B42318" }}>Borrar</button>
-                      </div>
-                      {/* Comentarios del responsable + pedir un cambio (request review) */}
-                      <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                        <button type="button" onClick={() => setOpenScope(openScope === t.id ? "" : t.id)} className="inline-flex items-center gap-1 font-semibold" style={{ color: "#17727A" }}>
-                          <MessageCircle size={12} /> Comentarios ({Array.isArray(t.comments) ? t.comments.length : 0})
-                        </button>
-                        <button type="button" onClick={() => { setCrFor(crFor === t.id ? "" : t.id); setCrDraft(""); }} className="font-semibold" style={{ color: "#B54708" }}>
-                          Pedir cambios
-                        </button>
-                      </div>
-                      {openScope === t.id && Array.isArray(t.comments) && t.comments.length > 0 && (
-                        <div className="mt-1 space-y-1">
-                          {t.comments.map((c, i) => (
-                            <div key={i} className="rounded border px-2 py-1 text-[11px]" style={{ borderColor: border, background: bg }}>
-                              <span className="font-semibold" style={{ color: text }}>{c.author || (c.role === "admin" ? "Admin" : "Responsable")}: </span>
-                              <span style={{ color: dim }}>{c.text}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {crFor === t.id && (
-                        <div className="mt-1 flex gap-1.5">
-                          <input value={crDraft} onChange={(e) => setCrDraft(e.target.value)} placeholder="¿Qué cambio pides?" onKeyDown={(e) => e.key === "Enter" && addRequestReview(t)}
-                            className="min-w-0 flex-1 rounded border px-2 py-1 text-[11px]" style={{ borderColor: border, background: bg, color: text }} />
-                          <button type="button" onClick={() => addRequestReview(t)} disabled={!crDraft.trim()} className="rounded px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Enviar</button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div key={t.id} className="rounded-md border p-2 text-xs" style={{ borderColor: border }}>
-                      <p className="font-semibold" style={{ color: text }}>{t.title}</p>
-                      <p className="mt-0.5" style={{ color: dim }}>
-                        {t.client} · {STATUS_LABEL[t.status] || t.status}
-                        {t.assignee_id ? ` · ${allPeople.find((p) => p.id === t.assignee_id)?.name || "Responsable"}` : ""}
-                        {t.due_date ? ` · vence ${t.due_date}` : ""}
-                      </p>
-                    </div>
-                  )))}
-                </div>
-              )}
             </div>
-
-            {/* Pop-up: motivo del cambio de fecha (queda como soporte, insumo para analítica). */}
-            {dueEdit && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={(e) => { if (e.target === e.currentTarget) setDueEdit(null); }}>
-                <div className="w-full max-w-sm rounded-md border p-4 shadow-2xl" style={{ borderColor: "#B76E00", background: card }}>
-                  <p className="text-sm font-semibold" style={{ color: text }}>Cambio de fecha</p>
-                  <p className="mt-1 text-xs" style={{ color: dim }}>De <b>{dueEdit.old}</b> a <b>{dueEdit.date}</b>. Di por qué se mueve (queda registrado).</p>
-                  <textarea value={dueReason} onChange={(e) => setDueReason(e.target.value)} rows={3} autoFocus placeholder="Motivo del cambio de fecha"
-                    className="mt-2 w-full rounded-md border px-2 py-1.5 text-sm" style={{ borderColor: border, background: bg, color: text }} />
-                  <div className="mt-2 flex gap-2">
-                    <button type="button" disabled={!dueReason.trim()} onClick={confirmDueChange} className="flex-1 rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#B76E00" }}>Aceptar</button>
-                    <button type="button" onClick={() => setDueEdit(null)} className="rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: border, color: dim }}>Cancelar</button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
