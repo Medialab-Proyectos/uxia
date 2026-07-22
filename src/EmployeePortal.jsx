@@ -47,6 +47,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("active");
   const [novFilter, setNovFilter] = React.useState("all"); // sub-filtro de novedad dentro de Activas
+  const [mineOnly, setMineOnly] = React.useState(false);    // líder: ver solo las que YO creé
   const [q, setQ] = React.useState("");
   const [crResolve, setCrResolve] = React.useState(null); // { task, cr } al resolver un cambio
   const [crComment, setCrComment] = React.useState("");
@@ -249,6 +250,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
     // Para el líder, el desplegable de subproyecto también acota la lista.
     if (myLeads.length && leadClient && t.client !== leadClient) return false;
+    if (mineOnly && String(t.created_by || "").toLowerCase() !== email) return false; // filtro "creadas por mí"
     // Buscador por palabras (ignora el filtro de estado para encontrar también finalizadas).
     if (qLow) return `${t.title || ""} ${t.client || ""} ${nameOf(t.company_id)} ${t.task_ref || ""} ${t.role || ""}`.toLowerCase().includes(qLow);
     // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
@@ -619,6 +621,14 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             </button>
             );
           })}
+          {/* Filtro de líder: solo las actividades que YO creé. */}
+          {myLeads.length > 0 && (
+            <button type="button" onClick={() => setMineOnly((v) => !v)}
+              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
+              style={mineOnly ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
+              Creadas por mí
+            </button>
+          )}
         </div>
         {/* Sub-filtro de novedades: SOLO aparece dentro de "Activas" (no es un filtro hermano). */}
         {statusFilter === "active" && !qLow && (
