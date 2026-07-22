@@ -461,6 +461,10 @@ function personById(people, id) {
 }
 
 function personBelongsToCompany(person, companyId) {
+  // Si la persona tiene una empresa fija (externo atado a su empresa), solo aparece en ESA empresa.
+  const single = person?.companyId || "";
+  if (single) return single === companyId;
+  // Si no, back-compat: lista de empresas o global (equipo MediaLab, disponible en todas).
   const companyIds = Array.isArray(person?.companyIds) ? person.companyIds : [];
   return companyIds.length === 0 || companyIds.includes(companyId);
 }
@@ -602,6 +606,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     onFocusHandled?.();
   }, [focus]);
   const [asideOpen, setAsideOpen] = useState(false);
+  const [asideTab, setAsideTab] = useState("empresas"); // "empresas" | "personas"
   const [globalOpen, setGlobalOpen] = useState(false);
   const [globalText, setGlobalText] = useState("");
   const [inboxText, setInboxText] = useState(starterText);
@@ -612,7 +617,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [newClientName, setNewClientName] = useState("");
   const [newClientTool, setNewClientTool] = useState("No aplica");
   const [newClientBoardUrl, setNewClientBoardUrl] = useState("");
-  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "" });
+  const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "", companyId: "" });
   const [contextPreview, setContextPreview] = useState({});
   const [loadedState, setLoadedState] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
@@ -940,13 +945,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
 
   // Da/actualiza el acceso del empleado al portal (correo + contraseña) vía la función
   // serverless segura (usa service_role del lado servidor, no en el navegador).
-  async function grantAccess(email, password) {
+  async function grantAccess(email, password, companyId = "", personId = "") {
     if (!email || !password) return;
     try {
       const res = await fetch("/api/employee", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, companyId, personId }),
       });
       const data = await res.json().catch(() => ({}));
       setNotice(res.ok ? `Acceso ${data.created ? "creado" : "actualizado"} para ${email}.` : `No se pudo dar acceso: ${data.error || res.status}`);
@@ -977,22 +982,27 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       setNotice("La contraseña de acceso debe tener al menos 6 caracteres.");
       return;
     }
-    if (password && email) grantAccess(email, password);
+    const personId = uid("person");
+    const companyId = newPerson.companyId || "";
+    if (password && email) grantAccess(email, password, companyId, personId);
     setPeople((current) => [
       ...current,
       {
-        id: uid("person"),
+        id: personId,
         name,
         email,
         phone,
         type: newPerson.type,
         chatUrl: newPerson.chatUrl.trim(),
         contactMethod: newPerson.contactMethod || "auto",
-        companyIds: [], // persona global: disponible para asignar en todas las empresas
+        // Empresa a la que pertenece. Vacío = equipo MediaLab (global, asignable en todas).
+        companyId,
+        companyIds: [],
       },
     ]);
-    setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "" });
-    setNotice(`Persona agregada: ${name}.`);
+    setNewPerson({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "", companyId: "" });
+    const compName = companies.find((c) => c.id === companyId)?.name;
+    setNotice(`Persona agregada: ${name}${compName ? ` · ${compName}` : " · equipo MediaLab"}.`);
   }
 
   function updatePerson(id, patch) {
@@ -1759,6 +1769,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                     Ocultar <ChevronRight size={14} />
                   </button>
                 </div>
+                {/* Tabs para alternar entre empresas y personas (antes se apilaban las dos). */}
+                <div className="flex gap-1 rounded-md border border-[#E4DED6] bg-[#F9FAFB] p-1">
+                  {[["empresas", "Empresas", Building2], ["personas", "Personas", UserRound]].map(([id, label, Icon]) => (
+                    <button key={id} type="button" onClick={() => setAsideTab(id)}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold"
+                      style={asideTab === id ? { background: "#17727A", color: "#fff" } : { background: "transparent", color: "#667085" }}>
+                      <Icon size={15} /> {label}
+                    </button>
+                  ))}
+                </div>
+                {asideTab === "empresas" && (<>
                 <div className="rounded-md border border-[#E4DED6] bg-white p-3 shadow-sm">
                   <label className="block">
                     <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Nueva empresa</span>
@@ -1801,7 +1822,10 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   </button>
                   );
                 })}
+                </>)}
+                {asideTab === "personas" && (
                 <PeoplePanel
+                  companies={companies}
                   people={people}
                   newPerson={newPerson}
                   onNewPerson={setNewPerson}
@@ -1810,6 +1834,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   onDeletePerson={deletePerson}
                   onGrantAccess={grantAccess}
                 />
+                )}
               </aside>
             )}
             </div>
@@ -2397,7 +2422,7 @@ function AccessControl({ person, onGrantAccess }) {
           <button
             type="button"
             disabled={saving || pwd.trim().length < 6}
-            onClick={async () => { setSaving(true); await onGrantAccess?.(email, pwd.trim()); setSaving(false); setPwd(""); }}
+            onClick={async () => { setSaving(true); await onGrantAccess?.(email, pwd.trim(), person.companyId || "", person.id || ""); setSaving(false); setPwd(""); }}
             className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
             style={{ background: "#17727A" }}
           >
@@ -2409,7 +2434,8 @@ function AccessControl({ person, onGrantAccess }) {
   );
 }
 
-function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePerson, onDeletePerson, onGrantAccess }) {
+function PeoplePanel({ companies = [], people, newPerson, onNewPerson, onAddPerson, onUpdatePerson, onDeletePerson, onGrantAccess }) {
+  const companyNameOf = (id) => companies.find((c) => c.id === id)?.name || "";
   return (
     <div className="rounded-md border border-[#E4DED6] bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-[#1D2939]">Personas e integrantes</h3>
@@ -2420,6 +2446,17 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
           placeholder="Nombre"
           className="w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm"
         />
+        <label className="block text-xs font-semibold text-[#667085]">Empresa
+          <select
+            value={newPerson.companyId || ""}
+            onChange={(event) => onNewPerson({ ...newPerson, companyId: event.target.value })}
+            className="mt-1 w-full rounded-md border border-[#D0D5DD] px-3 py-2 text-sm font-normal text-[#344054]"
+          >
+            <option value="">Equipo MediaLab (todas las empresas)</option>
+            {companies.filter((c) => c.id !== "por-asignar").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <span className="mt-1 block font-normal text-[#8b8272]">Externo de una empresa: elígela para que solo vea/aparezca en esa empresa y entre por su link.</span>
+        </label>
         <label className="block text-xs font-semibold text-[#667085]">Correo
           <input
             value={newPerson.email}
@@ -2487,6 +2524,7 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
           <details key={person.id} className="rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-2">
             <summary className="cursor-pointer text-sm font-semibold text-[#344054]">
               {person.name || "Persona sin nombre"} <span className="font-normal text-[#667085]">({person.type || "Empleado MediaLab"})</span>
+              <span className="ml-1 rounded-full bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-semibold text-[#17727A]">{person.companyId ? companyNameOf(person.companyId) : "Equipo MediaLab"}</span>
             </summary>
             <div className="mt-2 space-y-1">
               <input value={person.name} aria-label="Nombre de la persona" placeholder="Nombre" onChange={(event) => onUpdatePerson(person.id, { name: event.target.value })} className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]" />
@@ -2510,6 +2548,15 @@ function PeoplePanel({ people, newPerson, onNewPerson, onAddPerson, onUpdatePers
                 className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
               >
                 {PERSON_TYPES.map((type) => <option key={type}>{type}</option>)}
+              </select>
+              <select
+                value={person.companyId || ""}
+                aria-label="Empresa de la persona"
+                onChange={(event) => onUpdatePerson(person.id, { companyId: event.target.value })}
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]"
+              >
+                <option value="">Empresa: Equipo MediaLab (todas)</option>
+                {companies.filter((c) => c.id !== "por-asignar").map((c) => <option key={c.id} value={c.id}>Empresa: {c.name}</option>)}
               </select>
               <select
                 value={person.contactMethod || "auto"}

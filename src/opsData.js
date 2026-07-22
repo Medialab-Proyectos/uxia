@@ -103,10 +103,12 @@ const taskToRow = (task) => ({
 const rowToPerson = (row) => ({
   id: row.id, name: row.name, email: row.email || "", phone: row.phone || "",
   type: row.type || "Empleado MediaLab", chatUrl: row.chat_url || "", contactMethod: row.contact_method || "auto",
+  companyId: row.company_id || "", // empresa a la que pertenece (vacío = equipo MediaLab / global)
 });
 const personToRow = (p) => ({
   id: p.id, name: p.name || "Persona sin nombre", email: p.email || "", phone: p.phone || "",
   type: p.type || "Empleado MediaLab", chat_url: p.chatUrl || "", contact_method: p.contactMethod || "auto",
+  company_id: p.companyId || null,
 });
 
 const rowToSourceRecord = (row) => ({
