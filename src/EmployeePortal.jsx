@@ -88,7 +88,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setMe(person);
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
-        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by";
+        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by,assignee_id,prev_due_date";
         // Acota la vista SOLO si la persona pertenece a una empresa fija (externo). Los de MediaLab
         // (sin empresa) ven TODAS sus tareas asignadas, aunque estén repartidas entre clientes.
         const myCompany = person.company_id || "";
