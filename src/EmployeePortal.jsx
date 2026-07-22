@@ -83,7 +83,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setMe(person);
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
-        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points";
+        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by";
         // Acota la vista SOLO si la persona pertenece a una empresa fija (externo). Los de MediaLab
         // (sin empresa) ven TODAS sus tareas asignadas, aunque estén repartidas entre clientes.
         const myCompany = person.company_id || "";
@@ -655,6 +655,20 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                     {iCreated(t) && (
                       <div className="mb-3 rounded-md border p-2" style={{ borderColor: "#17727A", background: dark ? "#12201F" : "#F0FAF8" }}>
                         <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "#17727A" }}>Tú creaste esta actividad · gestión de líder</p>
+                        {/* Edición de la actividad (se guarda al salir del campo) */}
+                        <input defaultValue={t.title || ""} onBlur={(e) => { if (e.target.value !== t.title) patchLeadTask(t.id, { title: e.target.value }); }} placeholder="Título"
+                          className="mb-1.5 w-full rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
+                        <textarea defaultValue={t.description || ""} onBlur={(e) => { if (e.target.value !== (t.description || "")) patchLeadTask(t.id, { description: e.target.value }); }} rows={2} placeholder="Descripción / historia"
+                          className="mb-1.5 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                          <input type="date" value={t.due_date || ""} onChange={(e) => patchLeadTask(t.id, { due_date: e.target.value || null })}
+                            className="rounded border px-1.5 py-1" style={{ borderColor: border, background: bg, color: text }} title="Fecha" />
+                          <select value={t.assignee_id || ""} onChange={(e) => patchLeadTask(t.id, { assignee_id: e.target.value || null })}
+                            className="rounded border px-1.5 py-1" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
+                            <option value="">Sin responsable</option>
+                            {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </div>
                         <div className="flex flex-wrap gap-1.5">
                           {LEAD_STATUSES.map(([v, l]) => {
                             const on = (t.status === "done" ? "review" : t.status) === v;
