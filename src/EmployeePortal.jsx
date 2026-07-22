@@ -106,11 +106,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           const pplRes = await fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type`, { headers });
           setAllPeople(pplRes.ok ? await pplRes.json() : []);
           setLeadCompany((cur) => cur || leadRows[0].company_id); // empresa por defecto
-          // Las tareas que el líder CREÓ se suman a su lista activa (aunque estén asignadas a otro).
-          const mineRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?created_by=eq.${encodeURIComponent(email)}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
-          const mine = mineRes.ok ? await mineRes.json() : [];
+          // El líder ve TODAS las tareas de sus subproyectos (RLS lead_read_tasks) + sus asignadas.
+          const scopeRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
+          const scope = scopeRes.ok ? await scopeRes.json() : [];
           const byId = new Map(assigned.map((t) => [t.id, t]));
-          for (const t of mine) if (!byId.has(t.id)) byId.set(t.id, t);
+          for (const t of scope) if (!byId.has(t.id)) byId.set(t.id, t);
           setTasks([...byId.values()]);
         } else {
           setAllPeople([]);
@@ -411,6 +411,12 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       if (patch.status === "review") notifyEvent(token, { type: "review", taskId: id });
     } catch (e) { setError(String(e?.message || "No se pudo guardar el cambio.")); }
   }
+  async function deleteLeadTask(id) {
+    setTasks((cur) => cur.filter((t) => t.id !== id));
+    setOpenId(null);
+    try { await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, { method: "DELETE", headers: { ...headers, Prefer: "return=minimal" } }); }
+    catch { /* ignore */ }
+  }
   async function addLeadCR(t) {
     const txt = crDraft.trim();
     if (!txt) return;
@@ -681,9 +687,20 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                             );
                           })}
                         </div>
-                        <div className="mt-2">
+                        {/* Comentarios del responsable */}
+                        {Array.isArray(t.comments) && t.comments.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {t.comments.map((c, i) => (
+                              <li key={i} className="rounded border px-2 py-1 text-[11px]" style={{ borderColor: border, background: bg }}>
+                                <span className="font-semibold" style={{ color: text }}>{c.author || (c.role === "admin" ? "Admin" : "Responsable")}: </span>
+                                <span style={{ color: dim }}>{c.text}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-2 flex items-center justify-between gap-2">
                           {crFor === t.id ? (
-                            <div className="flex gap-1.5">
+                            <div className="flex flex-1 gap-1.5">
                               <input value={crDraft} onChange={(e) => setCrDraft(e.target.value)} placeholder="¿Qué cambio pides al responsable?" onKeyDown={(e) => e.key === "Enter" && addLeadCR(t)}
                                 className="min-w-0 flex-1 rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
                               <button type="button" onClick={() => addLeadCR(t)} disabled={!crDraft.trim()} className="rounded px-2 py-1 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Enviar</button>
@@ -692,6 +709,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                           ) : (
                             <button type="button" onClick={() => { setCrFor(t.id); setCrDraft(""); }} className="text-xs font-semibold" style={{ color: "#B54708" }}>+ Pedir cambios (request review)</button>
                           )}
+                          <button type="button" onClick={() => deleteLeadTask(t.id)} className="shrink-0 text-xs font-semibold" style={{ color: "#B42318" }}>Eliminar</button>
                         </div>
                       </div>
                     )}
@@ -720,7 +738,22 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                       </div>
                     )}
 
-                    {(() => {
+                    {/* Comentarios visibles también en las que NO son mías ni asignadas a mí (solo lectura). */}
+                    {!iCreated(t) && t.assignee_id !== me?.id && Array.isArray(t.comments) && t.comments.length > 0 && (
+                      <ul className="mb-2 space-y-1.5">
+                        {t.comments.map((c, i) => (
+                          <li key={i} className="rounded-md border p-2 text-xs" style={{ borderColor: border }}>
+                            <span className="font-semibold">{c.author}</span> <span style={{ color: dim }}>· {String(c.at || "").slice(0, 10)}</span>
+                            <p className="mt-0.5" style={{ color: dim }}>{c.text}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {!iCreated(t) && t.assignee_id !== me?.id && (
+                      <p className="text-[11px]" style={{ color: dim }}>Solo lectura — esta actividad no la creaste tú.</p>
+                    )}
+                    {/* Controles de RESPONSABLE (estado + comentario + guardar): solo si la tarea es tuya. */}
+                    {t.assignee_id === me?.id && (() => {
                       const st = saveState[t.id];
                       const pStatus = pending[t.id]?.status ?? t.status; // estado elegido (aún sin guardar)
                       const dirtyHere = isDirty(t);
