@@ -1375,6 +1375,10 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       priority: "media",
       status: "ready",
       dueDate: addDays(2),
+      // Tarea RECIÉN creada, aún sin guardar: la fecha por defecto no es un compromiso todavía,
+      // así que cambiarla no pide motivo hasta el primer "Guardar tarea". No se persiste (taskToRow
+      // no lo mapea).
+      _unsaved: true,
       deliveryDate: "",
       source: "Manual",
       audience: "Interno MediaLab",
@@ -1406,6 +1410,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       priority: "media",
       status: "ready",
       dueDate: addDays(2),
+      _unsaved: true, // ver addManualTask: sin compromiso de fecha hasta el primer guardado
       deliveryDate: "",
       source: "Manual",
       audience: "Interno MediaLab",
@@ -2594,6 +2599,8 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     const patch = {};
     if (aiCreated && !task.adminTouchedAt) patch.adminTouchedAt = new Date().toISOString();
     if (task.mdTouchedAt) patch.mdTouchedAt = "";
+    // Al GUARDAR, la tarea deja de ser "recién creada": su fecha ya es un compromiso guardado.
+    if (task._unsaved) patch._unsaved = false;
     if (Object.keys(patch).length) onChangeTask(task.id, patch);
     try {
       await onSaveTask(task.id);
@@ -3098,11 +3105,11 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
               onChange={(event) => {
                 const nueva = event.target.value;
                 if (nueva === task.dueDate) return;
-                // Se pone directo (sin pedir motivo) cuando: es la PRIMERA fecha, o ya se justificó
-                // el cambio en este ciclo y la tarjeta todavía NO se ha guardado (corregir un error
-                // no debe volver a pedir feedback).
-                if (!task.dueDate) { onChangeTask(task.id, { dueDate: nueva }); setDueJustified(true); return; }
-                if (dueJustified) { onChangeTask(task.id, { dueDate: nueva }); return; }
+                // Se pone directo (sin pedir motivo) cuando: es la PRIMERA fecha; la tarea todavía
+                // NO se ha guardado (recién creada: su fecha por defecto no es un compromiso aún);
+                // o ya se justificó el cambio en este ciclo y no se ha vuelto a guardar (corregir un
+                // error no debe re-preguntar).
+                if (!task.dueDate || task._unsaved || dueJustified) { onChangeTask(task.id, { dueDate: nueva }); return; }
                 // Cambiar una fecha YA GUARDADA exige motivo: se abre el popup y no se aplica aún.
                 if (nueva) { setDueDraft(nueva); setDueReason(""); }
               }}
@@ -3339,7 +3346,16 @@ function CompanyPanel({
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const [openTaskId, setOpenTaskId] = useState(null);
-  useEffect(() => { if (highlightId) setOpenTaskId(highlightId); }, [highlightId]);
+  // Subproyectos con la lista "Tareas del subproyecto" desplegada (Set de nombres de client).
+  const [expandedTaskLists, setExpandedTaskLists] = useState(() => new Set());
+  useEffect(() => {
+    if (!highlightId) return;
+    setOpenTaskId(highlightId);
+    // Al crear/resaltar una tarea, ABRE la lista de tareas del subproyecto donde cayó (si estaba
+    // colapsada no se veía la tarea nueva).
+    const t = (tasks || []).find((x) => x.id === highlightId);
+    if (t && t.client) setExpandedTaskLists((prev) => new Set(prev).add(t.client));
+  }, [highlightId, tasks]);
   const [editCompanyName, setEditCompanyName] = useState(null); // string en edición o null
   const [editClient, setEditClient] = useState(null); // { old, value } o null
   const [showKpi, setShowKpi] = useState(false);
@@ -3831,7 +3847,9 @@ function CompanyPanel({
                     </div>
                   </details>
 
-                  <details className="border-t pt-2" style={{ borderTopColor: `${accent}66` }}>
+                  <details className="border-t pt-2" style={{ borderTopColor: `${accent}66` }}
+                    open={expandedTaskLists.has(client)}
+                    onToggle={(e) => setExpandedTaskLists((prev) => { const n = new Set(prev); if (e.currentTarget.open) n.add(client); else n.delete(client); return n; })}>
                     <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5">
                         <ChevronRight size={16} className="ops-caret" style={{ color: accent }} />
