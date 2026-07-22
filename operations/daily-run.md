@@ -758,3 +758,16 @@ de `supabase/schema-insumos-pendientes.sql`).
 Así el CEO sube insumos desde el celular durante el día y, en casa/remoto, le dice a
 Claude Code que corra el MD: las tareas quedan creadas, las imágenes procesadas se
 borran, y solo queda información textual accionable.
+
+## Notificaciones (PWA)
+
+La app se instala como aplicación (PWA) en Android/iOS/Windows/Mac desde el navegador
+("Instalar app" / "Añadir a inicio"). El botón de campana ⤳ (BellRing) en el header pide
+permiso y suscribe el dispositivo al push.
+
+El cron `api/notify-cron` corre 1 vez al día (13:00 UTC) y envía a cada quien un **resumen de
+pendientes**: el empleado recibe sus vencidas / por vencer / nuevas / actualizadas por el MD /
+con cambios solicitados; el CEO recibe cuántas esperan su revisión y cuántas están vencidas.
+Solo notifica si hay algo pendiente. Correr el MD genera novedades que el empleado verá en el
+siguiente digest. Requiere VAPID en el entorno y la tabla `push_subscriptions`
+(`migration-push.sql`).

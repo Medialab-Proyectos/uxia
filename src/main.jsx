@@ -1,11 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock } from "lucide-react";
+import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
 import * as opsData from "./opsData.js";
-import { companyFromUrl } from "./companyLink.js";
+import { resolveCompany } from "./companyLink.js";
+import { registerServiceWorker, requestNotificationPermission, subscribeToPush, notificationState, pushSupported } from "./pwa.js";
 import logoMediaLab from "./logos/logo.svg";
 
 const AUTH_STORE_KEY = "uxia.supabaseSession";
@@ -77,7 +78,7 @@ const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
 function AppShell() {
   // Login por empresa: si la URL trae ?c=<token>, se identifica la empresa del empleado externo
   // (branding + vista acotada). Sin token = link principal (MediaLab / CEO).
-  const linkCompanyId = React.useMemo(() => companyFromUrl(), []);
+  const linkCompanyId = React.useMemo(() => resolveCompany(), []);
   const [brand, setBrand] = React.useState(null); // { id, name, logoUrl } de la empresa del link
   React.useEffect(() => {
     if (!linkCompanyId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
@@ -90,6 +91,24 @@ function AppShell() {
       if (c) setBrand({ id: c.id, name: c.name, logoUrl: c.logo?.url || "" });
     }).catch(() => {});
   }, [linkCompanyId]);
+
+  // PWA: registra el service worker una vez (instalación + push).
+  const [notifPerm, setNotifPerm] = React.useState(() => notificationState());
+  React.useEffect(() => { registerServiceWorker(); }, []);
+  // Con sesión y permiso ya concedido, re-suscribe este dispositivo al push (idempotente).
+  React.useEffect(() => {
+    if (session?.access_token && notifPerm === "granted") {
+      subscribeToPush({ token: session.access_token, companyId: linkCompanyId });
+    }
+  }, [session, notifPerm, linkCompanyId]);
+
+  async function enableNotifications() {
+    const p = await requestNotificationPermission();
+    setNotifPerm(p);
+    if (p === "granted" && session?.access_token) {
+      await subscribeToPush({ token: session.access_token, companyId: linkCompanyId });
+    }
+  }
   // El login SIEMPRE abre el Centro de Operaciones (prioridad). El Radar es una página
   // independiente a la que se entra por el menú; no es la primera vista.
   const [module, setModule] = React.useState("operations");
@@ -348,6 +367,12 @@ function AppShell() {
                 </div>
               )}
             </div>
+            {pushSupported() && notifPerm !== "granted" && (
+              <button type="button" onClick={enableNotifications} title="Activar avisos en este dispositivo" aria-label="Activar avisos"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: dk ? "#28313E" : "#E7E0D5", color: "#E8751A" }}>
+                <BellRing size={18} />
+              </button>
+            )}
             <button type="button" onClick={toggleTheme} className="inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: dk ? "#28313E" : "#E7E0D5", color: "#E8751A" }} aria-label="Tema">
               {dk ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -424,6 +449,11 @@ function AppShell() {
                   </div>
                 )}
               </div>
+              {pushSupported() && notifPerm !== "granted" && (
+                <button type="button" onClick={enableNotifications} aria-label="Activar avisos" title="Activar avisos en este dispositivo" className={iconBtn} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: "#E8751A" }}>
+                  <BellRing size={18} />
+                </button>
+              )}
               <button type="button" onClick={toggleTheme} aria-label={dark ? "Modo claro" : "Modo oscuro"} title={dark ? "Modo claro" : "Modo oscuro"} className={iconBtn} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: "#E8751A" }}>
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
               </button>

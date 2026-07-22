@@ -40,3 +40,29 @@ export function companyFromUrl() {
     return "";
   }
 }
+
+const STORE_KEY = "uxia.company";
+
+// Empresa efectiva del dispositivo. Prioridad: token en la URL (?c=) → se guarda para futuras
+// aperturas. Si no hay en la URL, usa el último guardado. Esto es CLAVE para la PWA instalada:
+// abre en start_url ("/") SIN el ?c=, y aquí recupera el token que se guardó cuando el usuario
+// entró por su link. No debilita el candado (es el mismo dispositivo que ya tenía acceso legítimo).
+export function resolveCompany() {
+  if (typeof window === "undefined") return "";
+  const fromUrl = companyFromUrl();
+  try {
+    if (fromUrl) {
+      window.localStorage.setItem(STORE_KEY, fromUrl);
+      return fromUrl;
+    }
+    return window.localStorage.getItem(STORE_KEY) || "";
+  } catch {
+    return fromUrl;
+  }
+}
+
+// Devuelve el token (?c=) actual o el reconstruido desde el guardado, para start_url / links.
+export function currentCompanyToken() {
+  const id = resolveCompany();
+  return id ? encodeCompanyToken(id) : "";
+}
