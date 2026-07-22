@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip } from "lucide-react";
 import { notifyEvent } from "./notify.js";
 import * as opsData from "./opsData.js";
 
@@ -59,8 +59,10 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [pwdSaving, setPwdSaving] = React.useState(false);
   const [myLeads, setMyLeads] = React.useState([]);             // subproyectos que lidera (si aplica)
   const [allPeople, setAllPeople] = React.useState([]);         // personas (para asignar; líder puede leerlas)
-  const [myCreated, setMyCreated] = React.useState([]);         // tareas creadas por el líder
-  const [leadOpen, setLeadOpen] = React.useState(false);        // panel de líder abierto
+  const [leadCompany, setLeadCompany] = React.useState("");     // empresa seleccionada en coordinación
+  const [leadClient, setLeadClient] = React.useState("");       // subproyecto seleccionado ("" = todos los que lidera)
+  const [leadScopeTasks, setLeadScopeTasks] = React.useState([]); // tareas del alcance seleccionado
+  const [createOpen, setCreateOpen] = React.useState(false);    // form "crear actividad" abierto
   const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "", priority: "media" }); // form nueva tarea
   const [leadBusy, setLeadBusy] = React.useState(false);
   const [leadMsg, setLeadMsg] = React.useState("");
@@ -104,9 +106,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         if (leadRows.length) {
           const pplRes = await fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type`, { headers });
           setAllPeople(pplRes.ok ? await pplRes.json() : []);
-          const mineRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?created_by=eq.${encodeURIComponent(email)}&select=${base},created_by&order=due_date.asc`, { headers });
-          setMyCreated(mineRes.ok ? await mineRes.json() : []);
-        } else { setAllPeople([]); setMyCreated([]); }
+          setLeadCompany((cur) => cur || leadRows[0].company_id); // empresa por defecto
+        } else { setAllPeople([]); }
       } else {
         setTasks([]);
       }
@@ -335,11 +336,28 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     } finally { setPwdSaving(false); }
   }
 
-  // ---- Líder de subproyecto: crear tareas/insumos y editar SOLO las que él crea ----
+  // ---- Coordinación de subproyectos (líder): navegar por empresa → subproyecto, crear actividad,
+  //      subir insumos y editar SOLO las tareas que él crea. ----
   const leadKey = (l) => `${l.company_id}|||${l.client}`;
   const companyNameOf = (id) => (companies.find((c) => c.id === id)?.name || id);
+  const scopeSelect = "id,title,description,client,company_id,status,priority,due_date,assignee_id,created_by";
+  const ledCompanies = React.useMemo(() => {
+    const ids = [...new Set(myLeads.map((l) => l.company_id))];
+    return ids.map((id) => ({ id, name: companyNameOf(id) }));
+  }, [myLeads, companies]);
+  const ledClients = React.useMemo(() => myLeads.filter((l) => l.company_id === leadCompany).map((l) => l.client), [myLeads, leadCompany]);
+
+  const loadLeadScope = React.useCallback(async () => {
+    if (!leadCompany) { setLeadScopeTasks([]); return; }
+    const cf = leadClient ? `&client=eq.${encodeURIComponent(leadClient)}` : "";
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?company_id=eq.${encodeURIComponent(leadCompany)}${cf}&select=${scopeSelect}&order=due_date.asc`, { headers });
+    setLeadScopeTasks(res.ok ? await res.json() : []);
+  }, [leadCompany, leadClient, headers]);
+  React.useEffect(() => { if (myLeads.length) loadLeadScope(); }, [loadLeadScope, myLeads.length]);
+
   async function createLeadTask() {
-    const lead = myLeads.find((l) => leadKey(l) === lf.key) || myLeads[0];
+    const key = lf.key || (leadClient ? `${leadCompany}|||${leadClient}` : (myLeads[0] && leadKey(myLeads[0])));
+    const lead = myLeads.find((l) => leadKey(l) === key) || myLeads[0];
     if (!lead || !lf.title.trim()) { setLeadMsg("Elige subproyecto y escribe un título."); return; }
     setLeadBusy(true); setLeadMsg("");
     try {
@@ -355,38 +373,38 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.message || d.hint || `Error ${res.status}`); }
       if (row.assignee_id) notifyEvent(token, { type: "assigned", taskId: row.id });
-      setLeadMsg("Tarea creada ✓");
+      setLeadMsg("Actividad creada ✓");
       setLf((f) => ({ ...f, title: "", description: "", dueDate: "", assigneeId: "" }));
-      await load();
-    } catch (e) { setLeadMsg(String(e?.message || "No se pudo crear la tarea.")); }
+      setCreateOpen(false);
+      loadLeadScope(); load();
+    } catch (e) { setLeadMsg(String(e?.message || "No se pudo crear la actividad.")); }
     finally { setLeadBusy(false); }
   }
-  async function uploadLeadInsumo(key, file) {
-    const lead = myLeads.find((l) => leadKey(l) === key);
-    if (!lead || !file) return;
+  async function uploadLeadInsumo(companyId, client, file) {
+    if (!client || !file) { setLeadMsg("Elige un subproyecto para el insumo."); return; }
     setLeadBusy(true); setLeadMsg("");
     try {
       const kind = /^image\//.test(file.type || "") ? "imagen" : "texto";
-      await opsData.saveInsumo(token, { companyId: lead.company_id, client: lead.client, file, kind });
-      setLeadMsg(`Insumo subido a ${lead.client} ✓`);
+      await opsData.saveInsumo(token, { companyId, client, file, kind });
+      setLeadMsg(`Insumo subido a ${client} ✓`);
     } catch (e) { setLeadMsg(String(e?.message || "No se pudo subir el insumo.")); }
     finally { setLeadBusy(false); }
   }
+  const iCreated = (t) => String(t.created_by || "").toLowerCase() === email; // ¿la creé yo? (editable)
   async function patchMyTask(id, patch) {
-    setMyCreated((cur) => cur.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    setLeadScopeTasks((cur) => cur.map((t) => (t.id === id ? { ...t, ...patch } : t)));
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, {
         method: "PATCH", headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
         body: JSON.stringify(patch),
       });
       if (!res.ok) throw new Error(`Error ${res.status}`);
-      // Finalizar (= review) avisa al admin para que la cierre. Reasignar avisa al nuevo responsable.
-      if (patch.status === "review") notifyEvent(token, { type: "review", taskId: id });
+      if (patch.status === "review") notifyEvent(token, { type: "review", taskId: id }); // finalizar → admin
       if (patch.assignee_id) notifyEvent(token, { type: "assigned", taskId: id });
     } catch (e) { setLeadMsg(String(e?.message || "No se pudo guardar el cambio.")); }
   }
   async function deleteMyTask(id) {
-    setMyCreated((cur) => cur.filter((t) => t.id !== id));
+    setLeadScopeTasks((cur) => cur.filter((t) => t.id !== id));
     try { await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, { method: "DELETE", headers: { ...headers, Prefer: "return=minimal" } }); }
     catch { /* ignore */ }
   }
@@ -437,28 +455,66 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           </div>
         )}
 
-        {/* PANEL DE LÍDER: solo si lideras subproyectos. Crear tareas/insumos + editar las tuyas. */}
+        {/* COORDINACIÓN DE SUBPROYECTOS (líder): navega por empresa → subproyecto, crea actividad,
+            sube insumos y edita SOLO las actividades que él crea. */}
         {myLeads.length > 0 && (
-          <div className="mb-4 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
-            <button type="button" onClick={() => { setLeadOpen((v) => !v); if (!lf.key && myLeads[0]) setLf((f) => ({ ...f, key: leadKey(myLeads[0]) })); }}
-              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
+          <section className="mb-5 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
+            <div className="flex flex-col gap-2 border-b px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: border }}>
               <span className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: "#17727A" }}>
-                <ListChecks size={16} /> Lideras {myLeads.length} subproyecto{myLeads.length > 1 ? "s" : ""}
+                <ListChecks size={16} /> Coordinación de subproyectos
               </span>
-              <span className="text-xs" style={{ color: dim }}>{leadOpen ? "Ocultar" : "Gestionar"}</span>
-            </button>
-            {leadOpen && (
-              <div className="border-t px-3 py-3" style={{ borderColor: border }}>
-                {/* Crear nueva tarea */}
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>Nueva tarea</p>
-                <div className="space-y-2">
-                  <select value={lf.key} onChange={(e) => setLf((f) => ({ ...f, key: e.target.value }))}
-                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }}>
-                    {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
-                  </select>
-                  <input value={lf.title} onChange={(e) => setLf((f) => ({ ...f, title: e.target.value }))} placeholder="Título de la tarea"
+              {ledCompanies.length > 1 ? (
+                <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
+                  className="rounded-md border px-2 py-1.5 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }}>
+                  {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              ) : (
+                <span className="text-sm font-semibold" style={{ color: text }}>{companyNameOf(leadCompany)}</span>
+              )}
+            </div>
+            <div className="px-3 py-3">
+              {/* Subproyectos que lidera en esta empresa (Todos + cada uno) */}
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => setLeadClient("")}
+                  className="rounded-full border px-2.5 py-1 text-xs font-semibold"
+                  style={leadClient === "" ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
+                  Todos
+                </button>
+                {ledClients.map((c) => (
+                  <button key={c} type="button" onClick={() => setLeadClient(c)}
+                    className="rounded-full border px-2.5 py-1 text-xs font-semibold"
+                    style={leadClient === c ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+
+              {/* Acciones: crear actividad + subir insumo al subproyecto seleccionado */}
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button type="button"
+                  onClick={() => { setCreateOpen((v) => !v); setLf((f) => ({ ...f, key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : "") })); }}
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
+                  <Send size={14} /> {createOpen ? "Cerrar" : "Crear actividad"}
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Elige un subproyecto para el insumo"}>
+                  <Paperclip size={14} /> Subir insumo
+                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
+                </label>
+              </div>
+              {leadMsg && <p className="mb-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
+
+              {/* Formulario "Crear actividad" (estructura completa; estados los define el admin al cerrar) */}
+              {createOpen && (
+                <div className="mb-3 space-y-2 rounded-md border p-3" style={{ borderColor: "#17727A" }}>
+                  <label className="block text-xs" style={{ color: dim }}>Subproyecto
+                    <select value={lf.key} onChange={(e) => setLf((f) => ({ ...f, key: e.target.value }))}
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
+                      {myLeads.filter((l) => l.company_id === leadCompany).map((l) => <option key={leadKey(l)} value={leadKey(l)}>{l.client}</option>)}
+                    </select>
+                  </label>
+                  <input value={lf.title} onChange={(e) => setLf((f) => ({ ...f, title: e.target.value }))} placeholder="Título de la actividad"
                     className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
-                  <textarea value={lf.description} onChange={(e) => setLf((f) => ({ ...f, description: e.target.value }))} rows={2} placeholder="Descripción (opcional)"
+                  <textarea value={lf.description} onChange={(e) => setLf((f) => ({ ...f, description: e.target.value }))} rows={3} placeholder="Descripción / historia para el responsable"
                     className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <label className="flex-1 text-xs" style={{ color: dim }}>Fecha
@@ -481,67 +537,65 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                   </label>
                   <button type="button" onClick={createLeadTask} disabled={leadBusy || !lf.title.trim()}
                     className="w-full rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
-                    {leadBusy ? "Guardando…" : "Crear tarea"}
+                    {leadBusy ? "Guardando…" : "Crear actividad"}
                   </button>
                 </div>
+              )}
 
-                {/* Subir insumo por subproyecto */}
-                <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>Subir insumo</p>
-                <div className="space-y-1.5">
-                  {myLeads.map((l) => (
-                    <label key={leadKey(l)} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: border }}>
-                      <span className="truncate" style={{ color: text }}>{l.client}</span>
-                      <span className="shrink-0 rounded border px-2 py-1 font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }}>Elegir archivo
-                        <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadKey(l), f); e.target.value = ""; }} />
-                      </span>
-                    </label>
-                  ))}
-                </div>
-
-                {leadMsg && <p className="mt-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
-
-                {/* Mis tareas creadas (editables) */}
-                {myCreated.length > 0 && (
-                  <>
-                    <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>Tareas que creé ({myCreated.length}) — editables</p>
-                    <div className="space-y-2">
-                      {myCreated.map((t) => (
-                        <div key={t.id} className="rounded-md border p-2" style={{ borderColor: border }}>
-                          <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
-                            className="w-full rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
-                          <textarea value={t.description || ""} onChange={(e) => patchMyTask(t.id, { description: e.target.value })} rows={2} placeholder="Descripción"
-                            className="mt-1 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
-                            {/* Reasignar el subproyecto entre los que lidera */}
-                            <select value={`${t.company_id}|||${t.client}`} onChange={(e) => { const [cid, cli] = e.target.value.split("|||"); patchMyTask(t.id, { company_id: cid, client: cli }); }}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
-                              {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
-                            </select>
-                            <input type="date" value={t.due_date || ""} onChange={(e) => patchMyTask(t.id, { due_date: e.target.value || null })}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} />
-                            <select value={t.status === "done" ? "review" : t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Estado (el cierre lo da el admin)">
-                              {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                            </select>
-                            <select value={t.priority || "media"} onChange={(e) => patchMyTask(t.id, { priority: e.target.value })}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Prioridad">
-                              {LEAD_PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                            </select>
-                            <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
-                              <option value="">Sin responsable</option>
-                              {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                            <button type="button" onClick={() => deleteMyTask(t.id)} className="ml-auto font-semibold" style={{ color: "#B42318" }}>Borrar</button>
-                          </div>
-                        </div>
-                      ))}
+              {/* Actividades del alcance. Las que YO creé son editables; el resto, solo lectura. */}
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>
+                Actividades {leadClient ? `· ${leadClient}` : "· todos"} ({leadScopeTasks.length})
+              </p>
+              {leadScopeTasks.length === 0 ? (
+                <p className="text-xs" style={{ color: dim }}>Sin actividades en este alcance todavía.</p>
+              ) : (
+                <div className="space-y-2">
+                  {leadScopeTasks.map((t) => (iCreated(t) ? (
+                    <div key={t.id} className="rounded-md border p-2" style={{ borderColor: "#17727A" }}>
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <span className="rounded bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-bold text-[#17727A]">Mía</span>
+                        <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
+                          className="min-w-0 flex-1 rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
+                      </div>
+                      <textarea value={t.description || ""} onChange={(e) => patchMyTask(t.id, { description: e.target.value })} rows={2} placeholder="Descripción"
+                        className="w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
+                        <select value={`${t.company_id}|||${t.client}`} onChange={(e) => { const [cid, cli] = e.target.value.split("|||"); patchMyTask(t.id, { company_id: cid, client: cli }); }}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
+                          {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
+                        </select>
+                        <input type="date" value={t.due_date || ""} onChange={(e) => patchMyTask(t.id, { due_date: e.target.value || null })}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} />
+                        <select value={t.status === "done" ? "review" : t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Estado (el cierre lo da el admin)">
+                          {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                        <select value={t.priority || "media"} onChange={(e) => patchMyTask(t.id, { priority: e.target.value })}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Prioridad">
+                          {LEAD_PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                        <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
+                          <option value="">Sin responsable</option>
+                          {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <button type="button" onClick={() => deleteMyTask(t.id)} className="ml-auto font-semibold" style={{ color: "#B42318" }}>Borrar</button>
+                      </div>
                     </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+                  ) : (
+                    <div key={t.id} className="rounded-md border p-2 text-xs" style={{ borderColor: border }}>
+                      <p className="font-semibold" style={{ color: text }}>{t.title}</p>
+                      <p className="mt-0.5" style={{ color: dim }}>
+                        {t.client} · {STATUS_LABEL[t.status] || t.status}
+                        {t.assignee_id ? ` · ${allPeople.find((p) => p.id === t.assignee_id)?.name || "Responsable"}` : ""}
+                        {t.due_date ? ` · vence ${t.due_date}` : ""}
+                      </p>
+                    </div>
+                  )))}
+                </div>
+              )}
+            </div>
+          </section>
         )}
 
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
