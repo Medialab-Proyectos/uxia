@@ -110,7 +110,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         if (leadRows.length) {
           const pplRes = await fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type`, { headers });
           setAllPeople(pplRes.ok ? await pplRes.json() : []);
-          setLeadCompany((cur) => cur || leadRows[0].company_id); // empresa por defecto
+          // Arranca en "Todas las empresas" (leadCompany = ""). El líder elige una para crear.
           // El líder ve TODAS las tareas de sus subproyectos (RLS lead_read_tasks) + sus asignadas.
           const scopeRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
           const scope = scopeRes.ok ? await scopeRes.json() : [];
@@ -224,6 +224,18 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const active = tasks.filter((t) => t.status !== "done");
   const done = tasks.filter((t) => t.status === "done");
   const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion").length;
+
+  // Conjunto ACOTADO por los filtros de arriba (empresa + subproyecto + creadas por mí), SIN el
+  // filtro de estado, para que indicadores y tabs muestren las cantidades reales del filtro.
+  const scoped = tasks.filter((t) =>
+    (companyFilter === "all" || t.company_id === companyFilter)
+    && !(myLeads.length && leadClient && t.client !== leadClient)
+    && !(mineOnly && String(t.created_by || "").toLowerCase() !== email));
+  const sActive = scoped.filter((t) => t.status !== "done");
+  const sDone = scoped.filter((t) => t.status === "done");
+  const sOverdue = sActive.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion").length;
+  const sNovelty = scoped.filter((t) => t.status !== "done" && hasNovelty(t)).length;
+  const tabCount = (k) => (k === "active" ? sActive.length : k === "all" ? scoped.length : k === "done" ? sDone.length : scoped.filter((t) => t.status === k).length);
 
   // Reporta las alertas al shell (la campana vive en el header del shell, junto al tema).
   // Cada alerta lleva una FIRMA (ids de las tareas que la componen): así reaparece si cambia el
@@ -514,10 +526,10 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         {/* Indicadores del empleado (2×2 en móvil, 4 en escritorio) con ícono — clicables → filtran */}
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { l: "Novedades", v: noveltyCount, col: "#6D28D9", Icon: Bell, on: statusFilter === "active" && novFilter === "any", go: () => { setStatusFilter("active"); setNovFilter("any"); } },
-            { l: "Activas", v: active.length, col: "#17727A", Icon: ListChecks, on: statusFilter === "active" && novFilter === "all", go: () => { setStatusFilter("active"); setNovFilter("all"); } },
-            { l: "Vencidas", v: overdue, col: "#B42318", Icon: AlertTriangle, on: statusFilter === "vencidas", go: () => setStatusFilter("vencidas") },
-            { l: "Finalizadas", v: done.length, col: "#0D7A4F", Icon: CheckCircle2, on: statusFilter === "done", go: () => setStatusFilter("done") },
+            { l: "Novedades", v: sNovelty, col: "#6D28D9", Icon: Bell, on: statusFilter === "active" && novFilter === "any", go: () => { setStatusFilter("active"); setNovFilter("any"); } },
+            { l: "Activas", v: sActive.length, col: "#17727A", Icon: ListChecks, on: statusFilter === "active" && novFilter === "all", go: () => { setStatusFilter("active"); setNovFilter("all"); } },
+            { l: "Vencidas", v: sOverdue, col: "#B42318", Icon: AlertTriangle, on: statusFilter === "vencidas", go: () => setStatusFilter("vencidas") },
+            { l: "Finalizadas", v: sDone.length, col: "#0D7A4F", Icon: CheckCircle2, on: statusFilter === "done", go: () => setStatusFilter("done") },
           ].map(({ l, v, col, Icon, on, go }) => (
             <button key={l} type="button" onClick={go} title={`Filtrar: ${l}`}
               className="rounded-md border p-3 text-left transition-colors"
@@ -534,10 +546,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           <div className="mb-4">
             {/* UNA sola línea: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] (scroll horizontal en móvil) */}
             <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-              {/* Este es EL filtro de empresa (también filtra la lista de abajo). */}
-              <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); setCompanyFilter(e.target.value); }}
+              {/* EL filtro de empresa (todas). También filtra la lista de abajo. */}
+              <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); setCompanyFilter(e.target.value || "all"); }}
                 className="shrink-0 rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Empresa">
-                {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="">Todas las empresas</option>
+                {companies.filter((c) => c.id !== "por-asignar").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <select value={leadClient} onChange={(e) => setLeadClient(e.target.value)}
                 className="shrink-0 rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Subproyecto">
@@ -632,7 +645,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             <button key={k} type="button" onClick={() => { setStatusFilter(k); if (k === "active") setNovFilter("all"); }}
               className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold"
               style={on ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: border, color: dim }}>
-              {l}
+              {l} ({tabCount(k)})
             </button>
             );
           })}
