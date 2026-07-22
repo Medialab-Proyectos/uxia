@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff } from "lucide-react";
+import { Sun, Moon, Bell, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
@@ -289,6 +289,13 @@ function AppShell() {
     setTimeout(() => setAuthNotice(""), 3000);
   }
 
+  // CANDADO POR EMPRESA: la base "en crudo" (sin token de empresa en ?c=) es inaccesible. Cada
+  // quien entra por el link de SU empresa (medialab incluido usa su propio link). El token no es
+  // seguridad real (eso lo dan Auth + RLS); es anti-enumeración y evita el acceso al link base.
+  if (!linkCompanyId) {
+    return <InaccessibleScreen theme={theme} onToggleTheme={toggleTheme} />;
+  }
+
   if (!authReady) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm font-semibold" style={{ background: "#0E1116", color: "#8B97A6" }}>
@@ -483,6 +490,39 @@ function AppShell() {
       )}
       {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} focus={opsFocus} onFocusHandled={() => setOpsFocus(null)} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
     </div>
+  );
+}
+
+// Pantalla que ve quien entra al link base (sin token de empresa). No revela nada del sistema.
+function InaccessibleScreen({ theme = "dark", onToggleTheme }) {
+  const dk = theme === "dark";
+  const C = dk
+    ? { bg: "#0E1116", panel: "#151B23", border: "#28313E", text: "#E8EDF3", dim: "#8B97A6" }
+    : { bg: "#F7F4EF", panel: "#FFFCF7", border: "#E7E0D5", text: "#1F2937", dim: "#667085" };
+  return (
+    <main className="relative flex min-h-screen items-center justify-center px-5" style={{ background: C.bg, color: C.text }}>
+      {onToggleTheme && (
+        <button
+          type="button"
+          onClick={onToggleTheme}
+          aria-label={dk ? "Modo claro" : "Modo oscuro"}
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md border"
+          style={{ borderColor: C.border, backgroundColor: C.panel, color: "#E8751A" }}
+        >
+          {dk ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      )}
+      <div className="w-full max-w-sm rounded-md border p-8 text-center shadow-lg" style={{ background: C.panel, borderColor: C.border }}>
+        <div className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full border" style={{ borderColor: C.border, color: "#E8751A" }}>
+          <Lock size={22} />
+        </div>
+        <h1 className="text-lg font-semibold">Acceso no disponible</h1>
+        <p className="mt-2 text-sm" style={{ color: C.dim }}>
+          Este espacio se abre solo desde el enlace de tu empresa. Si crees que deberías tener acceso,
+          escríbenos y te compartimos tu enlace.
+        </p>
+      </div>
+    </main>
   );
 }
 
