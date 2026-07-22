@@ -175,8 +175,21 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     }
     if (leadEdit.assigneeId && leadEdit.assigneeId !== t.assignee_id) notifyEvent(token, { type: "assigned", taskId: t.id });
     await patchLeadTask(t.id, patch);
+    // Relee la tarea de la BD para reflejar lo realmente guardado (por si el guard/RLS revierte algo).
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${t.id}&select=id,title,description,client,company_id,status,priority,due_date,prev_due_date,assignee_id,created_by,comments,change_requests,assignee_seen_at,admin_touched_at`, { headers });
+      if (r.ok) {
+        const rows = await r.json();
+        if (rows[0]) {
+          setTasks((cur) => cur.map((x) => (x.id === t.id ? { ...x, ...rows[0] } : x)));
+          if ((rows[0].assignee_id || "") !== (leadEdit.assigneeId || "")) {
+            setLeadMsg("La base no guardó el responsable (revisa que corriste migration-subproject-leads.sql).");
+          }
+        }
+      }
+    } catch { /* ignore */ }
     setLeadDueReason(""); // motivo se pide UNA vez por ciclo de guardado: se limpia tras guardar
-    setLeadSaved(t.id); setLeadMsg(""); setTimeout(() => setLeadSaved(""), 2000);
+    setLeadSaved(t.id); setLeadMsg((m) => m || ""); setTimeout(() => setLeadSaved(""), 2000);
   }
 
   // Novedades por persona: "Nueva" = nunca vista; "Actualizada" = el admin la cambió
