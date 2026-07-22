@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound } from "lucide-react";
 import { notifyEvent } from "./notify.js";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
@@ -47,6 +47,10 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [crComment, setCrComment] = React.useState("");
   const [lastLoadedAt, setLastLoadedAt] = React.useState(null); // momento de la última carga de la BD
   const [staleWarn, setStaleWarn] = React.useState(false);      // aviso de refrescar tras horas
+  const [pwdOpen, setPwdOpen] = React.useState(false);          // panel para cambiar la contraseña
+  const [newPwd, setNewPwd] = React.useState("");
+  const [pwdMsg, setPwdMsg] = React.useState("");
+  const [pwdSaving, setPwdSaving] = React.useState(false);
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -56,7 +60,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     setError("");
     try {
       const [peopleRes, compRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type`, { headers }),
+        fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type,company_id`, { headers }),
         fetch(`${SUPABASE_URL}/rest/v1/companies?select=id,name`, { headers }),
       ]);
       const people = peopleRes.ok ? await peopleRes.json() : [];
@@ -65,8 +69,10 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
         const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points";
-        // Login por empresa: si el link trae una empresa, se acota la vista a SUS tareas.
-        const compFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
+        // Acota la vista SOLO si la persona pertenece a una empresa fija (externo). Los de MediaLab
+        // (sin empresa) ven TODAS sus tareas asignadas, aunque estén repartidas entre clientes.
+        const myCompany = person.company_id || "";
+        const compFilter = myCompany ? `&company_id=eq.${encodeURIComponent(myCompany)}` : "";
         // Intenta con las columnas de novedad; si la base aún no está migrada, carga sin ellas.
         let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}${compFilter}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
         if (!tRes.ok) {
@@ -285,6 +291,25 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     }
   }
 
+  // El empleado cambia su propia contraseña (Supabase Auth: PUT /auth/v1/user con su token).
+  async function changePassword() {
+    const p = newPwd.trim();
+    if (p.length < 6) { setPwdMsg("La contraseña debe tener al menos 6 caracteres."); return; }
+    setPwdSaving(true); setPwdMsg("");
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: "PUT",
+        headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: p }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.msg || d.error_description || `Error ${res.status}`); }
+      setPwdMsg("Contraseña actualizada ✓"); setNewPwd("");
+      setTimeout(() => { setPwdOpen(false); setPwdMsg(""); }, 1600);
+    } catch (e) {
+      setPwdMsg(String(e?.message || "No se pudo cambiar la contraseña."));
+    } finally { setPwdSaving(false); }
+  }
+
   const dark = theme === "dark";
   const bg = dark ? "#0E1116" : "#F7F4EF";
   const card = dark ? "#151B23" : "#FFFFFF";
@@ -310,7 +335,26 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         {/* Saludo (la campana de alertas vive ahora en el header del shell). */}
         <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center justify-between gap-3 px-4 py-2 sm:-mx-6 sm:px-6" style={{ background: bg }}>
           <h1 className="truncate text-lg font-semibold">Hola, {me.name.split(" ")[0]}</h1>
+          <button type="button" onClick={() => { setPwdOpen((v) => !v); setPwdMsg(""); }} title="Cambiar mi contraseña"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: border, color: dim }}>
+            <KeyRound size={14} /> <span className="hidden sm:inline">Contraseña</span>
+          </button>
         </div>
+        {pwdOpen && (
+          <div className="mb-4 rounded-md border p-3" style={{ borderColor: border, background: card }}>
+            <p className="mb-2 text-sm font-semibold">Cambiar mi contraseña</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input value={newPwd} onChange={(e) => setNewPwd(e.target.value)} type="password" autoComplete="new-password"
+                placeholder="Nueva contraseña (mín. 6)" onKeyDown={(e) => e.key === "Enter" && changePassword()}
+                className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+              <button type="button" onClick={changePassword} disabled={pwdSaving || newPwd.trim().length < 6}
+                className="rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
+                {pwdSaving ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+            {pwdMsg && <p className="mt-2 text-xs font-semibold" style={{ color: pwdMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{pwdMsg}</p>}
+          </div>
+        )}
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
           <span>Estas son tus tareas y su prioridad.</span>
           {lastLoadedAt && (
