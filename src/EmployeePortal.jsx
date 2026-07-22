@@ -8,7 +8,7 @@ const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 // Estados que puede poner un LÍDER a sus tareas. NO puede cerrar/finalizar (eso lo da el admin):
 // "Finalizada" para el líder = pasa a REVISIÓN del admin (status "review"), por consistencia.
-const LEAD_STATUSES = [["ready", "Sin iniciar"], ["doing", "En progreso"], ["blocked", "Bloqueada"], ["review", "Finalizada (pasa a revisión)"]];
+const LEAD_STATUSES = [["ready", "Sin iniciar"], ["doing", "En progreso"], ["blocked", "Bloqueada"]];
 
 const STATUS_LABEL = {
   backlog: "Pendiente", ready: "Pendiente", doing: "En progreso",
@@ -711,9 +711,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                           <span className="text-[11px] font-semibold" style={{ color: "#17727A" }}>{leadPanelOpen ? "▲" : "▼"}</span>
                         </button>
                         {leadPanelOpen && (<div className="mt-2">
-                        {["review", "verificacion", "done"].includes(t.status) ? (
+                        {["done"].includes(t.status) ? (
                           <div>
-                            <p className="text-xs font-semibold" style={{ color: "#B76E00" }}>En revisión del administrador — ya no puedes hacer cambios en esta actividad.</p>
+                            <p className="text-xs font-semibold" style={{ color: "#0D7A4F" }}>Actividad finalizada — solo lectura.</p>
                             {Array.isArray(t.comments) && t.comments.length > 0 && (
                               <ul className="mt-2 space-y-1">
                                 {t.comments.map((c, i) => (
@@ -745,9 +745,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                           <input value={leadDueReason} onChange={(e) => setLeadDueReason(e.target.value)} placeholder="¿Por qué se mueve la fecha? (queda registrado)"
                             className="mb-1.5 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: "#B76E00", background: bg, color: text }} />
                         )}
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {LEAD_STATUSES.map(([v, l]) => {
-                            const on = (t.status === "done" ? "review" : t.status) === v;
+                            const on = t.status === v;
                             return (
                               <button key={v} type="button" onClick={() => patchLeadTask(t.id, { status: v })}
                                 className="rounded-md border px-2 py-1 text-xs font-semibold"
@@ -756,7 +756,18 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                               </button>
                             );
                           })}
+                          {/* Finalizar (cerrar la actividad): el líder es quien la finaliza. */}
+                          <button type="button" onClick={() => patchLeadTask(t.id, { status: "done" })}
+                            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold"
+                            style={t.status === "review" ? { borderColor: "#0D7A4F", background: "#0D7A4F", color: "#fff" } : { borderColor: "#0D7A4F", color: "#0D7A4F" }}>
+                            <CheckCircle2 size={12} /> Finalizar
+                          </button>
                         </div>
+                        {t.status === "review" && (
+                          <p className="mt-1.5 rounded border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: "#17727A", background: dark ? "#12201F" : "#EAF4F2", color: "#17727A" }}>
+                            El responsable lo envió a revisión — valida: <b>Finalizar</b> o <b>Pedir cambios</b> (vuelve a progreso).
+                          </p>
+                        )}
                         {/* Comentarios del responsable */}
                         {Array.isArray(t.comments) && t.comments.length > 0 && (
                           <ul className="mt-2 space-y-1">
