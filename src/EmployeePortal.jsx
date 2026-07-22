@@ -142,14 +142,14 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [load]);
 
-  // Si la pantalla lleva abierta +2h sin refrescar, sugiere actualizar (puede haber cambios).
+  // Auto-refresco cada 5 minutos (solo con la pestaña visible, para no gastar en segundo plano).
   React.useEffect(() => {
-    if (!lastLoadedAt) return undefined;
     const timer = setInterval(() => {
-      if (Date.now() - lastLoadedAt > 2 * 60 * 60 * 1000) setStaleWarn(true);
-    }, 60 * 1000);
+      if (typeof document !== "undefined" && document.hidden) return;
+      load();
+    }, 5 * 60 * 1000);
     return () => clearInterval(timer);
-  }, [lastLoadedAt]);
+  }, [load]);
 
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "";
 
@@ -508,38 +508,33 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         {/* COORDINACIÓN DE SUBPROYECTOS (líder): navega por empresa → subproyecto, crea actividad,
             sube insumos y edita SOLO las actividades que él crea. Va DEBAJO de los indicadores. */}
         {myLeads.length > 0 && (
-          <section className="mb-5 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
-            <div className="border-b px-3 py-2.5" style={{ borderColor: border }}>
-              <span className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: "#17727A" }}>
-                <ListChecks size={16} /> Coordinación de subproyectos
-              </span>
-              {/* Fila: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] */}
-              <div className="flex flex-wrap items-center gap-2">
-                {ledCompanies.length > 1 ? (
-                  <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
-                    className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} title="Empresa">
-                    {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                ) : (
-                  <span className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, color: text }}>{companyNameOf(leadCompany)}</span>
-                )}
-                <select value={leadClient} onChange={(e) => setLeadClient(e.target.value)}
-                  className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
-                  <option value="">Todos los subproyectos</option>
-                  {ledClients.map((c) => <option key={c} value={c}>{c}</option>)}
+          <div className="mb-4">
+            {/* Fila: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {ledCompanies.length > 1 ? (
+                <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
+                  className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Empresa">
+                  {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <button type="button"
-                  onClick={() => { setCreateOpen(true); setLf({ key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : ""), title: "", description: "", dueDate: "", assigneeId: "" }); }}
-                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
-                  <Send size={14} /> Crear actividad
-                </button>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Sube al subproyecto activo"}>
-                  <Paperclip size={14} /> Subir insumo
-                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
-                </label>
-              </div>
+              ) : (
+                <span className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }}>{companyNameOf(leadCompany)}</span>
+              )}
+              <select value={leadClient} onChange={(e) => setLeadClient(e.target.value)}
+                className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Subproyecto">
+                <option value="">Todos los subproyectos</option>
+                {ledClients.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button type="button"
+                onClick={() => { setCreateOpen(true); setLf({ key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : ""), title: "", description: "", dueDate: "", assigneeId: "" }); }}
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
+                <Send size={14} /> Crear actividad
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Sube al subproyecto activo"}>
+                <Paperclip size={14} /> Subir insumo
+                <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
+              </label>
             </div>
-            <div className="px-3 py-3">
+            <div>
               {leadMsg && <p className="mb-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
 
               {/* Modal "Crear actividad" (estructura de tarea; el cierre lo da el admin) */}
@@ -670,7 +665,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                 </div>
               </div>
             )}
-          </section>
+          </div>
         )}
 
         {error && <p className="mb-3 rounded-md border border-[#F3B0A8] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
