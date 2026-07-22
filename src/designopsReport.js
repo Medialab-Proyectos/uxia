@@ -190,36 +190,37 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   @page { size: A4; margin: 14mm 15mm 16mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --teal:#17727A; --orange:#E8751A; --ink:#1D2939; --gray:#667085; --line:#E4DED6; --green:#0D7A4F; --amber:#B76E00; --red:#B42318; --violet:#6D28D9; }
-  body { font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; color:var(--ink); font-size:10pt; line-height:1.45; }
+  body { font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; color:#1D2939; font-size:10pt; line-height:1.45; }
   .wrap { max-width:720px; margin:0 auto; }
-  h2 { font-size:12.5pt; font-weight:700; color:var(--teal); margin:20px 0 8px; padding-bottom:4px; border-bottom:2px solid var(--teal); break-after:avoid; }
+  h2 { font-size:12.5pt; font-weight:700; color:#17727A; margin:20px 0 8px; padding-bottom:4px; border-bottom:2px solid #17727A; break-after:avoid; }
   h3 { font-size:10.5pt; font-weight:700; margin:12px 0 5px; }
-  p { margin:5px 0; } .muted { color:var(--gray); } .small { font-size:8.5pt; }
-  .head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; border-bottom:3px solid var(--teal); padding-bottom:12px; }
+  p { margin:5px 0; } .muted { color:#667085; } .small { font-size:8.5pt; }
+  .head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; border-bottom:3px solid #17727A; padding-bottom:12px; }
   .brand { display:flex; align-items:center; gap:10px; } .logo { width:34px; height:34px; object-fit:contain; }
   .brand .name { font-size:13pt; font-weight:700; letter-spacing:0.02em; }
-  .brand .tag { font-size:8pt; color:var(--gray); text-transform:uppercase; letter-spacing:0.14em; }
-  .head .meta { text-align:right; font-size:8.5pt; color:var(--gray); } .head .meta .big { font-size:11pt; color:var(--ink); font-weight:700; }
-  .kicker { font-size:8.5pt; text-transform:uppercase; letter-spacing:0.16em; color:var(--orange); font-weight:700; margin-top:14px; }
-  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0; }
-  .tile { border:1px solid var(--line); border-radius:8px; padding:9px 10px; }
-  .tile .k { font-size:7.5pt; text-transform:uppercase; letter-spacing:0.08em; color:var(--gray); }
+  .brand .tag { font-size:8pt; color:#667085; text-transform:uppercase; letter-spacing:0.14em; }
+  .head .meta { text-align:right; font-size:8.5pt; color:#667085; } .head .meta .big { font-size:11pt; color:#1D2939; font-weight:700; }
+  .kicker { font-size:8.5pt; text-transform:uppercase; letter-spacing:0.16em; color:#E8751A; font-weight:700; margin-top:14px; }
+  .tiles { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+  .tile { flex:1 1 0; min-width:120px; border:1px solid #E4DED6; border-radius:8px; padding:9px 10px; }
+  .tile .k { font-size:7.5pt; text-transform:uppercase; letter-spacing:0.08em; color:#667085; }
   .tile .v { font-size:19pt; font-weight:700; line-height:1.1; margin-top:2px; font-variant-numeric:tabular-nums; }
-  .tile .s { font-size:7.5pt; color:var(--gray); }
+  .tile .s { font-size:7.5pt; color:#667085; }
   table { width:100%; border-collapse:collapse; margin:8px 0; font-size:8.7pt; }
-  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  thead th { background:var(--ink); color:#fff; font-size:8pt; text-transform:uppercase; letter-spacing:0.05em; border:none; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #E4DED6; vertical-align:top; }
+  thead th { background:#1D2939; color:#fff; font-size:8pt; text-transform:uppercase; letter-spacing:0.05em; border:none; }
   tbody tr:nth-child(even) { background:#FBFAF7; }
   td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; } td.center,th.center { text-align:center; }
   .chip { display:inline-block; padding:1px 8px; border-radius:999px; font-size:8pt; font-weight:700; white-space:nowrap; }
-  .g { background:#E5F5EE; color:var(--green); } .a { background:#FFF7E6; color:var(--amber); }
-  .r { background:#FEF3F2; color:var(--red); } .n { background:#F2F4F7; color:var(--gray); }
-  .callout { border-left:4px solid var(--orange); background:#FFF7E6; padding:9px 12px; border-radius:0 6px 6px 0; margin:8px 0; }
-  .callout.teal { border-color:var(--teal); background:#EAF4F2; } .callout.red { border-color:var(--red); background:#FEF3F2; }
+  .g { background:#E5F5EE; color:#0D7A4F; } .a { background:#FFF7E6; color:#B76E00; }
+  .r { background:#FEF3F2; color:#B42318; } .n { background:#F2F4F7; color:#667085; }
+  .callout { border-left:4px solid #E8751A; background:#FFF7E6; padding:9px 12px; border-radius:0 6px 6px 0; margin:8px 0; }
+  .callout.teal { border-color:#17727A; background:#EAF4F2; } .callout.red { border-color:#B42318; background:#FEF3F2; }
   ul { margin:4px 0 4px 18px; } li { margin:3px 0; }
-  .cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .card { border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
-  .foot { margin-top:18px; border-top:1px solid var(--line); padding-top:8px; font-size:8pt; color:var(--gray); display:flex; justify-content:space-between; }
+  .cols { display:flex; flex-wrap:wrap; gap:14px; }
+  .cols > * { flex:1 1 0; min-width:220px; }
+  .card { border:1px solid #E4DED6; border-radius:8px; padding:10px 12px; }
+  .foot { margin-top:18px; border-top:1px solid #E4DED6; padding-top:8px; font-size:8pt; color:#667085; display:flex; justify-content:space-between; }
   .avoid { break-inside:avoid; }
 </style></head><body><div class="wrap">
 
@@ -241,10 +242,10 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
   El foco de la semana es <b>${focoTxt}</b>. La predictibilidad de fecha ${predictPct == null ? "aún no tiene base suficiente" : `es del <b>${predictPct}%</b>`}${predictPct != null && predictPct < 85 ? ", por debajo de la meta (≥85%)" : ""}.</p>
 
   <div class="tiles">
-    <div class="tile"><div class="k">Tareas activas</div><div class="v" style="color:var(--teal)">${active.length}</div><div class="s">de ${ct.length} · ${done.length} cerradas</div></div>
-    <div class="tile"><div class="k">En revisión</div><div class="v" style="color:var(--violet)">${review.length}</div><div class="s">esperan aprobación</div></div>
-    <div class="tile"><div class="k">Vencidas</div><div class="v" style="color:var(--red)">${overdue.length}</div><div class="s">${blocked.length} bloqueada(s)</div></div>
-    <div class="tile"><div class="k">Satisfacción</div><div class="v" style="color:var(--green)">${avg != null ? avg.toFixed(1) : "—"}</div><div class="s">/ 5 · ${rated.length} evaluada(s)</div></div>
+    <div class="tile"><div class="k">Tareas activas</div><div class="v" style="color:#17727A">${active.length}</div><div class="s">de ${ct.length} · ${done.length} cerradas</div></div>
+    <div class="tile"><div class="k">En revisión</div><div class="v" style="color:#6D28D9">${review.length}</div><div class="s">esperan aprobación</div></div>
+    <div class="tile"><div class="k">Vencidas</div><div class="v" style="color:#B42318">${overdue.length}</div><div class="s">${blocked.length} bloqueada(s)</div></div>
+    <div class="tile"><div class="k">Satisfacción</div><div class="v" style="color:#0D7A4F">${avg != null ? avg.toFixed(1) : "—"}</div><div class="s">/ 5 · ${rated.length} evaluada(s)</div></div>
   </div>
 
   <h2>1. Tablero de indicadores DesignOps</h2>
@@ -266,9 +267,9 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
 
   <h3>Flujo del trabajo <span class="muted small" style="font-weight:400">· REACH: Efficiency</span></h3>
   <div class="tiles" style="grid-template-columns:repeat(3,1fr)">
-    <div class="tile"><div class="k">Cycle time medio</div><div class="v" style="color:var(--teal)">${cycleTime == null ? "—" : Math.round(cycleTime)}</div><div class="s">días de creada a cerrada</div></div>
-    <div class="tile"><div class="k">Throughput</div><div class="v" style="color:var(--green)">${throughputWk}</div><div class="s">tareas cerradas / semana</div></div>
-    <div class="tile"><div class="k">WIP en progreso</div><div class="v" style="color:var(--amber)">${wip}</div><div class="s">trabajo activo simultáneo</div></div>
+    <div class="tile"><div class="k">Cycle time medio</div><div class="v" style="color:#17727A">${cycleTime == null ? "—" : Math.round(cycleTime)}</div><div class="s">días de creada a cerrada</div></div>
+    <div class="tile"><div class="k">Throughput</div><div class="v" style="color:#0D7A4F">${throughputWk}</div><div class="s">tareas cerradas / semana</div></div>
+    <div class="tile"><div class="k">WIP en progreso</div><div class="v" style="color:#B76E00">${wip}</div><div class="s">trabajo activo simultáneo</div></div>
   </div>
   ${utils.length ? `<p class="muted small">Utilización por diseñador: ${utils.sort((a, b) => b.pct - a.pct).slice(0, 6).map((u) => `${esc(u.name)} ${u.pct}%`).join(" · ")}. Objetivo 70–90%.</p>` : ""}
 
