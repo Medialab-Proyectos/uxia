@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound } from "lucide-react";
 import { notifyEvent } from "./notify.js";
 import * as opsData from "./opsData.js";
 
@@ -66,6 +66,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [leadMsg, setLeadMsg] = React.useState("");
   const [crFor, setCrFor] = React.useState("");                 // id de tarea propia para pedir cambios
   const [crDraft, setCrDraft] = React.useState("");
+  const [leadEdit, setLeadEdit] = React.useState({ title: "", description: "", dueDate: "", assigneeId: "" }); // edición de la actividad propia abierta
+  const [leadDueReason, setLeadDueReason] = React.useState("");  // motivo del cambio de fecha
+  const [leadSaved, setLeadSaved] = React.useState("");          // id con "guardado ✓"
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -132,19 +135,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
 
   // Recarga al VOLVER a la pestaña/ventana: así los cambios del admin (p. ej. un request review
   // recién enviado) aparecen sin tener que refrescar a mano. Se limita a 1 recarga cada 20s.
-  React.useEffect(() => {
-    let last = 0;
-    const refresh = () => {
-      if (document.visibilityState !== "visible") return;
-      const now = Date.now();
-      if (now - last < 20000) return;
-      last = now;
-      load();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [load]);
 
   // Para el líder, el filtro de empresa de la lista sigue a su desplegable de empresa.
   React.useEffect(() => {
@@ -163,6 +153,28 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   }, [load, createOpen, openId, crResolve]);
 
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "";
+  const whoName = (id) => (allPeople.find((p) => p.id === id)?.name) || (id && id === me?.id ? (me?.name || "") : "");
+  // Al abrir una actividad que YO creé, carga sus valores en el formulario de edición.
+  React.useEffect(() => {
+    const t = tasks.find((x) => x.id === openId);
+    if (t && String(t.created_by || "").toLowerCase() === email) {
+      setLeadEdit({ title: t.title || "", description: t.description || "", dueDate: t.due_date || "", assigneeId: t.assignee_id || "" });
+      setLeadDueReason(""); setLeadSaved("");
+    }
+  }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Guarda los cambios de la actividad propia. Si cambió la fecha y ya había una, exige el motivo.
+  async function saveLeadEdit(t) {
+    const patch = { title: leadEdit.title.trim() || t.title, description: leadEdit.description.trim() || null, assignee_id: leadEdit.assigneeId || null };
+    const dateChanged = (leadEdit.dueDate || "") !== (t.due_date || "");
+    if (dateChanged) {
+      if (t.due_date && !leadDueReason.trim()) { setLeadMsg("Di el motivo del cambio de fecha."); return; }
+      patch.due_date = leadEdit.dueDate || null;
+      if (t.due_date) { patch.prev_due_date = t.due_date; patch.due_change_reason = leadDueReason.trim(); }
+    }
+    if (leadEdit.assigneeId && leadEdit.assigneeId !== t.assignee_id) notifyEvent(token, { type: "assigned", taskId: t.id });
+    await patchLeadTask(t.id, patch);
+    setLeadSaved(t.id); setLeadMsg(""); setTimeout(() => setLeadSaved(""), 2000);
+  }
 
   // Novedades por persona: "Nueva" = nunca vista; "Actualizada" = el admin la cambió
   // después de la última vez que la vi. Al abrirla se marca vista y el tag desaparece.
@@ -635,8 +647,14 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           {ranked.length ? ranked.map((t) => {
             const isOpen = openId === t.id;
             return (
-              <div key={t.id} className="rounded-md border" style={{ borderColor: border, background: card }}>
-                <button type="button" onClick={() => { const opening = !isOpen; setOpenId(isOpen ? null : t.id); setDraft(""); if (opening) markSeen(t); }} className="flex w-full items-start gap-3 p-3 text-left">
+              <div key={t.id} className="relative rounded-md border" style={{ borderColor: border, background: card }}>
+                {iCreated(t) && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); deleteLeadTask(t.id); }} title="Eliminar actividad"
+                    className="absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md border" style={{ borderColor: "#F3B0A8", color: "#B42318", background: card }}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+                <button type="button" onClick={() => { const opening = !isOpen; setOpenId(isOpen ? null : t.id); setDraft(""); if (opening) markSeen(t); }} className="flex w-full items-start gap-3 p-3 pr-10 text-left">
                   <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: t.score >= 70 ? "#B42318" : t.score >= 45 ? "#B76E00" : "#1570EF" }}>{t.score}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">
@@ -648,6 +666,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                     </span>
                     <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
                       {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1 truncate text-xs" style={{ color: t.assignee_id ? "#17727A" : "#B76E00" }}>
+                      <UserRound size={11} /> {t.assignee_id ? (whoName(t.assignee_id) || "Responsable") : "Sin responsable"}
                     </span>
                   </span>
                 </button>
@@ -661,20 +682,29 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                     {iCreated(t) && (
                       <div className="mb-3 rounded-md border p-2" style={{ borderColor: "#17727A", background: dark ? "#12201F" : "#F0FAF8" }}>
                         <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "#17727A" }}>Tú creaste esta actividad · gestión de líder</p>
-                        {/* Edición de la actividad (se guarda al salir del campo) */}
-                        <input defaultValue={t.title || ""} onBlur={(e) => { if (e.target.value !== t.title) patchLeadTask(t.id, { title: e.target.value }); }} placeholder="Título"
+                        {/* Edición de la actividad (con botón Guardar) */}
+                        <input value={leadEdit.title} onChange={(e) => setLeadEdit((s) => ({ ...s, title: e.target.value }))} placeholder="Título"
                           className="mb-1.5 w-full rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
-                        <textarea defaultValue={t.description || ""} onBlur={(e) => { if (e.target.value !== (t.description || "")) patchLeadTask(t.id, { description: e.target.value }); }} rows={2} placeholder="Descripción / historia"
+                        <textarea value={leadEdit.description} onChange={(e) => setLeadEdit((s) => ({ ...s, description: e.target.value }))} rows={2} placeholder="Descripción / historia"
                           className="mb-1.5 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
                         <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-                          <input type="date" value={t.due_date || ""} onChange={(e) => patchLeadTask(t.id, { due_date: e.target.value || null })}
-                            className="rounded border px-1.5 py-1" style={{ borderColor: border, background: bg, color: text }} title="Fecha" />
-                          <select value={t.assignee_id || ""} onChange={(e) => patchLeadTask(t.id, { assignee_id: e.target.value || null })}
+                          <input type="date" value={leadEdit.dueDate} onChange={(e) => setLeadEdit((s) => ({ ...s, dueDate: e.target.value }))}
+                            className="rounded border px-1.5 py-1" style={{ borderColor: border, background: bg, color: text }} title="Fecha de finalización" />
+                          <select value={leadEdit.assigneeId} onChange={(e) => setLeadEdit((s) => ({ ...s, assigneeId: e.target.value }))}
                             className="rounded border px-1.5 py-1" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
                             <option value="">Sin responsable</option>
                             {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
                         </div>
+                        {/* Motivo del cambio de fecha: aparece si movió una fecha ya guardada. */}
+                        {(leadEdit.dueDate || "") !== (t.due_date || "") && t.due_date && (
+                          <input value={leadDueReason} onChange={(e) => setLeadDueReason(e.target.value)} placeholder="¿Por qué se mueve la fecha? (queda registrado)"
+                            className="mb-1.5 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: "#B76E00", background: bg, color: text }} />
+                        )}
+                        <button type="button" onClick={() => saveLeadEdit(t)}
+                          className="mb-2 w-full rounded-md px-3 py-1.5 text-xs font-semibold text-white" style={{ background: leadSaved === t.id ? "#0D7A4F" : "#17727A" }}>
+                          {leadSaved === t.id ? "Guardado ✓" : "Guardar cambios"}
+                        </button>
                         <div className="flex flex-wrap gap-1.5">
                           {LEAD_STATUSES.map(([v, l]) => {
                             const on = (t.status === "done" ? "review" : t.status) === v;
@@ -709,7 +739,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                           ) : (
                             <button type="button" onClick={() => { setCrFor(t.id); setCrDraft(""); }} className="text-xs font-semibold" style={{ color: "#B54708" }}>+ Pedir cambios (request review)</button>
                           )}
-                          <button type="button" onClick={() => deleteLeadTask(t.id)} className="shrink-0 text-xs font-semibold" style={{ color: "#B42318" }}>Eliminar</button>
                         </div>
                       </div>
                     )}
