@@ -92,23 +92,10 @@ function AppShell() {
     }).catch(() => {});
   }, [linkCompanyId]);
 
-  // PWA: registra el service worker una vez (instalación + push).
+  // PWA: registra el service worker una vez (instalación + push). El resto de la lógica de
+  // notificaciones (que usa `session`) vive más abajo, tras declararse `session`.
   const [notifPerm, setNotifPerm] = React.useState(() => notificationState());
   React.useEffect(() => { registerServiceWorker(); }, []);
-  // Con sesión y permiso ya concedido, re-suscribe este dispositivo al push (idempotente).
-  React.useEffect(() => {
-    if (session?.access_token && notifPerm === "granted") {
-      subscribeToPush({ token: session.access_token, companyId: linkCompanyId });
-    }
-  }, [session, notifPerm, linkCompanyId]);
-
-  async function enableNotifications() {
-    const p = await requestNotificationPermission();
-    setNotifPerm(p);
-    if (p === "granted" && session?.access_token) {
-      await subscribeToPush({ token: session.access_token, companyId: linkCompanyId });
-    }
-  }
   // El login SIEMPRE abre el Centro de Operaciones (prioridad). El Radar es una página
   // independiente a la que se entra por el menú; no es la primera vista.
   const [module, setModule] = React.useState("operations");
@@ -142,6 +129,22 @@ function AppShell() {
     setNotifs((list) => list.filter((x) => x.key !== n.key));
   }
   const [session, setSession] = React.useState(() => readStoredSession());
+
+  // Notificaciones que dependen de `session` (ya declarada arriba). Con sesión y permiso
+  // concedido, re-suscribe este dispositivo al push (idempotente).
+  React.useEffect(() => {
+    if (session?.access_token && notifPerm === "granted") {
+      subscribeToPush({ token: session.access_token, companyId: linkCompanyId });
+    }
+  }, [session, notifPerm, linkCompanyId]);
+
+  async function enableNotifications() {
+    const p = await requestNotificationPermission();
+    setNotifPerm(p);
+    if (p === "granted" && session?.access_token) {
+      await subscribeToPush({ token: session.access_token, companyId: linkCompanyId });
+    }
+  }
 
   // Solo el CEO entra al Centro de Operaciones; el resto se queda en el Radar.
   const userEmail = String(session?.user?.email || session?.user?.user_metadata?.email || "").toLowerCase();
@@ -735,7 +738,8 @@ class ErrorBoundary extends React.Component {
           <div style={{ maxWidth: 560 }}>
             <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Algo falló al mostrar esta vista</h1>
             <p style={{ color: "#9FB0C3", fontSize: 13, marginTop: 8 }}>Se evitó la pantalla en blanco. Recarga; si sigue, comparte este mensaje:</p>
-            <pre style={{ marginTop: 12, whiteSpace: "pre-wrap", background: "#151B23", border: "1px solid #28313E", borderRadius: 8, padding: 12, fontSize: 12, color: "#f08a80", overflow: "auto", maxHeight: 300 }}>{String(this.state.error?.stack || this.state.error?.message || this.state.error)}</pre>
+            <pre style={{ marginTop: 12, whiteSpace: "pre-wrap", background: "#2A1416", border: "1px solid #7A2A2A", borderRadius: 8, padding: 12, fontSize: 13, fontWeight: 700, color: "#ffb3ab" }}>{String(this.state.error?.message || this.state.error)}</pre>
+            <pre style={{ marginTop: 8, whiteSpace: "pre-wrap", background: "#151B23", border: "1px solid #28313E", borderRadius: 8, padding: 12, fontSize: 11, color: "#f08a80", overflow: "auto", maxHeight: 240 }}>{String(this.state.error?.stack || "")}</pre>
             <button type="button" onClick={() => window.location.reload()} style={{ marginTop: 12, background: "#17727A", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Recargar</button>
           </div>
         </div>
