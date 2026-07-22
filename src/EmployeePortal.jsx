@@ -756,16 +756,16 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                               </button>
                             );
                           })}
-                          {/* Finalizar (cerrar la actividad): el líder es quien la finaliza. */}
-                          <button type="button" onClick={() => patchLeadTask(t.id, { status: "done" })}
+                          {/* Finalizar = enviar a REVISIÓN del admin (el CEO da el cierre final). */}
+                          <button type="button" onClick={() => patchLeadTask(t.id, { status: "review" })}
                             className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold"
-                            style={t.status === "review" ? { borderColor: "#0D7A4F", background: "#0D7A4F", color: "#fff" } : { borderColor: "#0D7A4F", color: "#0D7A4F" }}>
-                            <CheckCircle2 size={12} /> Finalizar
+                            style={t.status === "review" ? { borderColor: "#175CD3", background: "#175CD3", color: "#fff" } : { borderColor: "#175CD3", color: "#175CD3" }}>
+                            <CheckCircle2 size={12} /> Finalizar (a revisión del admin)
                           </button>
                         </div>
                         {t.status === "review" && (
-                          <p className="mt-1.5 rounded border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: "#17727A", background: dark ? "#12201F" : "#EAF4F2", color: "#17727A" }}>
-                            El responsable lo envió a revisión — valida: <b>Finalizar</b> o <b>Pedir cambios</b> (vuelve a progreso).
+                          <p className="mt-1.5 rounded border px-2 py-1 text-[11px] font-semibold" style={{ borderColor: "#175CD3", background: dark ? "#12201F" : "#EAF2FB", color: "#175CD3" }}>
+                            En revisión del administrador (él da el cierre final). Puedes <b>Pedir cambios</b> para devolverla a progreso.
                           </p>
                         )}
                         {/* Comentarios del responsable */}
