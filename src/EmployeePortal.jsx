@@ -509,22 +509,25 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             sube insumos y edita SOLO las actividades que él crea. Va DEBAJO de los indicadores. */}
         {myLeads.length > 0 && (
           <section className="mb-5 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
-            <div className="flex flex-col gap-2 border-b px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: border }}>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: "#17727A" }}>
-                  <ListChecks size={16} /> Coordinación
-                </span>
+            <div className="border-b px-3 py-2.5" style={{ borderColor: border }}>
+              <span className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: "#17727A" }}>
+                <ListChecks size={16} /> Coordinación de subproyectos
+              </span>
+              {/* Fila: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] */}
+              <div className="flex flex-wrap items-center gap-2">
                 {ledCompanies.length > 1 ? (
                   <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
-                    className="rounded-md border px-2 py-1.5 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }}>
+                    className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} title="Empresa">
                     {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 ) : (
-                  <span className="text-sm font-semibold" style={{ color: text }}>{companyNameOf(leadCompany)}</span>
+                  <span className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, color: text }}>{companyNameOf(leadCompany)}</span>
                 )}
-              </div>
-              {/* Botones al lado del desplegable de empresa */}
-              <div className="flex flex-wrap items-center gap-2">
+                <select value={leadClient} onChange={(e) => setLeadClient(e.target.value)}
+                  className="rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
+                  <option value="">Todos los subproyectos</option>
+                  {ledClients.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
                 <button type="button"
                   onClick={() => { setCreateOpen(true); setLf({ key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : ""), title: "", description: "", dueDate: "", assigneeId: "" }); }}
                   className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
@@ -537,22 +540,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
               </div>
             </div>
             <div className="px-3 py-3">
-              {/* Subproyectos que lidera en esta empresa (Todos + cada uno) */}
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                <button type="button" onClick={() => setLeadClient("")}
-                  className="rounded-full border px-2.5 py-1 text-xs font-semibold"
-                  style={leadClient === "" ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
-                  Todos
-                </button>
-                {ledClients.map((c) => (
-                  <button key={c} type="button" onClick={() => setLeadClient(c)}
-                    className="rounded-full border px-2.5 py-1 text-xs font-semibold"
-                    style={leadClient === c ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-
               {leadMsg && <p className="mb-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
 
               {/* Modal "Crear actividad" (estructura de tarea; el cierre lo da el admin) */}
