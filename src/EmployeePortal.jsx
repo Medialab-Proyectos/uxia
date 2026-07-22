@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound, ExternalLink, Download } from "lucide-react";
 import { notifyEvent } from "./notify.js";
 import * as opsData from "./opsData.js";
 
@@ -88,7 +88,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setMe(person);
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
-        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by,assignee_id,prev_due_date";
+        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by,assignee_id,prev_due_date,attachments";
         // Acota la vista SOLO si la persona pertenece a una empresa fija (externo). Los de MediaLab
         // (sin empresa) ven TODAS sus tareas asignadas, aunque estén repartidas entre clientes.
         const myCompany = person.company_id || "";
@@ -714,6 +714,28 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                 {isOpen && (
                   <div className="border-t px-3 py-3" style={{ borderColor: border }}>
                     {t.description && <p className="mb-3 whitespace-pre-line text-sm" style={{ color: dim }}>{t.description}</p>}
+
+                    {/* Enlaces y documentos anexos de la tarea (repositorios, PDFs, imágenes…) */}
+                    {Array.isArray(t.attachments) && t.attachments.length > 0 && (
+                      <ul className="mb-3 space-y-1 rounded-md border p-2" style={{ borderColor: border, background: bg }}>
+                        {t.attachments.map((a, i) => {
+                          const isLink = a.type === "link" || (!a.path && a.url);
+                          const href = a.url || (a.path ? `/operations-files/${String(a.path).replace(/\\/g, "/").replace(/^operations\//, "")}` : "");
+                          return (
+                            <li key={i} className="flex items-center gap-1.5 text-xs" style={{ color: text }}>
+                              {isLink ? <ExternalLink size={12} style={{ color: "#17727A" }} /> : <Paperclip size={12} />}
+                              <span className="min-w-0 flex-1 break-all">{a.label || a.path || "Adjunto"}</span>
+                              {href && (
+                                <a href={href} {...(isLink ? {} : { download: true })} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border" style={{ borderColor: border, color: text }} title={isLink ? "Abrir" : "Descargar"}>
+                                  {isLink ? <ExternalLink size={12} /> : <Download size={12} />}
+                                </a>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
 
                     {/* GESTIÓN DE LÍDER: solo en las actividades que YO creé. Estado (limitado) + pedir cambios.
                         El cierre real (finalizar) lo da el admin; aquí "Finalizada" = pasa a revisión. */}
