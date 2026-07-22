@@ -5,6 +5,7 @@ import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
 import { notifyEvent } from "./notify.js";
+import { encodeCompanyToken } from "./companyLink.js";
 
 const STATUS = {
   backlog: "Pendiente",
@@ -3401,6 +3402,7 @@ function CompanyPanel({
   const [editCompanyName, setEditCompanyName] = useState(null); // string en edición o null
   const [editClient, setEditClient] = useState(null); // { old, value } o null
   const [showKpi, setShowKpi] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false); // feedback al copiar el link de acceso
   // Subproyecto pendiente de confirmar borrado (bandeja). Sin window.confirm.
   const [confirmDeleteClient, setConfirmDeleteClient] = useState(null);
   // "Subproyecto y contexto" siempre oculto al abrir/cambiar de empresa.
@@ -3456,6 +3458,28 @@ function CompanyPanel({
           <p className="mt-1 text-sm text-[#667085]">
             {active.length ? `Subproyectos activos: ${active.join(", ")}` : "Sin subproyectos activos"}
           </p>
+          {/* Link de acceso de ESTA empresa: sus empleados externos entran por aquí (login branded
+              con el logo de la empresa y vista acotada a sus tareas). MediaLab usa el link principal. */}
+          {!isBandeja && (() => {
+            const url = `${window.location.origin}/?c=${encodeCompanyToken(company.id)}`;
+            const isHome = company.id === "medialab";
+            return (
+              <div className="mt-2">
+                <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#98A2B3]">
+                  <Link2 size={11} /> {isHome ? "Link principal (MediaLab)" : "Link de acceso de la empresa"}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <input readOnly value={url} onFocus={(e) => e.target.select()}
+                    className="min-w-0 flex-1 rounded border border-[#E4DED6] bg-[#F9FAFB] px-2 py-1 font-mono text-[11px] text-[#475467]" title="Link de acceso" />
+                  <button type="button"
+                    onClick={async () => { try { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1500); } catch { /* ignore */ } }}
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded border border-[#D0D5DD] px-2 text-xs font-semibold text-[#344054] hover:border-[#17727A] hover:text-[#17727A]" title="Copiar link">
+                    {linkCopied ? <Check size={13} /> : <Link2 size={13} />}{linkCopied ? "Copiado" : "Copiar"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">

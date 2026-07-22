@@ -81,7 +81,9 @@ function AppShell() {
   const linkCompanyId = React.useMemo(() => resolveCompany(), []);
   const [brand, setBrand] = React.useState(null); // { id, name, logoUrl } de la empresa del link
   React.useEffect(() => {
-    if (!linkCompanyId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+    // MediaLab es la casa: NO se brandea (conserva el logo actual del Centro de Operaciones en el
+    // login y en el portal de sus empleados). El branding por logo aplica solo a empresas externas.
+    if (!linkCompanyId || linkCompanyId === "medialab" || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
     fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/rpc/company_branding`, {
       method: "POST",
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
