@@ -629,8 +629,33 @@ function UserMenu({ email, onChangePassword, navText = "#344054", navDim = "#667
   );
 }
 
+// Evita la pantalla en blanco: si algo revienta al renderizar (p. ej. al abrir una tarjeta),
+// muestra el error en vez de tumbar toda la app, y deja recargar.
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error("UXIA crash:", error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0E1116", color: "#E8EDF3", padding: 24, fontFamily: "system-ui, sans-serif" }}>
+          <div style={{ maxWidth: 560 }}>
+            <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Algo falló al mostrar esta vista</h1>
+            <p style={{ color: "#9FB0C3", fontSize: 13, marginTop: 8 }}>Se evitó la pantalla en blanco. Recarga; si sigue, comparte este mensaje:</p>
+            <pre style={{ marginTop: 12, whiteSpace: "pre-wrap", background: "#151B23", border: "1px solid #28313E", borderRadius: 8, padding: 12, fontSize: 12, color: "#f08a80", overflow: "auto", maxHeight: 300 }}>{String(this.state.error?.stack || this.state.error?.message || this.state.error)}</pre>
+            <button type="button" onClick={() => window.location.reload()} style={{ marginTop: 12, background: "#17727A", color: "#fff", border: "none", borderRadius: 6, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Recargar</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <AppShell />
+    <ErrorBoundary>
+      <AppShell />
+    </ErrorBoundary>
   </React.StrictMode>
 );
