@@ -61,7 +61,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [leadCompany, setLeadCompany] = React.useState("");     // empresa seleccionada (para crear/subir)
   const [leadClient, setLeadClient] = React.useState("");       // subproyecto seleccionado ("" = todos los que lidera)
   const [createOpen, setCreateOpen] = React.useState(false);    // modal "crear actividad" abierto
-  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "" }); // form nueva actividad
+  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "", status: "ready" }); // form nueva actividad
   const [leadBusy, setLeadBusy] = React.useState(false);
   const [leadMsg, setLeadMsg] = React.useState("");
   const [crFor, setCrFor] = React.useState("");                 // id de tarea propia para pedir cambios
@@ -151,14 +151,16 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     if (myLeads.length && leadCompany) setCompanyFilter(leadCompany);
   }, [myLeads.length, leadCompany]);
 
-  // Auto-refresco cada 5 minutos (solo con la pestaña visible, para no gastar en segundo plano).
+  // Auto-refresco cada 10 minutos (solo con la pestaña visible; no refresca si hay algo abierto
+  // para no perder lo que estás escribiendo/creando).
   React.useEffect(() => {
     const timer = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) return;
+      if (createOpen || openId || crResolve) return; // no interrumpir edición/creación
       load();
-    }, 5 * 60 * 1000);
+    }, 10 * 60 * 1000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, createOpen, openId, crResolve]);
 
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "";
 
@@ -370,7 +372,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       const row = {
         id: crypto.randomUUID(), company_id: lead.company_id, client: lead.client,
         title: lf.title.trim(), description: lf.description.trim() || null,
-        status: "ready", priority: lf.priority || "media", due_date: lf.dueDate || null,
+        status: lf.status || "ready", priority: "media", due_date: lf.dueDate || null,
         assignee_id: lf.assigneeId || null, created_by: email, created_at: new Date().toISOString(),
       };
       const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks`, {
@@ -511,7 +513,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
               {leadClient && (
                 <>
                   <button type="button"
-                    onClick={() => { setCreateOpen(true); setLf({ key: `${leadCompany}|||${leadClient}`, title: "", description: "", dueDate: "", assigneeId: "" }); }}
+                    onClick={() => { setCreateOpen(true); setLf({ key: `${leadCompany}|||${leadClient}`, title: "", description: "", dueDate: "", assigneeId: "", status: "ready" }); }}
                     className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
                     <Send size={14} /> Crear actividad
                   </button>
@@ -543,10 +545,18 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                     className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
                   <textarea value={lf.description} onChange={(e) => setLf((f) => ({ ...f, description: e.target.value }))} rows={3} placeholder="Descripción / historia para el responsable"
                     className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
-                  <label className="block text-xs" style={{ color: dim }}>Fecha de finalización
-                    <input type="date" value={lf.dueDate} onChange={(e) => setLf((f) => ({ ...f, dueDate: e.target.value }))}
-                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }} />
-                  </label>
+                  <div className="flex gap-2">
+                    <label className="flex-1 text-xs" style={{ color: dim }}>Fecha de finalización
+                      <input type="date" value={lf.dueDate} onChange={(e) => setLf((f) => ({ ...f, dueDate: e.target.value }))}
+                        className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }} />
+                    </label>
+                    <label className="flex-1 text-xs" style={{ color: dim }}>Estado
+                      <select value={lf.status} onChange={(e) => setLf((f) => ({ ...f, status: e.target.value }))}
+                        className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
+                        {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </label>
+                  </div>
                   <label className="block text-xs" style={{ color: dim }}>Responsable (a quién le llega la historia)
                     <select value={lf.assigneeId} onChange={(e) => setLf((f) => ({ ...f, assigneeId: e.target.value }))}
                       className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
