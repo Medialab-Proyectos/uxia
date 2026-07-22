@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -587,6 +587,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [sortRecent, setSortRecent] = useState(false);    // ordenar por últimas incluidas
   const [activeView, setActiveView] = useState("companies");
   const [finalizeTask, setFinalizeTask] = useState(null); // tarea a finalizar desde la vista de prioridad
+  const [growthPractices, setGrowthPractices] = useState([]); // buenas prácticas de crecimiento (MD)
   const [alertDismissed, setAlertDismissed] = useState(false);
   // Foco desde una notificación del shell: abre "Todas las tareas" en el filtro indicado.
   useEffect(() => {
@@ -662,6 +663,12 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
 
     loadState();
   }, []);
+
+  // Buenas prácticas de crecimiento (las genera el MD). Se cargan aparte del estado central.
+  useEffect(() => {
+    if (!token || !opsData.opsDataReady()) return;
+    opsData.listGrowthPractices(token).then(setGrowthPractices).catch(() => {});
+  }, [token]);
 
   // Autosave silencioso de respaldo (estructura: empresas, personas, insumos y también
   // tareas). NO se muestra un botón global "Guardar cambios" (confundía): el guardado
@@ -1423,6 +1430,29 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setNotice(`Tarea creada en ${target}. Aparece arriba y abierta para completarla.`);
   }
 
+  // Convierte una BUENA PRÁCTICA de crecimiento en una tarea del subproyecto (hereda tipo/puntos).
+  function convertPracticeToTask(p) {
+    const puntos = p.esfuerzo === "alto" ? 4 : p.esfuerzo === "bajo" ? 1 : 2;
+    const nextTask = {
+      id: uid(), title: p.titulo, companyId: p.companyId,
+      client: p.client || activeCompanyClients[0] || "Sin subproyecto",
+      role: "Product", owner: "", priority: p.impacto === "alto" ? "alta" : "media", status: "ready",
+      dueDate: "", _unsaved: true, deliveryDate: "", source: "Práctica de crecimiento",
+      audience: "Interno MediaLab", syncMode: "Manual", evidence: "", category: "Producto", designPoints: puntos,
+      description: `${p.porque ? p.porque + "\n\n" : ""}Cómo: ${p.como || ""}${p.marco ? `\n\nMarco: ${p.marco}` : ""}`.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    setTasks((current) => [nextTask, ...current]);
+    setHighlightTaskId(nextTask.id);
+    setGrowthPractices((cur) => cur.filter((x) => x.id !== p.id));
+    if (opsData.opsDataReady()) opsData.updateGrowthPractice(token, p.id, { status: "convertida" }).catch(() => {});
+    setNotice(`"${p.titulo}" convertida en tarea.`);
+  }
+  function dismissPractice(id) {
+    setGrowthPractices((cur) => cur.filter((x) => x.id !== id));
+    if (opsData.opsDataReady()) opsData.updateGrowthPractice(token, id, { status: "descartada" }).catch(() => {});
+  }
+
   function dailyBrief() {
     const rows = companyTasks
       .filter((task) => task.status !== "done")
@@ -1665,6 +1695,9 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               highlightId={highlightTaskId}
               tasks={tasks}
               people={people}
+              growthPractices={growthPractices}
+              onConvertPractice={convertPracticeToTask}
+              onDismissPractice={dismissPractice}
               newClientName={newClientName}
               newClientTool={newClientTool}
               newClientBoardUrl={newClientBoardUrl}
@@ -3311,6 +3344,9 @@ function CompanyPanel({
   highlightId,
   tasks = [],
   people = [],
+  growthPractices = [],
+  onConvertPractice,
+  onDismissPractice,
   newClientName,
   newClientTool,
   newClientBoardUrl,
@@ -3598,7 +3634,8 @@ function CompanyPanel({
         </div>
         )}
         {showKpi && !isBandeja ? (
-          <CompanyKpiPanel company={company} tasks={tasks} clients={active} people={companyPeople} />
+          <CompanyKpiPanel company={company} tasks={tasks} clients={active} people={companyPeople}
+            growthPractices={growthPractices} onConvertPractice={onConvertPractice} onDismissPractice={onDismissPractice} />
         ) : (
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-1.5">
@@ -3950,7 +3987,9 @@ function CompanyPanel({
 
 // Panel de indicadores (KPI) por empresa: cumplidas vs total, por subproyecto, salud,
 // satisfacción (rating de tareas) y curva de crecimiento por periodo.
-function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
+function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growthPractices = [], onConvertPractice, onDismissPractice }) {
+  const [growthOpen, setGrowthOpen] = useState(false);
+  const myPractices = growthPractices.filter((p) => p.companyId === company.id);
   const [period, setPeriod] = useState("trimestre");
   const [fbPage, setFbPage] = useState(0); // paginacion del feedback (10 por pagina)
   const companyTasks = tasks.filter((t) => t.companyId === company.id);
@@ -4053,8 +4092,53 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [] }) {
             <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
           ))}
           <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl, period })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title={`Descargar el reporte DesignOps (${period}, a corte de hoy)`}><Download size={12} /><span className="hidden sm:inline"> Reporte DesignOps</span></button>
+          {/* Botón de CRECIMIENTO: buenas prácticas del proyecto (las genera el MD). */}
+          <button type="button" onClick={() => setGrowthOpen(true)} className="no-print inline-flex items-center gap-1 rounded-full border border-[#6941C6] bg-[#F4F1FD] px-2.5 py-1 text-xs font-semibold text-[#6941C6]" title="Buenas prácticas para crecer con este proyecto">
+            <Sparkles size={12} /><span className="hidden sm:inline"> Crecimiento</span>{myPractices.length ? ` · ${myPractices.length}` : ""}
+          </button>
         </div>
       </div>
+      {growthOpen && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setGrowthOpen(false); }}>
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-[#E4DED6] p-4">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#1D2939]"><Sparkles size={15} className="text-[#6941C6]" /> Crecimiento — {company.name}</h3>
+                <p className="mt-0.5 text-xs text-[#667085]">Buenas prácticas para crecer con este cliente (las genera el MD como consultor). Convierte en tarea lo que quieras ejecutar.</p>
+              </div>
+              <button type="button" onClick={() => setGrowthOpen(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {myPractices.length === 0 ? (
+                <p className="text-sm text-[#98A2B3]">Aún no hay prácticas para {company.name}. El MD las genera en su corrida (o cuando subas contexto/insumos del proyecto).</p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {myPractices.map((p) => (
+                    <li key={p.id} className="rounded-md border border-[#E4DED6] p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-semibold text-[#1D2939]">{p.titulo}</span>
+                        <span className="flex shrink-0 gap-1">
+                          <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold" style={p.impacto === "alto" ? { background: "#E5F5EE", color: "#0D7A4F" } : { background: "#F2F4F7", color: "#667085" }}>impacto {p.impacto}</span>
+                          <span className="rounded-full bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-bold text-[#667085]">esf. {p.esfuerzo}</span>
+                        </span>
+                      </div>
+                      {p.client && <p className="mt-0.5 text-[11px] font-semibold text-[#6941C6]">{p.client}</p>}
+                      {p.porque && <p className="mt-1 text-xs text-[#475467]"><b>Por qué:</b> {p.porque}</p>}
+                      {p.como && <p className="mt-0.5 text-xs text-[#475467]"><b>Cómo:</b> {p.como}</p>}
+                      {p.marco && <p className="mt-0.5 text-[11px] italic text-[#98A2B3]">{p.marco}</p>}
+                      <div className="mt-2 flex gap-1.5">
+                        <button type="button" onClick={() => { onConvertPractice?.(p); setGrowthOpen(false); }} className="inline-flex items-center gap-1 rounded-md bg-[#6941C6] px-2.5 py-1 text-xs font-semibold text-white"><Plus size={12} /> Convertir en tarea</button>
+                        <button type="button" onClick={() => onDismissPractice?.(p.id)} className="rounded-md border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#667085]">Descartar</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* Mapa dinámico MDSSP: solo dentro de los indicadores de la empresa. */}
       <CompanyMdsspMap company={company} />

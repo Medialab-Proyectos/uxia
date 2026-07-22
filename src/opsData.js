@@ -448,3 +448,20 @@ export async function deleteOportunidad(token, id) {
   const rows = await rest(token, `oportunidades?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=representation" });
   return asArray(rows).length;
 }
+
+// ---------- buenas prácticas de crecimiento (las genera el MD; el admin las convierte en tareas) ----------
+const rowToPractice = (r) => ({
+  id: r.id, companyId: r.company_id, client: r.client || "", titulo: r.titulo,
+  porque: r.porque || "", como: r.como || "", marco: r.marco || "",
+  impacto: r.impacto || "medio", esfuerzo: r.esfuerzo || "medio", status: r.status || "activa",
+});
+export async function listGrowthPractices(token) {
+  const rows = await rest(token, "growth_practices", { query: "?select=*&status=eq.activa&order=created_at.desc" }).catch(() => []);
+  return asArray(rows).map(rowToPractice);
+}
+export async function updateGrowthPractice(token, id, patch) {
+  await rest(token, `growth_practices?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH", prefer: "return=minimal",
+    body: { ...(patch.status ? { status: patch.status } : {}), updated_at: new Date().toISOString() },
+  });
+}

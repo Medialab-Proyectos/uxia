@@ -73,6 +73,23 @@ alter table people add column if not exists contact_method text default 'auto';
 -- Empresa/organización de la persona (obligatoria cuando el tipo es "Externo").
 alter table people add column if not exists org text;
 
+-- 2d) Buenas prácticas de CRECIMIENTO por proyecto (las genera el MD como consultor senior).
+-- Ver supabase/migration-growth-practices.sql. La app las muestra con un botón junto a los
+-- indicadores; cada práctica se puede convertir en tarea.
+create table if not exists growth_practices (
+  id uuid primary key default gen_random_uuid(),
+  company_id text not null,
+  client text,
+  titulo text not null,
+  porque text, como text, marco text,
+  impacto text default 'medio', esfuerzo text default 'medio',
+  status text not null default 'activa',        -- activa | convertida | descartada
+  source text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists growth_practices_company_idx on growth_practices (company_id, status);
+
 -- 3b) Imagen por subproyecto (jsonb en la empresa) -------------------------------
 alter table companies add column if not exists project_images jsonb not null default '{}'::jsonb;
 
@@ -221,7 +238,7 @@ $fn$;
 do $$
 declare t text;
 begin
-  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes','product_signals']
+  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes','product_signals','growth_practices']
   loop
     execute format('alter table %I enable row level security;', t);
     execute format('drop policy if exists "auth_all_%1$s" on %1$I;', t);
@@ -233,7 +250,7 @@ end $$;
 do $$
 declare t text;
 begin
-  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes','product_signals']
+  foreach t in array array['companies','projects','tasks','people','source_documents','app_state','insumos_pendientes','oportunidades','vacantes','product_signals','growth_practices']
   loop
     execute format('create policy "admin_all_%1$s" on %1$I for all to authenticated using (app_is_admin()) with check (app_is_admin());', t);
   end loop;
