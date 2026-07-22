@@ -616,6 +616,12 @@ su acceso se le da usuario + contraseña y su empresa. Los empleados de **MediaL
 **link principal**. La seguridad real la dan Supabase Auth + RLS (el empleado solo ve SUS tareas);
 el token del link es branding/anti-enumeración. Requiere `migration-login-empresa.sql`.
 
+**Líderes de subproyecto:** un subproyecto puede tener líderes (empleados MediaLab, se asignan en
+el admin → panel de la empresa → "Líderes de subproyecto"). Desde su portal el líder puede **crear
+tareas** y **subir insumos** a su subproyecto, y **editar/borrar SOLO las tareas que él crea**
+(`tasks.created_by`). El MD trata esas tareas e insumos como cualquier otra entrada del subproyecto.
+Lo permiten las políticas RLS + `app_is_lead()`. Requiere `migration-subproject-leads.sql`.
+
 Datos minimos de una persona:
 
 - Nombre.

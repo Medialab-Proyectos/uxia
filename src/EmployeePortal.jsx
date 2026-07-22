@@ -1,6 +1,7 @@
 import React from "react";
 import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound } from "lucide-react";
 import { notifyEvent } from "./notify.js";
+import * as opsData from "./opsData.js";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -51,6 +52,13 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [newPwd, setNewPwd] = React.useState("");
   const [pwdMsg, setPwdMsg] = React.useState("");
   const [pwdSaving, setPwdSaving] = React.useState(false);
+  const [myLeads, setMyLeads] = React.useState([]);             // subproyectos que lidera (si aplica)
+  const [allPeople, setAllPeople] = React.useState([]);         // personas (para asignar; líder puede leerlas)
+  const [myCreated, setMyCreated] = React.useState([]);         // tareas creadas por el líder
+  const [leadOpen, setLeadOpen] = React.useState(false);        // panel de líder abierto
+  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "" }); // form nueva tarea
+  const [leadBusy, setLeadBusy] = React.useState(false);
+  const [leadMsg, setLeadMsg] = React.useState("");
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -82,6 +90,18 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           setNoveltyReady(true);
         }
         setTasks(tRes.ok ? await tRes.json() : []);
+
+        // ¿Lidera subproyectos? (RLS devuelve solo SUS liderazgos). Si sí, carga personas y sus
+        // tareas creadas para el panel de líder.
+        const leadRes = await fetch(`${SUPABASE_URL}/rest/v1/subproject_leads?select=id,company_id,client`, { headers });
+        const leadRows = leadRes.ok ? await leadRes.json() : [];
+        setMyLeads(leadRows);
+        if (leadRows.length) {
+          const pplRes = await fetch(`${SUPABASE_URL}/rest/v1/people?select=id,name,email,type`, { headers });
+          setAllPeople(pplRes.ok ? await pplRes.json() : []);
+          const mineRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?created_by=eq.${encodeURIComponent(email)}&select=${base},created_by&order=due_date.asc`, { headers });
+          setMyCreated(mineRes.ok ? await mineRes.json() : []);
+        } else { setAllPeople([]); setMyCreated([]); }
       } else {
         setTasks([]);
       }
@@ -310,6 +330,59 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     } finally { setPwdSaving(false); }
   }
 
+  // ---- Líder de subproyecto: crear tareas/insumos y editar SOLO las que él crea ----
+  const leadKey = (l) => `${l.company_id}|||${l.client}`;
+  const companyNameOf = (id) => (companies.find((c) => c.id === id)?.name || id);
+  async function createLeadTask() {
+    const lead = myLeads.find((l) => leadKey(l) === lf.key) || myLeads[0];
+    if (!lead || !lf.title.trim()) { setLeadMsg("Elige subproyecto y escribe un título."); return; }
+    setLeadBusy(true); setLeadMsg("");
+    try {
+      const row = {
+        id: crypto.randomUUID(), company_id: lead.company_id, client: lead.client,
+        title: lf.title.trim(), description: lf.description.trim() || null,
+        status: "ready", priority: "media", due_date: lf.dueDate || null,
+        assignee_id: lf.assigneeId || null, created_by: email, created_at: new Date().toISOString(),
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks`, {
+        method: "POST", headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify(row),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.message || d.hint || `Error ${res.status}`); }
+      if (row.assignee_id) notifyEvent(token, { type: "assigned", taskId: row.id });
+      setLeadMsg("Tarea creada ✓");
+      setLf((f) => ({ ...f, title: "", description: "", dueDate: "", assigneeId: "" }));
+      await load();
+    } catch (e) { setLeadMsg(String(e?.message || "No se pudo crear la tarea.")); }
+    finally { setLeadBusy(false); }
+  }
+  async function uploadLeadInsumo(key, file) {
+    const lead = myLeads.find((l) => leadKey(l) === key);
+    if (!lead || !file) return;
+    setLeadBusy(true); setLeadMsg("");
+    try {
+      const kind = /^image\//.test(file.type || "") ? "imagen" : "texto";
+      await opsData.saveInsumo(token, { companyId: lead.company_id, client: lead.client, file, kind });
+      setLeadMsg(`Insumo subido a ${lead.client} ✓`);
+    } catch (e) { setLeadMsg(String(e?.message || "No se pudo subir el insumo.")); }
+    finally { setLeadBusy(false); }
+  }
+  async function patchMyTask(id, patch) {
+    setMyCreated((cur) => cur.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, {
+        method: "PATCH", headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+    } catch (e) { setLeadMsg(String(e?.message || "No se pudo guardar el cambio.")); }
+  }
+  async function deleteMyTask(id) {
+    setMyCreated((cur) => cur.filter((t) => t.id !== id));
+    try { await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, { method: "DELETE", headers: { ...headers, Prefer: "return=minimal" } }); }
+    catch { /* ignore */ }
+  }
+
   const dark = theme === "dark";
   const bg = dark ? "#0E1116" : "#F7F4EF";
   const card = dark ? "#151B23" : "#FFFFFF";
@@ -355,6 +428,98 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             {pwdMsg && <p className="mt-2 text-xs font-semibold" style={{ color: pwdMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{pwdMsg}</p>}
           </div>
         )}
+
+        {/* PANEL DE LÍDER: solo si lideras subproyectos. Crear tareas/insumos + editar las tuyas. */}
+        {myLeads.length > 0 && (
+          <div className="mb-4 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
+            <button type="button" onClick={() => { setLeadOpen((v) => !v); if (!lf.key && myLeads[0]) setLf((f) => ({ ...f, key: leadKey(myLeads[0]) })); }}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
+              <span className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: "#17727A" }}>
+                <ListChecks size={16} /> Lideras {myLeads.length} subproyecto{myLeads.length > 1 ? "s" : ""}
+              </span>
+              <span className="text-xs" style={{ color: dim }}>{leadOpen ? "Ocultar" : "Gestionar"}</span>
+            </button>
+            {leadOpen && (
+              <div className="border-t px-3 py-3" style={{ borderColor: border }}>
+                {/* Crear nueva tarea */}
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>Nueva tarea</p>
+                <div className="space-y-2">
+                  <select value={lf.key} onChange={(e) => setLf((f) => ({ ...f, key: e.target.value }))}
+                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }}>
+                    {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
+                  </select>
+                  <input value={lf.title} onChange={(e) => setLf((f) => ({ ...f, title: e.target.value }))} placeholder="Título de la tarea"
+                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+                  <textarea value={lf.description} onChange={(e) => setLf((f) => ({ ...f, description: e.target.value }))} rows={2} placeholder="Descripción (opcional)"
+                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <label className="flex-1 text-xs" style={{ color: dim }}>Fecha
+                      <input type="date" value={lf.dueDate} onChange={(e) => setLf((f) => ({ ...f, dueDate: e.target.value }))}
+                        className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }} />
+                    </label>
+                    <label className="flex-1 text-xs" style={{ color: dim }}>Responsable
+                      <select value={lf.assigneeId} onChange={(e) => setLf((f) => ({ ...f, assigneeId: e.target.value }))}
+                        className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
+                        <option value="">Sin responsable</option>
+                        {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <button type="button" onClick={createLeadTask} disabled={leadBusy || !lf.title.trim()}
+                    className="w-full rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
+                    {leadBusy ? "Guardando…" : "Crear tarea"}
+                  </button>
+                </div>
+
+                {/* Subir insumo por subproyecto */}
+                <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>Subir insumo</p>
+                <div className="space-y-1.5">
+                  {myLeads.map((l) => (
+                    <label key={leadKey(l)} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: border }}>
+                      <span className="truncate" style={{ color: text }}>{l.client}</span>
+                      <span className="shrink-0 rounded border px-2 py-1 font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }}>Elegir archivo
+                        <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadKey(l), f); e.target.value = ""; }} />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {leadMsg && <p className="mt-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
+
+                {/* Mis tareas creadas (editables) */}
+                {myCreated.length > 0 && (
+                  <>
+                    <p className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>Tareas que creé ({myCreated.length}) — editables</p>
+                    <div className="space-y-2">
+                      {myCreated.map((t) => (
+                        <div key={t.id} className="rounded-md border p-2" style={{ borderColor: border }}>
+                          <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
+                            className="w-full rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
+                            <span>{companyNameOf(t.company_id)} · {t.client}</span>
+                            <input type="date" value={t.due_date || ""} onChange={(e) => patchMyTask(t.id, { due_date: e.target.value || null })}
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} />
+                            <select value={t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }}>
+                              {[["ready", "Pendiente"], ["doing", "En progreso"], ["review", "En revisión"], ["blocked", "Bloqueada"], ["done", "Finalizada"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                            </select>
+                            <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }}>
+                              <option value="">Sin responsable</option>
+                              {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <button type="button" onClick={() => deleteMyTask(t.id)} className="ml-auto font-semibold" style={{ color: "#B42318" }}>Borrar</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
           <span>Estas son tus tareas y su prioridad.</span>
           {lastLoadedAt && (

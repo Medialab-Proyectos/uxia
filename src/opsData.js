@@ -72,7 +72,7 @@ const rowToTask = (row) => ({
   assigneeSeenAt: row.assignee_seen_at || "", adminTouchedAt: row.admin_touched_at || "",
   designPoints: row.design_points ?? null, qaDefects: row.qa_defects ?? null, changeRequest: !!row.change_request,
   tools: asArray(row.tools), changeRequests: asArray(row.change_requests),
-  mdTouchedAt: row.md_touched_at || "",
+  mdTouchedAt: row.md_touched_at || "", createdBy: row.created_by || "",
 });
 
 const taskToRow = (task) => ({
@@ -98,6 +98,7 @@ const taskToRow = (task) => ({
   change_requests: asArray(task.changeRequests),
   md_touched_at: task.mdTouchedAt || null,
   created_at: task.createdAt || new Date().toISOString(),
+  created_by: task.createdBy || null, // preserva quién creó la tarea (líder) en los guardados del admin
 });
 
 const rowToPerson = (row) => ({
@@ -237,7 +238,7 @@ export async function saveState(token, state) {
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   if (taskRows.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason"]);
+    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba
@@ -270,7 +271,7 @@ export async function saveState(token, state) {
 export async function saveTask(token, task) {
   if (!task?.id) return;
   await upsertResilient(token, "tasks?on_conflict=id", [taskToRow(task)],
-    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason"]);
+    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by"]);
 }
 
 // Borrado EXPLÍCITO (una tarea/persona a la vez) — sustituye al deleteMissing masivo.
@@ -466,4 +467,21 @@ export async function updateGrowthPractice(token, id, patch) {
     method: "PATCH", prefer: "return=minimal",
     body: { ...(patch.status ? { status: patch.status } : {}), updated_at: new Date().toISOString() },
   });
+}
+
+// ---- Líderes de subproyecto (admin) ----
+const rowToLead = (r) => ({ id: r.id, companyId: r.company_id, client: r.client || "", email: String(r.email || "").toLowerCase() });
+export async function listLeads(token) {
+  const rows = await rest(token, "subproject_leads", { query: "?select=*&order=created_at.asc" }).catch(() => []);
+  return asArray(rows).map(rowToLead);
+}
+export async function setLead(token, { companyId, client, email }) {
+  await rest(token, "subproject_leads?on_conflict=company_id,client,email", {
+    method: "POST", prefer: "resolution=merge-duplicates,return=minimal",
+    body: { company_id: companyId, client, email: String(email || "").toLowerCase() },
+  });
+}
+export async function removeLead(token, id) {
+  if (!id) return;
+  await rest(token, `subproject_leads?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", prefer: "return=minimal" });
 }

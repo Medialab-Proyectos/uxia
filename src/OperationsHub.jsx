@@ -594,6 +594,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [activeView, setActiveView] = useState("companies");
   const [finalizeTask, setFinalizeTask] = useState(null); // tarea a finalizar desde la vista de prioridad
   const [growthPractices, setGrowthPractices] = useState([]); // buenas prácticas de crecimiento (MD)
+  const [leads, setLeads] = useState([]); // líderes de subproyecto (company_id + client + email)
   const [alertDismissed, setAlertDismissed] = useState(false);
   // Foco desde una notificación del shell: abre "Todas las tareas" en el filtro indicado.
   useEffect(() => {
@@ -675,7 +676,21 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   useEffect(() => {
     if (!token || !opsData.opsDataReady()) return;
     opsData.listGrowthPractices(token).then(setGrowthPractices).catch(() => {});
+    opsData.listLeads(token).then(setLeads).catch(() => {});
   }, [token]);
+
+  // Líderes de subproyecto (empleados MediaLab que pueden crear tareas/insumos en su subproyecto).
+  async function assignLead(companyId, client, email) {
+    try {
+      await opsData.setLead(token, { companyId, client, email });
+      setLeads(await opsData.listLeads(token));
+      setNotice(`Líder asignado a ${client}.`);
+    } catch { setNotice("No se pudo asignar el líder (¿corriste migration-subproject-leads.sql?)."); }
+  }
+  async function removeLeadFn(id) {
+    try { await opsData.removeLead(token, id); setLeads((cur) => cur.filter((l) => l.id !== id)); }
+    catch { setNotice("No se pudo quitar el líder."); }
+  }
 
   // Autosave silencioso de respaldo (estructura: empresas, personas, insumos y también
   // tareas). NO se muestra un botón global "Guardar cambios" (confundía): el guardado
@@ -1715,6 +1730,9 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               growthPractices={growthPractices}
               onConvertPractice={convertPracticeToTask}
               onDismissPractice={dismissPractice}
+              leads={leads}
+              onAssignLead={assignLead}
+              onRemoveLead={removeLeadFn}
               newClientName={newClientName}
               newClientTool={newClientTool}
               newClientBoardUrl={newClientBoardUrl}
@@ -3432,6 +3450,9 @@ function CompanyPanel({
   onDeleteClient,
   onRestoreClient,
   onToggleStatus,
+  leads = [],
+  onAssignLead,
+  onRemoveLead,
 }) {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
@@ -3602,6 +3623,47 @@ function CompanyPanel({
           })}
         </div>
       </details>
+
+      {/* Líderes de subproyecto: empleados MediaLab que pueden subir tareas/insumos a ese
+          subproyecto y editar solo las tareas que ellos crean. */}
+      {!isBandeja && (
+      <details className="mt-3 rounded-md border border-[#E4DED6] bg-[#FFFCF7] p-3">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#667085]">
+          <ChevronRight size={14} className="ops-caret" /> Líderes de subproyecto
+        </summary>
+        <p className="mt-1 text-xs text-[#8b8272]">Un líder (empleado MediaLab) puede crear tareas e insumos en su subproyecto desde su portal, y editar solo las tareas que él crea.</p>
+        <div className="mt-2 space-y-2">
+          {active.length === 0 && <p className="text-xs text-[#98A2B3]">Sin subproyectos activos.</p>}
+          {active.map((client) => {
+            const mlPeople = people.filter((p) => (p.type || "Empleado MediaLab") === "Empleado MediaLab" && p.email);
+            const current = leads.filter((l) => l.companyId === company.id && l.client === client);
+            return (
+              <div key={client} className="rounded-md border border-[#E4DED6] bg-white p-2">
+                <p className="text-xs font-semibold text-[#344054]">{client}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {current.map((l) => (
+                    <span key={l.id} className="inline-flex items-center gap-1 rounded-full bg-[#EAF4F2] px-2 py-0.5 text-[11px] font-semibold text-[#17727A]">
+                      {mlPeople.find((p) => p.email.toLowerCase() === l.email)?.name || l.email}
+                      <button type="button" onClick={() => onRemoveLead?.(l.id)} title="Quitar líder" className="text-[#B42318]"><X size={11} /></button>
+                    </span>
+                  ))}
+                  <select
+                    value=""
+                    onChange={(e) => { if (e.target.value) onAssignLead?.(company.id, client, e.target.value); e.target.value = ""; }}
+                    className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#344054]"
+                  >
+                    <option value="">+ Agregar líder…</option>
+                    {mlPeople
+                      .filter((p) => !current.some((l) => l.email === p.email.toLowerCase()))
+                      .map((p) => <option key={p.id} value={p.email}>{p.name} ({p.email})</option>)}
+                  </select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+      )}
 
       <div className={sideOpen ? "mt-4 grid gap-4 xl:grid-cols-[300px_1fr]" : "mt-4"}>
         {sideOpen && (

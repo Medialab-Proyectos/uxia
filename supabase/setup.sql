@@ -295,7 +295,10 @@ create policy "emp_update_tasks" on tasks for update to authenticated
 create or replace function app_guard_employee_task_update() returns trigger
   language plpgsql as $fn$
 begin
-  if app_is_employee() then
+  -- El CREADOR (líder de subproyecto) edita libremente SU tarea; el resto de empleados quedan
+  -- blindados (solo status a doing/review/actualizada, comments y sellos de visto).
+  if app_is_employee() and not (old.created_by is not null
+      and lower(old.created_by) = lower(auth.jwt() ->> 'email')) then
     new.company_id := old.company_id; new.client := old.client; new.title := old.title;
     new.priority := old.priority; new.role := old.role; new.owner := old.owner;
     new.assignee_id := old.assignee_id; new.due_date := old.due_date;
@@ -318,9 +321,12 @@ begin
     new.md_touched_at := old.md_touched_at;
     -- change_requests SÍ lo puede tocar el empleado en SUS tareas: para marcar un cambio
     -- como RESUELTO al re-enviar a revisión. El admin tiene la última palabra (aprobar/re-pedir).
+    new.created_by := old.created_by;
     if new.status is distinct from old.status and new.status not in ('doing','review','actualizada') then
       new.status := old.status;
     end if;
+  else
+    new.created_by := old.created_by; -- nadie cambia quién creó la tarea
   end if;
   return new;
 end
@@ -328,6 +334,56 @@ $fn$;
 drop trigger if exists app_guard_task_update on tasks;
 create trigger app_guard_task_update before update on tasks
   for each row execute function app_guard_employee_task_update();
+
+-- LÍDERES DE SUBPROYECTO (empleados MediaLab): crean tareas/insumos en su subproyecto y editan
+-- SOLO las tareas que ellos crean (created_by). Ver supabase/migration-subproject-leads.sql.
+alter table tasks add column if not exists created_by text;
+create table if not exists subproject_leads (
+  id uuid primary key default gen_random_uuid(),
+  company_id text not null, client text not null, email text not null,
+  created_at timestamptz default now(), unique (company_id, client, email)
+);
+create index if not exists subproject_leads_email_idx on subproject_leads (lower(email));
+alter table subproject_leads enable row level security;
+drop policy if exists "admin_all_subproject_leads" on subproject_leads;
+create policy "admin_all_subproject_leads" on subproject_leads for all to authenticated
+  using (app_is_admin()) with check (app_is_admin());
+drop policy if exists "lead_read_own_leads" on subproject_leads;
+create policy "lead_read_own_leads" on subproject_leads for select to authenticated
+  using (lower(email) = lower(auth.jwt() ->> 'email'));
+create or replace function app_is_lead(cid text, cli text) returns boolean
+  language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from subproject_leads l
+    where l.company_id = cid and coalesce(l.client,'') = coalesce(cli,'')
+      and lower(l.email) = lower(auth.jwt() ->> 'email'))
+$fn$;
+drop policy if exists "lead_read_tasks" on tasks;
+create policy "lead_read_tasks" on tasks for select to authenticated
+  using (app_is_employee() and app_is_lead(company_id, client));
+drop policy if exists "lead_insert_tasks" on tasks;
+create policy "lead_insert_tasks" on tasks for insert to authenticated
+  with check (app_is_employee() and app_is_lead(company_id, client)
+    and lower(coalesce(created_by,'')) = lower(auth.jwt() ->> 'email'));
+drop policy if exists "lead_update_own_tasks" on tasks;
+create policy "lead_update_own_tasks" on tasks for update to authenticated
+  using (app_is_employee() and lower(coalesce(created_by,'')) = lower(auth.jwt() ->> 'email'))
+  with check (app_is_employee() and lower(coalesce(created_by,'')) = lower(auth.jwt() ->> 'email'));
+drop policy if exists "lead_delete_own_tasks" on tasks;
+create policy "lead_delete_own_tasks" on tasks for delete to authenticated
+  using (app_is_employee() and lower(coalesce(created_by,'')) = lower(auth.jwt() ->> 'email'));
+drop policy if exists "lead_read_insumos" on insumos_pendientes;
+create policy "lead_read_insumos" on insumos_pendientes for select to authenticated
+  using (app_is_employee() and app_is_lead(company_id, client));
+drop policy if exists "lead_insert_insumos" on insumos_pendientes;
+create policy "lead_insert_insumos" on insumos_pendientes for insert to authenticated
+  with check (app_is_employee() and app_is_lead(company_id, client));
+drop policy if exists "lead_delete_insumos" on insumos_pendientes;
+create policy "lead_delete_insumos" on insumos_pendientes for delete to authenticated
+  using (app_is_employee() and app_is_lead(company_id, client));
+drop policy if exists "lead_read_people" on people;
+create policy "lead_read_people" on people for select to authenticated
+  using (app_is_employee() and exists (
+    select 1 from subproject_leads l where lower(l.email) = lower(auth.jwt() ->> 'email')));
 
 -- 5) Storage (bucket operations-documents): lectura pública, escritura autenticada
 drop policy if exists "ops_public_read" on storage.objects;
