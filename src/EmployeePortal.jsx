@@ -1,5 +1,6 @@
 import React from "react";
 import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle } from "lucide-react";
+import { notifyEvent } from "./notify.js";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -246,6 +247,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         body: JSON.stringify({ ...body, employee_touched_at: new Date().toISOString() }),
       });
       if (!res.ok) throw new Error(`No se guardó (código ${res.status}).`);
+      // Si el empleado pasa la tarea a REVISIÓN, avisa al admin al instante.
+      if (body.status === "review") notifyEvent(token, { type: "review", taskId: task.id });
       setSaveState((s) => ({ ...s, [task.id]: { kind: "saved", at: Date.now() } }));
       setPending((p2) => { const n = { ...p2 }; delete n[task.id]; return n; });
       setDraft("");
@@ -274,6 +277,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`No se pudo guardar (código ${res.status}).`);
+      notifyEvent(token, { type: "cr-resolved", taskId: task.id }); // avisa al admin
       setCrResolve(null); setCrComment("");
       await load();
     } catch (e) {

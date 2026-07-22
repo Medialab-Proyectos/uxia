@@ -4,6 +4,7 @@ import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, Chec
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
+import { notifyEvent } from "./notify.js";
 
 const STATUS = {
   backlog: "Pendiente",
@@ -866,6 +867,11 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // (daily:fetch → Claude → daily:push) los interpreta. Aquí solo se descargan o borran.
 
   function updateTask(id, patch) {
+    // Aviso instantáneo al RESPONSABLE cuando el admin le pide cambios (CR abierto). El responsable
+    // no cambia con esta acción, así que el servidor lo resuelve bien aunque el guardado sea diferido.
+    if (patch.changeRequest === true && patch.status === "doing" && Array.isArray(patch.changeRequests)) {
+      notifyEvent(token, { type: "cr-opened", taskId: id });
+    }
     setTasks((current) => current.map((task) => {
       if (task.id !== id) return task;
       const next = { ...task, ...patch };
