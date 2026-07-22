@@ -174,6 +174,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     }
     if (leadEdit.assigneeId && leadEdit.assigneeId !== t.assignee_id) notifyEvent(token, { type: "assigned", taskId: t.id });
     await patchLeadTask(t.id, patch);
+    setLeadDueReason(""); // motivo se pide UNA vez por ciclo de guardado: se limpia tras guardar
     setLeadSaved(t.id); setLeadMsg(""); setTimeout(() => setLeadSaved(""), 2000);
   }
 
