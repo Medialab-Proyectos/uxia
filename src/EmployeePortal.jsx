@@ -779,6 +779,26 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                             ))}
                           </ul>
                         )}
+                        {/* HISTORIAL de cambios solicitados (los que YO pedí + su resolución) */}
+                        {Array.isArray(t.change_requests) && t.change_requests.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: dim }}>Historial de cambios solicitados</p>
+                            <ul className="mt-1 space-y-1">
+                              {t.change_requests.map((c, i) => (
+                                <li key={c.id || i} className="rounded border px-2 py-1 text-[11px]" style={{ borderColor: c.resolved ? border : "#F2C879", background: bg }}>
+                                  <div>
+                                    <span className="font-semibold" style={{ color: c.by === "lead" ? "#B54708" : c.by === "cliente" ? "#1D5A99" : "#B54708" }}>{c.by === "lead" ? "Tú pediste" : c.by === "cliente" ? "Cliente" : "Admin"}: </span>
+                                    <span style={{ color: text }}>{c.text}</span>
+                                    <span className="ml-1" style={{ color: dim }}>· {String(c.at || "").slice(0, 10)}</span>
+                                  </div>
+                                  {c.resolved
+                                    ? <div style={{ color: "#0D7A4F" }}>✓ Resuelto{c.resolved_comment ? `: ${c.resolved_comment}` : ""}</div>
+                                    : <div style={{ color: "#B54708" }}>● Pendiente</div>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                         <div className="mt-2 flex items-center justify-between gap-2">
                           {crFor === t.id ? (
                             <div className="flex flex-1 gap-1.5">
