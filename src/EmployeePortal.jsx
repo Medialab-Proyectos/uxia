@@ -27,7 +27,7 @@ function scoreTask(t) {
   return Math.min(100, s);
 }
 
-export default function EmployeePortal({ token, user, theme = "light", onAlerts, focus = null, onFocusHandled }) {
+export default function EmployeePortal({ token, user, theme = "light", onAlerts, focus = null, onFocusHandled, companyId = "", companyName = "" }) {
   const email = String(user?.email || "").toLowerCase();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -64,11 +64,13 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
         const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points";
+        // Login por empresa: si el link trae una empresa, se acota la vista a SUS tareas.
+        const compFilter = companyId ? `&company_id=eq.${encodeURIComponent(companyId)}` : "";
         // Intenta con las columnas de novedad; si la base aún no está migrada, carga sin ellas.
-        let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
+        let tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}${compFilter}&select=${base},assignee_seen_at,admin_touched_at,change_requests&order=due_date.asc`, { headers });
         if (!tRes.ok) {
           setNoveltyReady(false);
-          tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}&select=${base}&order=due_date.asc`, { headers });
+          tRes = await fetch(`${SUPABASE_URL}/rest/v1/tasks?assignee_id=eq.${person.id}${compFilter}&select=${base}&order=due_date.asc`, { headers });
         } else {
           setNoveltyReady(true);
         }
@@ -83,7 +85,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     } finally {
       setLoading(false);
     }
-  }, [headers, email]);
+  }, [headers, email, companyId]);
 
   React.useEffect(() => { load(); }, [load]);
 

@@ -609,6 +609,13 @@ Al crear una persona desde una empresa, esa persona queda asociada a la empresa
 activa. Al asignar una tarea, el desplegable debe mostrar solo las personas
 permitidas para esa empresa.
 
+**Login por empresa (empleados externos):** cada empleado externo pertenece a UNA empresa
+(`people.company_id`) y accede por el **link de esa empresa** (`…/?c=<token>`), que brandea el
+login y el header con el logo de la empresa y le muestra SOLO las tareas de esa empresa. Al crear
+su acceso se le da usuario + contraseña y su empresa. Los empleados de **MediaLab** entran por el
+**link principal**. La seguridad real la dan Supabase Auth + RLS (el empleado solo ve SUS tareas);
+el token del link es branding/anti-enumeración. Requiere `migration-login-empresa.sql`.
+
 Datos minimos de una persona:
 
 - Nombre.

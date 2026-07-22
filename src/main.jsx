@@ -5,6 +5,7 @@ import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
 import * as opsData from "./opsData.js";
+import { companyFromUrl } from "./companyLink.js";
 import logoMediaLab from "./logos/logo.svg";
 
 const AUTH_STORE_KEY = "uxia.supabaseSession";
@@ -74,6 +75,21 @@ const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 
 function AppShell() {
+  // Login por empresa: si la URL trae ?c=<token>, se identifica la empresa del empleado externo
+  // (branding + vista acotada). Sin token = link principal (MediaLab / CEO).
+  const linkCompanyId = React.useMemo(() => companyFromUrl(), []);
+  const [brand, setBrand] = React.useState(null); // { id, name, logoUrl } de la empresa del link
+  React.useEffect(() => {
+    if (!linkCompanyId || !SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+    fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/rpc/company_branding`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ cid: linkCompanyId }),
+    }).then((r) => (r.ok ? r.json() : [])).then((rows) => {
+      const c = Array.isArray(rows) ? rows[0] : rows;
+      if (c) setBrand({ id: c.id, name: c.name, logoUrl: c.logo?.url || "" });
+    }).catch(() => {});
+  }, [linkCompanyId]);
   // El login SIEMPRE abre el Centro de Operaciones (prioridad). El Radar es una página
   // independiente a la que se entra por el menú; no es la primera vista.
   const [module, setModule] = React.useState("operations");
@@ -282,7 +298,7 @@ function AppShell() {
   }
 
   if (!session?.access_token) {
-    return <LoginScreen notice={authNotice} onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />;
+    return <LoginScreen notice={authNotice} onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} brand={brand} />;
   }
 
   // EMPLEADO (no CEO): portal restringido — solo SUS tareas e indicadores. Sin Radar,
@@ -292,7 +308,10 @@ function AppShell() {
     return (
       <div style={{ minHeight: "100vh", background: dk ? "#0E1116" : "#F7F4EF" }}>
         <nav className="sticky top-0 z-50 flex items-center justify-between border-b px-4 py-2" style={{ backgroundColor: dk ? "#151B23" : "#FFFCF7", borderColor: dk ? "#28313E" : "#E7E0D5" }}>
-          <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-6 w-auto" />
+          {/* Header con el logo de la EMPRESA del link (branding); si no hay, el de MediaLab. */}
+          {brand?.logoUrl
+            ? <img src={brand.logoUrl} alt={brand.name || ""} className="h-7 w-auto" title={brand.name || ""} />
+            : <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-6 w-auto" />}
           <div className="flex items-center gap-2">
             <div className="relative">
               <button type="button" onClick={() => setEmpBellOpen((v) => !v)} aria-label={`Alertas${empVisible.length ? ` · ${empVisible.length}` : ""}`} aria-expanded={empBellOpen}
@@ -330,7 +349,7 @@ function AppShell() {
             </button>
           </div>
         </nav>
-        <EmployeePortal token={session.access_token} user={session.user} theme={theme} onAlerts={setEmpAlerts} focus={empFocus} onFocusHandled={() => setEmpFocus(null)} />
+        <EmployeePortal token={session.access_token} user={session.user} theme={theme} onAlerts={setEmpAlerts} focus={empFocus} onFocusHandled={() => setEmpFocus(null)} companyId={linkCompanyId} companyName={brand?.name || ""} />
       </div>
     );
   }
@@ -467,7 +486,7 @@ function AppShell() {
   );
 }
 
-function LoginScreen({ notice, onLogin, theme = "light", onToggleTheme }) {
+function LoginScreen({ notice, onLogin, theme = "light", onToggleTheme, brand = null }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPwd, setShowPwd] = React.useState(false);
@@ -510,9 +529,13 @@ function LoginScreen({ notice, onLogin, theme = "light", onToggleTheme }) {
       )}
       <form onSubmit={submit} className="w-full max-w-sm rounded-md border p-6 shadow-lg" style={{ background: C.panel, borderColor: C.border }}>
         <div className="mb-5 flex flex-col items-center text-center">
-          <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-10 w-auto" />
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: C.dim }}>MediaLab Ingeniería</p>
-          <h1 className="mt-1 text-2xl font-semibold">Centro operativo</h1>
+          {/* Login branded con el logo de la EMPRESA del link; si no hay, el de MediaLab. */}
+          {brand?.logoUrl
+            ? <img src={brand.logoUrl} alt={brand.name || ""} className="h-11 w-auto" />
+            : <img src={logoMediaLab} alt="MediaLab Ingeniería" className="h-10 w-auto" />}
+          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: C.dim }}>{brand?.name || "MediaLab Ingeniería"}</p>
+          <h1 className="mt-1 text-2xl font-semibold">{brand ? "Portal del proyecto" : "Centro operativo"}</h1>
+          {brand && <p className="mt-1 text-xs" style={{ color: C.dim }}>Entra para ver el estado de tus tareas.</p>}
         </div>
         <div className="space-y-3">
           <label className="block">

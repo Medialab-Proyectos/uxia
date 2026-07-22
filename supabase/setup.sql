@@ -72,6 +72,17 @@ create index if not exists product_signals_company_idx on product_signals (compa
 alter table people add column if not exists contact_method text default 'auto';
 -- Empresa/organización de la persona (obligatoria cuando el tipo es "Externo").
 alter table people add column if not exists org text;
+-- company_id: empresa del empleado externo (login por empresa). null = interno MediaLab.
+alter table people add column if not exists company_id text;
+
+-- Branding público del login por empresa: nombre + logo de UNA empresa por id (SECURITY DEFINER,
+-- para poder pintar el logo antes de autenticar). No lista todas; el id viene del token del link.
+create or replace function company_branding(cid text)
+  returns table (id text, name text, logo jsonb)
+  language sql stable security definer set search_path = public as $fn$
+  select c.id, c.name, c.logo from companies c where c.id = cid
+$fn$;
+grant execute on function company_branding(text) to anon, authenticated;
 
 -- 2d) Buenas prácticas de CRECIMIENTO por proyecto (las genera el MD como consultor senior).
 -- Ver supabase/migration-growth-practices.sql. La app las muestra con un botón junto a los

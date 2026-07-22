@@ -45,19 +45,36 @@ export default async function handler(req, res) {
   const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
   const email = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "");
+  // Empresa del empleado (login por empresa): el empleado externo solo accede a SU empresa.
+  const companyId = String(body.companyId || "").trim();
+  const personId = String(body.personId || "").trim();
   if (!email || !password) { res.status(400).json({ error: "Correo y contraseña son obligatorios" }); return; }
   if (password.length < 6) { res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" }); return; }
+
+  // Deja registrada la empresa del empleado en people.company_id (si vino personId), vía REST + service_role.
+  async function bindCompany() {
+    if (!companyId || !personId) return;
+    try {
+      await fetch(`${URL}/rest/v1/people?id=eq.${encodeURIComponent(personId)}`, {
+        method: "PATCH",
+        headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify({ company_id: companyId }),
+      });
+    } catch { /* no crítico */ }
+  }
 
   // 3) Buscar si el usuario ya existe (por email) y crear o actualizar la contraseña.
   const list = await svc(`admin/users?page=1&per_page=200`);
   const existing = (list.data?.users || list.data || []).find?.((u) => String(u.email || "").toLowerCase() === email);
   if (existing) {
-    const upd = await svc(`admin/users/${existing.id}`, { method: "PUT", body: { password, email_confirm: true, user_metadata: { ...(existing.user_metadata || {}), role: "employee" } } });
+    const upd = await svc(`admin/users/${existing.id}`, { method: "PUT", body: { password, email_confirm: true, user_metadata: { ...(existing.user_metadata || {}), role: "employee", company_id: companyId || existing.user_metadata?.company_id || null } } });
     if (!upd.ok) { res.status(upd.status).json({ error: upd.data?.msg || "No se pudo actualizar la contraseña" }); return; }
+    await bindCompany();
     res.status(200).json({ ok: true, created: false, userId: existing.id });
     return;
   }
-  const created = await svc(`admin/users`, { method: "POST", body: { email, password, email_confirm: true, user_metadata: { role: "employee" } } });
+  const created = await svc(`admin/users`, { method: "POST", body: { email, password, email_confirm: true, user_metadata: { role: "employee", company_id: companyId || null } } });
   if (!created.ok) { res.status(created.status).json({ error: created.data?.msg || "No se pudo crear el acceso" }); return; }
+  await bindCompany();
   res.status(200).json({ ok: true, created: true, userId: created.data?.id });
 }
