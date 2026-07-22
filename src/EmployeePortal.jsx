@@ -144,6 +144,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     return () => { window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [load]);
 
+  // Para el líder, el filtro de empresa de la lista sigue a su desplegable de empresa.
+  React.useEffect(() => {
+    if (myLeads.length && leadCompany) setCompanyFilter(leadCompany);
+  }, [myLeads.length, leadCompany]);
+
   // Auto-refresco cada 5 minutos (solo con la pestaña visible, para no gastar en segundo plano).
   React.useEffect(() => {
     const timer = setInterval(() => {
@@ -226,6 +231,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const qLow = q.trim().toLowerCase();
   const filtered = tasks.filter((t) => {
     if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
+    // Para el líder, el desplegable de subproyecto también acota la lista.
+    if (myLeads.length && leadClient && t.client !== leadClient) return false;
     // Buscador por palabras (ignora el filtro de estado para encontrar también finalizadas).
     if (qLow) return `${t.title || ""} ${t.client || ""} ${nameOf(t.company_id)} ${t.task_ref || ""} ${t.role || ""}`.toLowerCase().includes(qLow);
     // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
@@ -466,7 +473,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           <div className="mb-4">
             {/* UNA sola línea: [Empresa ▾] [Subproyecto ▾] [Crear actividad] [Subir insumo] (scroll horizontal en móvil) */}
             <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-              <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
+              {/* Este es EL filtro de empresa (también filtra la lista de abajo). */}
+              <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); setCompanyFilter(e.target.value); }}
                 className="shrink-0 rounded-md border px-2 py-2 text-sm font-semibold" style={{ borderColor: border, background: card, color: text }} title="Empresa">
                 {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -475,15 +483,20 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                 <option value="">Todos los subproyectos</option>
                 {ledClients.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button type="button"
-                onClick={() => { setCreateOpen(true); setLf({ key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : ""), title: "", description: "", dueDate: "", assigneeId: "" }); }}
-                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
-                <Send size={14} /> Crear actividad
-              </button>
-              <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Sube al subproyecto activo"}>
-                <Paperclip size={14} /> Subir insumo
-                <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
-              </label>
+              {/* Los botones SOLO aparecen cuando hay un subproyecto específico seleccionado. */}
+              {leadClient && (
+                <>
+                  <button type="button"
+                    onClick={() => { setCreateOpen(true); setLf({ key: `${leadCompany}|||${leadClient}`, title: "", description: "", dueDate: "", assigneeId: "" }); }}
+                    className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
+                    <Send size={14} /> Crear actividad
+                  </button>
+                  <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={`Subir insumo a ${leadClient}`}>
+                    <Paperclip size={14} /> Subir insumo
+                    <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient, f); e.target.value = ""; }} />
+                  </label>
+                </>
+              )}
             </div>
             <div>
               {leadMsg && <p className="mb-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
@@ -531,8 +544,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
 
         {error && <p className="mb-3 rounded-md border border-[#F3B0A8] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
 
-        {/* Filtros: empresa (si hay varias) + estado como carrusel horizontal en móvil */}
-        {myCompanies.length > 1 && (
+        {/* Filtro de empresa normal: SOLO para no-líderes. El líder usa el desplegable de arriba. */}
+        {myCompanies.length > 1 && myLeads.length === 0 && (
           <div className="mb-2">
             <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}
               className="w-full rounded-md border px-2 py-1.5 text-xs font-semibold sm:w-auto" style={{ borderColor: border, background: card, color: text }}>
