@@ -109,8 +109,51 @@ Cuando no queda nada por procesar, el run diario igual DEBE hacer estas dos pasa
    presupuesto, tecnologia, dependencias, mercado). Las que no se puedan derivar de
    tareas se capturan a mano en /mdssp.html → Medicion.
 
+### PESAR las fuerzas por AMPLITUD del proyecto (obligatorio — no leer los datos "en crudo")
+
+La `intensity` de una señal NO es solo el tamaño literal del dato: es su **impacto según la
+amplitud y el momento del proyecto**. Un "error pequeño" puede ser grave y uno "grande" puede ser
+menor según el contexto. Antes de fijar intensidades, el MD DEBE:
+
+1. **Leer el CONTEXTO del subproyecto** (`companies.project_descriptions` y `context_documents` de
+   ese subproyecto) para entender la **amplitud**: etapa (descubrimiento / construcción / previo a
+   lanzamiento / operación), fecha de lanzamiento, criticidad del flujo, alcance contratado.
+2. **Amplificar por cercanía al lanzamiento y por criticidad del flujo**: una fricción o caída en el
+   **flujo NÚCLEO** a **días del lanzamiento** es intensidad ALTA (0.7–0.9), aunque el dato crudo
+   parezca chico (p. ej. "clics muertos" o "solo la mitad avanza en el embudo"). Un detalle cosmético
+   fuera del camino crítico es intensidad BAJA aunque haya muchos.
+3. **Si NO existe contexto del subproyecto**, el MD NO debe asumir amplitud baja por defecto: lo
+   REPORTA como "falta contexto para valorar la amplitud de <subproyecto>" y pide subir un
+   documento de contexto (o la descripción del subproyecto) para calibrar bien. Mejor señalar la
+   incertidumbre que subvalorar.
+4. **Insumos que son REPORTES (PDF/imagen)**: leerlos completos y con cuidado; si solo se pudo
+   extraer el TEXTO (sin render visual), advertir que puede haberse perdido severidad visual
+   (gráficas, mapas de calor) y validar la lectura contra la amplitud antes de fijar la intensidad.
+
 El resultado del run sin insumos es: tareas repriorizadas + un reporte de que señales
 faltan por adaptar en cada empresa.
+
+## Lista de BUENAS PRÁCTICAS DE CRECIMIENTO por proyecto (el MD la genera)
+
+Además de tareas y señales, el MD actúa como **consultor senior / lead de producto digital** y
+genera, **por subproyecto**, una lista corta de **buenas prácticas para crecer con ese cliente/proyecto**.
+Se guarda en la tabla `growth_practices` (ver `supabase/migration-growth-practices.sql`) y la app la
+muestra con un botón (con logo) al lado de los indicadores; **cada ítem se puede convertir en tarea**.
+
+Cómo la arma el MD:
+- **Basado en marcos reales de influencia, ventas, crecimiento e innovación** (Cialdini/influencia;
+  Hormozi/oferta y valor; Godin/marketing del permiso; Sinek/propósito; Reis-Trout/posicionamiento;
+  Blank-Ries/lean startup; Cain/comunicación; Carnegie/relaciones; Duhigg/hábitos; Kahneman/decisión).
+  No citar por citar: **traducir** el marco en una práctica accionable para ESTE proyecto.
+- **Prioriza lo más VIABLE y de mayor IMPACTO**: pocas prácticas (3–6), que generen **conexión, apoyo
+  y alivien los DOLORES** ya detectados (señales MDSSP + insumos), no genéricas.
+- **Escucha el CONTEXTO y la VOZ**: usa el contexto del subproyecto, la **voz/tono del CEO** (lo que
+  tiene y lo que busca) y, si el subproyecto tiene un **LEAD** asignado, su voz y tono en los insumos.
+- Cada práctica: `{ titulo, porque (el dolor/oportunidad), como (acción concreta), marco, impacto,
+  esfuerzo }`. El admin puede convertirla en tarea (hereda tipo/puntos estimados).
+
+**Lead por subproyecto (para escuchar su voz):** al leer insumos, identificar quién es el **lead** de
+cada subproyecto (si se menciona) y registrarlo; su voz/tono alimenta tanto las tareas como esta lista.
 
 ## Priorizacion de tareas (SIEMPRE, despues de analizar)
 
