@@ -3849,7 +3849,7 @@ function CompanyPanel({
 
                   <details className="border-t pt-2" style={{ borderTopColor: `${accent}66` }}
                     open={expandedTaskLists.has(client)}
-                    onToggle={(e) => setExpandedTaskLists((prev) => { const n = new Set(prev); if (e.currentTarget.open) n.add(client); else n.delete(client); return n; })}>
+                    onToggle={(e) => { const isOpen = e.currentTarget.open; setExpandedTaskLists((prev) => { const n = new Set(prev); if (isOpen) n.add(client); else n.delete(client); return n; }); }}>
                     <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5">
                         <ChevronRight size={16} className="ops-caret" style={{ color: accent }} />
