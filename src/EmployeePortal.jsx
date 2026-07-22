@@ -6,6 +6,11 @@ import * as opsData from "./opsData.js";
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
+// Estados que puede poner un LÍDER a sus tareas. NO puede cerrar/finalizar (eso lo da el admin):
+// "Finalizada" para el líder = pasa a REVISIÓN del admin (status "review"), por consistencia.
+const LEAD_STATUSES = [["ready", "Sin iniciar"], ["doing", "En progreso"], ["blocked", "Bloqueada"], ["review", "Finalizada (pasa a revisión)"]];
+const LEAD_PRIORITIES = [["alta", "Alta"], ["media", "Media"], ["baja", "Baja"]];
+
 const STATUS_LABEL = {
   backlog: "Pendiente", ready: "Pendiente", doing: "En progreso",
   review: "En revisión", verificacion: "Verificación", blocked: "Bloqueada", actualizada: "Actualizada", done: "Finalizada",
@@ -56,7 +61,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [allPeople, setAllPeople] = React.useState([]);         // personas (para asignar; líder puede leerlas)
   const [myCreated, setMyCreated] = React.useState([]);         // tareas creadas por el líder
   const [leadOpen, setLeadOpen] = React.useState(false);        // panel de líder abierto
-  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "" }); // form nueva tarea
+  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "", priority: "media" }); // form nueva tarea
   const [leadBusy, setLeadBusy] = React.useState(false);
   const [leadMsg, setLeadMsg] = React.useState("");
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
@@ -341,7 +346,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       const row = {
         id: crypto.randomUUID(), company_id: lead.company_id, client: lead.client,
         title: lf.title.trim(), description: lf.description.trim() || null,
-        status: "ready", priority: "media", due_date: lf.dueDate || null,
+        status: "ready", priority: lf.priority || "media", due_date: lf.dueDate || null,
         assignee_id: lf.assigneeId || null, created_by: email, created_at: new Date().toISOString(),
       };
       const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks`, {
@@ -375,6 +380,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         body: JSON.stringify(patch),
       });
       if (!res.ok) throw new Error(`Error ${res.status}`);
+      // Finalizar (= review) avisa al admin para que la cierre. Reasignar avisa al nuevo responsable.
+      if (patch.status === "review") notifyEvent(token, { type: "review", taskId: id });
+      if (patch.assignee_id) notifyEvent(token, { type: "assigned", taskId: id });
     } catch (e) { setLeadMsg(String(e?.message || "No se pudo guardar el cambio.")); }
   }
   async function deleteMyTask(id) {
@@ -457,14 +465,20 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                       <input type="date" value={lf.dueDate} onChange={(e) => setLf((f) => ({ ...f, dueDate: e.target.value }))}
                         className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }} />
                     </label>
-                    <label className="flex-1 text-xs" style={{ color: dim }}>Responsable
-                      <select value={lf.assigneeId} onChange={(e) => setLf((f) => ({ ...f, assigneeId: e.target.value }))}
+                    <label className="flex-1 text-xs" style={{ color: dim }}>Prioridad
+                      <select value={lf.priority} onChange={(e) => setLf((f) => ({ ...f, priority: e.target.value }))}
                         className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
-                        <option value="">Sin responsable</option>
-                        {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        {LEAD_PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                       </select>
                     </label>
                   </div>
+                  <label className="block text-xs" style={{ color: dim }}>Responsable (a quién le llega la historia)
+                    <select value={lf.assigneeId} onChange={(e) => setLf((f) => ({ ...f, assigneeId: e.target.value }))}
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
+                      <option value="">Sin responsable</option>
+                      {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
                   <button type="button" onClick={createLeadTask} disabled={leadBusy || !lf.title.trim()}
                     className="w-full rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
                     {leadBusy ? "Guardando…" : "Crear tarea"}
@@ -495,16 +509,26 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                         <div key={t.id} className="rounded-md border p-2" style={{ borderColor: border }}>
                           <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
                             className="w-full rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
+                          <textarea value={t.description || ""} onChange={(e) => patchMyTask(t.id, { description: e.target.value })} rows={2} placeholder="Descripción"
+                            className="mt-1 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
-                            <span>{companyNameOf(t.company_id)} · {t.client}</span>
+                            {/* Reasignar el subproyecto entre los que lidera */}
+                            <select value={`${t.company_id}|||${t.client}`} onChange={(e) => { const [cid, cli] = e.target.value.split("|||"); patchMyTask(t.id, { company_id: cid, client: cli }); }}
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
+                              {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
+                            </select>
                             <input type="date" value={t.due_date || ""} onChange={(e) => patchMyTask(t.id, { due_date: e.target.value || null })}
                               className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} />
-                            <select value={t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }}>
-                              {[["ready", "Pendiente"], ["doing", "En progreso"], ["review", "En revisión"], ["blocked", "Bloqueada"], ["done", "Finalizada"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                            <select value={t.status === "done" ? "review" : t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Estado (el cierre lo da el admin)">
+                              {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                            </select>
+                            <select value={t.priority || "media"} onChange={(e) => patchMyTask(t.id, { priority: e.target.value })}
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Prioridad">
+                              {LEAD_PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                             </select>
                             <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
-                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }}>
+                              className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
                               <option value="">Sin responsable</option>
                               {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>

@@ -5,7 +5,7 @@ import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
 import * as opsData from "./opsData.js";
-import { resolveCompany } from "./companyLink.js";
+import { companyFromUrl, encodeCompanyToken } from "./companyLink.js";
 import { registerServiceWorker, requestNotificationPermission, subscribeToPush, notificationState, pushSupported } from "./pwa.js";
 import logoMediaLab from "./logos/logo.svg";
 
@@ -76,9 +76,20 @@ const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 
 function AppShell() {
-  // Login por empresa: si la URL trae ?c=<token>, se identifica la empresa del empleado externo
-  // (branding + vista acotada). Sin token = link principal (MediaLab / CEO).
-  const linkCompanyId = React.useMemo(() => resolveCompany(), []);
+  // Login por empresa: la empresa se toma SOLO del token de la URL (?c=<token>). Sin token, la base
+  // es inaccesible (no se recuerda un token guardado a propósito: el link base no debe mostrar nada).
+  const linkCompanyId = React.useMemo(() => companyFromUrl(), []);
+  // Persiste el token cuando SÍ viene en la URL (para poder brandear y para la PWA instalada). Si NO
+  // hay token en la URL pero es la PWA instalada (abre en "/") y hay uno guardado, redirige con él.
+  React.useEffect(() => {
+    if (linkCompanyId) { try { localStorage.setItem("uxia.company", linkCompanyId); } catch { /* ignore */ } return; }
+    const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+    if (!standalone) return; // navegador normal: sin token = pantalla "Acceso no disponible".
+    try {
+      const stored = localStorage.getItem("uxia.company");
+      if (stored) window.location.replace(`/?c=${encodeCompanyToken(stored)}`);
+    } catch { /* ignore */ }
+  }, [linkCompanyId]);
   const [brand, setBrand] = React.useState(null); // { id, name, logoUrl } de la empresa del link
   React.useEffect(() => {
     // MediaLab es la casa: NO se brandea (conserva el logo actual del Centro de Operaciones en el
