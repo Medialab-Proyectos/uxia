@@ -64,6 +64,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "" }); // form nueva actividad
   const [leadBusy, setLeadBusy] = React.useState(false);
   const [leadMsg, setLeadMsg] = React.useState("");
+  const [crFor, setCrFor] = React.useState("");                 // id de tarea propia para pedir cambios
+  const [crDraft, setCrDraft] = React.useState("");
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -394,6 +396,28 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     } catch (e) { setLeadMsg(String(e?.message || "No se pudo subir el insumo.")); }
     finally { setLeadBusy(false); }
   }
+  // ¿Yo (líder) creé esta actividad? Entonces puedo gestionar estado y pedir cambios sobre ella.
+  const iCreated = (t) => String(t.created_by || "").toLowerCase() === email;
+  async function patchLeadTask(id, patch) {
+    setTasks((cur) => cur.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, {
+        method: "PATCH", headers: { ...headers, "Content-Type": "application/json", Prefer: "return=minimal" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      if (patch.status === "review") notifyEvent(token, { type: "review", taskId: id });
+    } catch (e) { setError(String(e?.message || "No se pudo guardar el cambio.")); }
+  }
+  async function addLeadCR(t) {
+    const txt = crDraft.trim();
+    if (!txt) return;
+    const crs = Array.isArray(t.change_requests) ? t.change_requests : [];
+    const cr = { id: `cr-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, at: new Date().toISOString(), by: "lead", text: txt, resolved: false };
+    await patchLeadTask(t.id, { change_requests: [...crs, cr], change_request: true, status: "doing" });
+    notifyEvent(token, { type: "cr-opened", taskId: t.id });
+    setCrFor(""); setCrDraft("");
+  }
 
   const dark = theme === "dark";
   const bg = dark ? "#0E1116" : "#F7F4EF";
@@ -615,6 +639,38 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                 {isOpen && (
                   <div className="border-t px-3 py-3" style={{ borderColor: border }}>
                     {t.description && <p className="mb-3 whitespace-pre-line text-sm" style={{ color: dim }}>{t.description}</p>}
+
+                    {/* GESTIÓN DE LÍDER: solo en las actividades que YO creé. Estado (limitado) + pedir cambios.
+                        El cierre real (finalizar) lo da el admin; aquí "Finalizada" = pasa a revisión. */}
+                    {iCreated(t) && (
+                      <div className="mb-3 rounded-md border p-2" style={{ borderColor: "#17727A", background: dark ? "#12201F" : "#F0FAF8" }}>
+                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "#17727A" }}>Tú creaste esta actividad · gestión de líder</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {LEAD_STATUSES.map(([v, l]) => {
+                            const on = (t.status === "done" ? "review" : t.status) === v;
+                            return (
+                              <button key={v} type="button" onClick={() => patchLeadTask(t.id, { status: v })}
+                                className="rounded-md border px-2 py-1 text-xs font-semibold"
+                                style={on ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
+                                {l}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2">
+                          {crFor === t.id ? (
+                            <div className="flex gap-1.5">
+                              <input value={crDraft} onChange={(e) => setCrDraft(e.target.value)} placeholder="¿Qué cambio pides al responsable?" onKeyDown={(e) => e.key === "Enter" && addLeadCR(t)}
+                                className="min-w-0 flex-1 rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
+                              <button type="button" onClick={() => addLeadCR(t)} disabled={!crDraft.trim()} className="rounded px-2 py-1 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Enviar</button>
+                              <button type="button" onClick={() => setCrFor("")} className="text-xs font-semibold" style={{ color: dim }}>Cancelar</button>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => { setCrFor(t.id); setCrDraft(""); }} className="text-xs font-semibold" style={{ color: "#B54708" }}>+ Pedir cambios (request review)</button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Cambios solicitados (CR) abiertos: lo que hay que ajustar antes de re-enviar */}
                     {openCRs(t).length > 0 && (
