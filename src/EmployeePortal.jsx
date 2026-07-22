@@ -711,10 +711,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                           <input value={leadDueReason} onChange={(e) => setLeadDueReason(e.target.value)} placeholder="¿Por qué se mueve la fecha? (queda registrado)"
                             className="mb-1.5 w-full rounded border px-2 py-1 text-xs" style={{ borderColor: "#B76E00", background: bg, color: text }} />
                         )}
-                        <button type="button" onClick={() => saveLeadEdit(t)}
-                          className="mb-2 w-full rounded-md px-3 py-1.5 text-xs font-semibold text-white" style={{ background: leadSaved === t.id ? "#0D7A4F" : "#17727A" }}>
-                          {leadSaved === t.id ? "Guardado ✓" : "Guardar cambios"}
-                        </button>
                         <div className="flex flex-wrap gap-1.5">
                           {LEAD_STATUSES.map(([v, l]) => {
                             const on = (t.status === "done" ? "review" : t.status) === v;
@@ -750,6 +746,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                             <button type="button" onClick={() => { setCrFor(t.id); setCrDraft(""); }} className="text-xs font-semibold" style={{ color: "#B54708" }}>+ Pedir cambios (request review)</button>
                           )}
                         </div>
+                        {/* Guardar al FINAL de la caja */}
+                        <button type="button" onClick={() => saveLeadEdit(t)}
+                          className="mt-3 w-full rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: leadSaved === t.id ? "#0D7A4F" : "#17727A" }}>
+                          {leadSaved === t.id ? "Guardado ✓" : "Guardar cambios"}
+                        </button>
                       </div>
                     )}
 
