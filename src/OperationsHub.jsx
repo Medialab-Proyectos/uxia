@@ -2699,9 +2699,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
       style={open ? { boxShadow: "0 0 0 1px #17727A55" } : undefined}>
       <summary className="flex cursor-pointer list-none flex-col gap-1.5 rounded text-xs font-semibold text-[#1D2939]">
         {/* Fila superior: chevron + título (2 columnas) + acciones (tacho a la derecha) */}
-        <span className="flex w-full items-start gap-2">
+        <span className="flex w-full items-center gap-2">
         <span
-          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded"
           style={{ transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", color: "#17727A" }}
           aria-hidden="true"
         >
@@ -2785,7 +2785,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
             <button
               type="button"
               onClick={(event) => { event.preventDefault(); event.stopPropagation(); setConfirmDelete(true); }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#B42318] bg-white text-[#B42318]"
+              className={`inline-flex items-center justify-center rounded-md border border-[#B42318] bg-white text-[#B42318] ${open ? "h-9 w-9" : "h-7 w-7"}`}
               title="Eliminar tarea"
             >
               <Trash2 size={14} />
