@@ -9,7 +9,6 @@ const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 // Estados que puede poner un LÍDER a sus tareas. NO puede cerrar/finalizar (eso lo da el admin):
 // "Finalizada" para el líder = pasa a REVISIÓN del admin (status "review"), por consistencia.
 const LEAD_STATUSES = [["ready", "Sin iniciar"], ["doing", "En progreso"], ["blocked", "Bloqueada"], ["review", "Finalizada (pasa a revisión)"]];
-const LEAD_PRIORITIES = [["alta", "Alta"], ["media", "Media"], ["baja", "Baja"]];
 
 const STATUS_LABEL = {
   backlog: "Pendiente", ready: "Pendiente", doing: "En progreso",
@@ -62,10 +61,15 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [leadCompany, setLeadCompany] = React.useState("");     // empresa seleccionada en coordinación
   const [leadClient, setLeadClient] = React.useState("");       // subproyecto seleccionado ("" = todos los que lidera)
   const [leadScopeTasks, setLeadScopeTasks] = React.useState([]); // tareas del alcance seleccionado
-  const [createOpen, setCreateOpen] = React.useState(false);    // form "crear actividad" abierto
-  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "", priority: "media" }); // form nueva tarea
+  const [createOpen, setCreateOpen] = React.useState(false);    // modal "crear actividad" abierto
+  const [lf, setLf] = React.useState({ key: "", title: "", description: "", dueDate: "", assigneeId: "" }); // form nueva actividad
   const [leadBusy, setLeadBusy] = React.useState(false);
   const [leadMsg, setLeadMsg] = React.useState("");
+  const [dueEdit, setDueEdit] = React.useState(null);           // { id, date, old } popup de motivo de cambio de fecha
+  const [dueReason, setDueReason] = React.useState("");
+  const [crFor, setCrFor] = React.useState("");                 // id de la tarea para escribir un request review
+  const [crDraft, setCrDraft] = React.useState("");
+  const [openScope, setOpenScope] = React.useState("");         // tarea del alcance expandida (comentarios)
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -340,7 +344,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   //      subir insumos y editar SOLO las tareas que él crea. ----
   const leadKey = (l) => `${l.company_id}|||${l.client}`;
   const companyNameOf = (id) => (companies.find((c) => c.id === id)?.name || id);
-  const scopeSelect = "id,title,description,client,company_id,status,priority,due_date,assignee_id,created_by";
+  const scopeSelect = "id,title,description,client,company_id,status,priority,due_date,prev_due_date,assignee_id,created_by,comments,change_requests";
   const ledCompanies = React.useMemo(() => {
     const ids = [...new Set(myLeads.map((l) => l.company_id))];
     return ids.map((id) => ({ id, name: companyNameOf(id) }));
@@ -408,6 +412,26 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     try { await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${id}`, { method: "DELETE", headers: { ...headers, Prefer: "return=minimal" } }); }
     catch { /* ignore */ }
   }
+  // Cambio de fecha con MOTIVO (igual que el admin): si ya tenía fecha, pide el porqué.
+  function onDueChange(t, newDate) {
+    if (t.due_date && newDate && newDate !== t.due_date) { setDueEdit({ id: t.id, date: newDate, old: t.due_date }); setDueReason(""); }
+    else patchMyTask(t.id, { due_date: newDate || null });
+  }
+  function confirmDueChange() {
+    if (!dueEdit || !dueReason.trim()) return;
+    patchMyTask(dueEdit.id, { due_date: dueEdit.date, prev_due_date: dueEdit.old || null, due_change_reason: dueReason.trim() });
+    setDueEdit(null); setDueReason("");
+  }
+  // El líder pide un cambio (request review) sobre SU actividad: la devuelve a "en progreso" y avisa.
+  async function addRequestReview(t) {
+    const txt = crDraft.trim();
+    if (!txt) return;
+    const crs = Array.isArray(t.change_requests) ? t.change_requests : [];
+    const cr = { id: `cr-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`, at: new Date().toISOString(), by: "lead", text: txt, resolved: false };
+    await patchMyTask(t.id, { change_requests: [...crs, cr], change_request: true, status: "doing" });
+    notifyEvent(token, { type: "cr-opened", taskId: t.id });
+    setCrFor(""); setCrDraft("");
+  }
 
   const dark = theme === "dark";
   const bg = dark ? "#0E1116" : "#F7F4EF";
@@ -455,149 +479,6 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           </div>
         )}
 
-        {/* COORDINACIÓN DE SUBPROYECTOS (líder): navega por empresa → subproyecto, crea actividad,
-            sube insumos y edita SOLO las actividades que él crea. */}
-        {myLeads.length > 0 && (
-          <section className="mb-5 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
-            <div className="flex flex-col gap-2 border-b px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: border }}>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: "#17727A" }}>
-                <ListChecks size={16} /> Coordinación de subproyectos
-              </span>
-              {ledCompanies.length > 1 ? (
-                <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
-                  className="rounded-md border px-2 py-1.5 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }}>
-                  {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              ) : (
-                <span className="text-sm font-semibold" style={{ color: text }}>{companyNameOf(leadCompany)}</span>
-              )}
-            </div>
-            <div className="px-3 py-3">
-              {/* Subproyectos que lidera en esta empresa (Todos + cada uno) */}
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                <button type="button" onClick={() => setLeadClient("")}
-                  className="rounded-full border px-2.5 py-1 text-xs font-semibold"
-                  style={leadClient === "" ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
-                  Todos
-                </button>
-                {ledClients.map((c) => (
-                  <button key={c} type="button" onClick={() => setLeadClient(c)}
-                    className="rounded-full border px-2.5 py-1 text-xs font-semibold"
-                    style={leadClient === c ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-
-              {/* Acciones: crear actividad + subir insumo al subproyecto seleccionado */}
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <button type="button"
-                  onClick={() => { setCreateOpen((v) => !v); setLf((f) => ({ ...f, key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : "") })); }}
-                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
-                  <Send size={14} /> {createOpen ? "Cerrar" : "Crear actividad"}
-                </button>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Elige un subproyecto para el insumo"}>
-                  <Paperclip size={14} /> Subir insumo
-                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
-                </label>
-              </div>
-              {leadMsg && <p className="mb-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
-
-              {/* Formulario "Crear actividad" (estructura completa; estados los define el admin al cerrar) */}
-              {createOpen && (
-                <div className="mb-3 space-y-2 rounded-md border p-3" style={{ borderColor: "#17727A" }}>
-                  <label className="block text-xs" style={{ color: dim }}>Subproyecto
-                    <select value={lf.key} onChange={(e) => setLf((f) => ({ ...f, key: e.target.value }))}
-                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
-                      {myLeads.filter((l) => l.company_id === leadCompany).map((l) => <option key={leadKey(l)} value={leadKey(l)}>{l.client}</option>)}
-                    </select>
-                  </label>
-                  <input value={lf.title} onChange={(e) => setLf((f) => ({ ...f, title: e.target.value }))} placeholder="Título de la actividad"
-                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
-                  <textarea value={lf.description} onChange={(e) => setLf((f) => ({ ...f, description: e.target.value }))} rows={3} placeholder="Descripción / historia para el responsable"
-                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <label className="flex-1 text-xs" style={{ color: dim }}>Fecha
-                      <input type="date" value={lf.dueDate} onChange={(e) => setLf((f) => ({ ...f, dueDate: e.target.value }))}
-                        className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }} />
-                    </label>
-                    <label className="flex-1 text-xs" style={{ color: dim }}>Prioridad
-                      <select value={lf.priority} onChange={(e) => setLf((f) => ({ ...f, priority: e.target.value }))}
-                        className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
-                        {LEAD_PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                  <label className="block text-xs" style={{ color: dim }}>Responsable (a quién le llega la historia)
-                    <select value={lf.assigneeId} onChange={(e) => setLf((f) => ({ ...f, assigneeId: e.target.value }))}
-                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
-                      <option value="">Sin responsable</option>
-                      {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </label>
-                  <button type="button" onClick={createLeadTask} disabled={leadBusy || !lf.title.trim()}
-                    className="w-full rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
-                    {leadBusy ? "Guardando…" : "Crear actividad"}
-                  </button>
-                </div>
-              )}
-
-              {/* Actividades del alcance. Las que YO creé son editables; el resto, solo lectura. */}
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>
-                Actividades {leadClient ? `· ${leadClient}` : "· todos"} ({leadScopeTasks.length})
-              </p>
-              {leadScopeTasks.length === 0 ? (
-                <p className="text-xs" style={{ color: dim }}>Sin actividades en este alcance todavía.</p>
-              ) : (
-                <div className="space-y-2">
-                  {leadScopeTasks.map((t) => (iCreated(t) ? (
-                    <div key={t.id} className="rounded-md border p-2" style={{ borderColor: "#17727A" }}>
-                      <div className="mb-1 flex items-center gap-1.5">
-                        <span className="rounded bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-bold text-[#17727A]">Mía</span>
-                        <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
-                          className="min-w-0 flex-1 rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
-                      </div>
-                      <textarea value={t.description || ""} onChange={(e) => patchMyTask(t.id, { description: e.target.value })} rows={2} placeholder="Descripción"
-                        className="w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
-                        <select value={`${t.company_id}|||${t.client}`} onChange={(e) => { const [cid, cli] = e.target.value.split("|||"); patchMyTask(t.id, { company_id: cid, client: cli }); }}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
-                          {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
-                        </select>
-                        <input type="date" value={t.due_date || ""} onChange={(e) => patchMyTask(t.id, { due_date: e.target.value || null })}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} />
-                        <select value={t.status === "done" ? "review" : t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Estado (el cierre lo da el admin)">
-                          {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                        </select>
-                        <select value={t.priority || "media"} onChange={(e) => patchMyTask(t.id, { priority: e.target.value })}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Prioridad">
-                          {LEAD_PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                        </select>
-                        <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
-                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
-                          <option value="">Sin responsable</option>
-                          {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <button type="button" onClick={() => deleteMyTask(t.id)} className="ml-auto font-semibold" style={{ color: "#B42318" }}>Borrar</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div key={t.id} className="rounded-md border p-2 text-xs" style={{ borderColor: border }}>
-                      <p className="font-semibold" style={{ color: text }}>{t.title}</p>
-                      <p className="mt-0.5" style={{ color: dim }}>
-                        {t.client} · {STATUS_LABEL[t.status] || t.status}
-                        {t.assignee_id ? ` · ${allPeople.find((p) => p.id === t.assignee_id)?.name || "Responsable"}` : ""}
-                        {t.due_date ? ` · vence ${t.due_date}` : ""}
-                      </p>
-                    </div>
-                  )))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
           <span>Estas son tus tareas y su prioridad.</span>
           {lastLoadedAt && (
@@ -623,6 +504,187 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             </button>
           ))}
         </div>
+
+        {/* COORDINACIÓN DE SUBPROYECTOS (líder): navega por empresa → subproyecto, crea actividad,
+            sube insumos y edita SOLO las actividades que él crea. Va DEBAJO de los indicadores. */}
+        {myLeads.length > 0 && (
+          <section className="mb-5 rounded-md border" style={{ borderColor: "#17727A", background: card }}>
+            <div className="flex flex-col gap-2 border-b px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: border }}>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: "#17727A" }}>
+                  <ListChecks size={16} /> Coordinación
+                </span>
+                {ledCompanies.length > 1 ? (
+                  <select value={leadCompany} onChange={(e) => { setLeadCompany(e.target.value); setLeadClient(""); }}
+                    className="rounded-md border px-2 py-1.5 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }}>
+                    {ledCompanies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                ) : (
+                  <span className="text-sm font-semibold" style={{ color: text }}>{companyNameOf(leadCompany)}</span>
+                )}
+              </div>
+              {/* Botones al lado del desplegable de empresa */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button"
+                  onClick={() => { setCreateOpen(true); setLf({ key: leadClient ? `${leadCompany}|||${leadClient}` : (ledClients[0] ? `${leadCompany}|||${ledClients[0]}` : ""), title: "", description: "", dueDate: "", assigneeId: "" }); }}
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: "#17727A" }}>
+                  <Send size={14} /> Crear actividad
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "#17727A", color: "#17727A" }} title={leadClient ? `Subir insumo a ${leadClient}` : "Sube al subproyecto activo"}>
+                  <Paperclip size={14} /> Subir insumo
+                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLeadInsumo(leadCompany, leadClient || ledClients[0], f); e.target.value = ""; }} />
+                </label>
+              </div>
+            </div>
+            <div className="px-3 py-3">
+              {/* Subproyectos que lidera en esta empresa (Todos + cada uno) */}
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => setLeadClient("")}
+                  className="rounded-full border px-2.5 py-1 text-xs font-semibold"
+                  style={leadClient === "" ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
+                  Todos
+                </button>
+                {ledClients.map((c) => (
+                  <button key={c} type="button" onClick={() => setLeadClient(c)}
+                    className="rounded-full border px-2.5 py-1 text-xs font-semibold"
+                    style={leadClient === c ? { borderColor: "#17727A", background: "#17727A", color: "#fff" } : { borderColor: border, color: dim }}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+
+              {leadMsg && <p className="mb-2 text-xs font-semibold" style={{ color: leadMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{leadMsg}</p>}
+
+              {/* Modal "Crear actividad" (estructura de tarea; el cierre lo da el admin) */}
+              {createOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={(e) => { if (e.target === e.currentTarget) setCreateOpen(false); }}>
+                  <div className="w-full max-w-md space-y-2 rounded-md border p-4 shadow-2xl" style={{ borderColor: "#17727A", background: card, maxHeight: "92vh", overflowY: "auto" }}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold" style={{ color: text }}>Crear actividad</p>
+                    <button type="button" onClick={() => setCreateOpen(false)} className="text-xs font-semibold" style={{ color: dim }}>Cerrar</button>
+                  </div>
+                  <label className="block text-xs" style={{ color: dim }}>Subproyecto
+                    <select value={lf.key} onChange={(e) => setLf((f) => ({ ...f, key: e.target.value }))}
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
+                      {myLeads.filter((l) => l.company_id === leadCompany).map((l) => <option key={leadKey(l)} value={leadKey(l)}>{l.client}</option>)}
+                    </select>
+                  </label>
+                  <input value={lf.title} onChange={(e) => setLf((f) => ({ ...f, title: e.target.value }))} placeholder="Título de la actividad"
+                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+                  <textarea value={lf.description} onChange={(e) => setLf((f) => ({ ...f, description: e.target.value }))} rows={3} placeholder="Descripción / historia para el responsable"
+                    className="w-full rounded-md border px-2 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+                  <label className="block text-xs" style={{ color: dim }}>Fecha de finalización
+                    <input type="date" value={lf.dueDate} onChange={(e) => setLf((f) => ({ ...f, dueDate: e.target.value }))}
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }} />
+                  </label>
+                  <label className="block text-xs" style={{ color: dim }}>Responsable (a quién le llega la historia)
+                    <select value={lf.assigneeId} onChange={(e) => setLf((f) => ({ ...f, assigneeId: e.target.value }))}
+                      className="mt-1 w-full rounded-md border px-2 py-2 text-sm font-normal" style={{ borderColor: border, background: bg, color: text }}>
+                      <option value="">Sin responsable</option>
+                      {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                  <button type="button" onClick={createLeadTask} disabled={leadBusy || !lf.title.trim()}
+                    className="w-full rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
+                    {leadBusy ? "Guardando…" : "Crear actividad"}
+                  </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Actividades del alcance. Las que YO creé son editables; el resto, solo lectura. */}
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: dim }}>
+                Actividades {leadClient ? `· ${leadClient}` : "· todos"} ({leadScopeTasks.length})
+              </p>
+              {leadScopeTasks.length === 0 ? (
+                <p className="text-xs" style={{ color: dim }}>Sin actividades en este alcance todavía.</p>
+              ) : (
+                <div className="space-y-2">
+                  {leadScopeTasks.map((t) => (iCreated(t) ? (
+                    <div key={t.id} className="rounded-md border p-2" style={{ borderColor: "#17727A" }}>
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <span className="rounded bg-[#EAF4F2] px-1.5 py-0.5 text-[10px] font-bold text-[#17727A]">Mía</span>
+                        <input value={t.title || ""} onChange={(e) => patchMyTask(t.id, { title: e.target.value })}
+                          className="min-w-0 flex-1 rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
+                      </div>
+                      <textarea value={t.description || ""} onChange={(e) => patchMyTask(t.id, { description: e.target.value })} rows={2} placeholder="Descripción"
+                        className="w-full rounded border px-2 py-1 text-xs" style={{ borderColor: border, background: bg, color: text }} />
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style={{ color: dim }}>
+                        <select value={`${t.company_id}|||${t.client}`} onChange={(e) => { const [cid, cli] = e.target.value.split("|||"); patchMyTask(t.id, { company_id: cid, client: cli }); }}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Subproyecto">
+                          {myLeads.map((l) => <option key={leadKey(l)} value={leadKey(l)}>{companyNameOf(l.company_id)} · {l.client}</option>)}
+                        </select>
+                        <input type="date" value={t.due_date || ""} onChange={(e) => onDueChange(t, e.target.value)}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Fecha de finalización" />
+                        <select value={t.status === "done" ? "review" : t.status} onChange={(e) => patchMyTask(t.id, { status: e.target.value })}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Estado (el cierre lo da el admin)">
+                          {LEAD_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                        <select value={t.assignee_id || ""} onChange={(e) => patchMyTask(t.id, { assignee_id: e.target.value || null })}
+                          className="rounded border px-1.5 py-0.5" style={{ borderColor: border, background: bg, color: text }} title="Responsable">
+                          <option value="">Sin responsable</option>
+                          {allPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <button type="button" onClick={() => deleteMyTask(t.id)} className="font-semibold" style={{ color: "#B42318" }}>Borrar</button>
+                      </div>
+                      {/* Comentarios del responsable + pedir un cambio (request review) */}
+                      <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+                        <button type="button" onClick={() => setOpenScope(openScope === t.id ? "" : t.id)} className="inline-flex items-center gap-1 font-semibold" style={{ color: "#17727A" }}>
+                          <MessageCircle size={12} /> Comentarios ({Array.isArray(t.comments) ? t.comments.length : 0})
+                        </button>
+                        <button type="button" onClick={() => { setCrFor(crFor === t.id ? "" : t.id); setCrDraft(""); }} className="font-semibold" style={{ color: "#B54708" }}>
+                          Pedir cambios
+                        </button>
+                      </div>
+                      {openScope === t.id && Array.isArray(t.comments) && t.comments.length > 0 && (
+                        <div className="mt-1 space-y-1">
+                          {t.comments.map((c, i) => (
+                            <div key={i} className="rounded border px-2 py-1 text-[11px]" style={{ borderColor: border, background: bg }}>
+                              <span className="font-semibold" style={{ color: text }}>{c.author || (c.role === "admin" ? "Admin" : "Responsable")}: </span>
+                              <span style={{ color: dim }}>{c.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {crFor === t.id && (
+                        <div className="mt-1 flex gap-1.5">
+                          <input value={crDraft} onChange={(e) => setCrDraft(e.target.value)} placeholder="¿Qué cambio pides?" onKeyDown={(e) => e.key === "Enter" && addRequestReview(t)}
+                            className="min-w-0 flex-1 rounded border px-2 py-1 text-[11px]" style={{ borderColor: border, background: bg, color: text }} />
+                          <button type="button" onClick={() => addRequestReview(t)} disabled={!crDraft.trim()} className="rounded px-2 py-1 text-[11px] font-semibold text-white disabled:opacity-40" style={{ background: "#B54708" }}>Enviar</button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div key={t.id} className="rounded-md border p-2 text-xs" style={{ borderColor: border }}>
+                      <p className="font-semibold" style={{ color: text }}>{t.title}</p>
+                      <p className="mt-0.5" style={{ color: dim }}>
+                        {t.client} · {STATUS_LABEL[t.status] || t.status}
+                        {t.assignee_id ? ` · ${allPeople.find((p) => p.id === t.assignee_id)?.name || "Responsable"}` : ""}
+                        {t.due_date ? ` · vence ${t.due_date}` : ""}
+                      </p>
+                    </div>
+                  )))}
+                </div>
+              )}
+            </div>
+
+            {/* Pop-up: motivo del cambio de fecha (queda como soporte, insumo para analítica). */}
+            {dueEdit && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)" }} onClick={(e) => { if (e.target === e.currentTarget) setDueEdit(null); }}>
+                <div className="w-full max-w-sm rounded-md border p-4 shadow-2xl" style={{ borderColor: "#B76E00", background: card }}>
+                  <p className="text-sm font-semibold" style={{ color: text }}>Cambio de fecha</p>
+                  <p className="mt-1 text-xs" style={{ color: dim }}>De <b>{dueEdit.old}</b> a <b>{dueEdit.date}</b>. Di por qué se mueve (queda registrado).</p>
+                  <textarea value={dueReason} onChange={(e) => setDueReason(e.target.value)} rows={3} autoFocus placeholder="Motivo del cambio de fecha"
+                    className="mt-2 w-full rounded-md border px-2 py-1.5 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" disabled={!dueReason.trim()} onClick={confirmDueChange} className="flex-1 rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#B76E00" }}>Aceptar</button>
+                    <button type="button" onClick={() => setDueEdit(null)} className="rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: border, color: dim }}>Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         {error && <p className="mb-3 rounded-md border border-[#F3B0A8] bg-[#FEF3F2] p-2 text-xs font-semibold text-[#B42318]">{error}</p>}
 
