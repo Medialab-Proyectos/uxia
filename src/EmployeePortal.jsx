@@ -70,6 +70,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [leadEdit, setLeadEdit] = React.useState({ title: "", description: "", dueDate: "", assigneeId: "" }); // edición de la actividad propia abierta
   const [leadDueReason, setLeadDueReason] = React.useState("");  // motivo del cambio de fecha
   const [leadSaved, setLeadSaved] = React.useState("");          // id con "guardado ✓"
+  const [leadPanelOpen, setLeadPanelOpen] = React.useState(false); // acordeón de "gestión de líder"
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
@@ -160,7 +161,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     const t = tasks.find((x) => x.id === openId);
     if (t && String(t.created_by || "").toLowerCase() === email) {
       setLeadEdit({ title: t.title || "", description: t.description || "", dueDate: t.due_date || "", assigneeId: t.assignee_id || "" });
-      setLeadDueReason(""); setLeadSaved("");
+      setLeadDueReason(""); setLeadSaved(""); setLeadPanelOpen(false);
     }
   }, [openId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Guarda los cambios de la actividad propia. Si cambió la fecha y ya había una, exige el motivo.
@@ -692,7 +693,26 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                         El cierre real (finalizar) lo da el admin; aquí "Finalizada" = pasa a revisión. */}
                     {iCreated(t) && (
                       <div className="mb-3 rounded-md border p-2" style={{ borderColor: "#17727A", background: dark ? "#12201F" : "#F0FAF8" }}>
-                        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "#17727A" }}>Tú creaste esta actividad · gestión de líder</p>
+                        <button type="button" onClick={() => setLeadPanelOpen((v) => !v)} className="flex w-full items-center justify-between text-left">
+                          <span className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "#17727A" }}>Tú creaste esta actividad · gestión de líder</span>
+                          <span className="text-[11px] font-semibold" style={{ color: "#17727A" }}>{leadPanelOpen ? "▲" : "▼"}</span>
+                        </button>
+                        {leadPanelOpen && (<div className="mt-2">
+                        {["review", "verificacion", "done"].includes(t.status) ? (
+                          <div>
+                            <p className="text-xs font-semibold" style={{ color: "#B76E00" }}>En revisión del administrador — ya no puedes hacer cambios en esta actividad.</p>
+                            {Array.isArray(t.comments) && t.comments.length > 0 && (
+                              <ul className="mt-2 space-y-1">
+                                {t.comments.map((c, i) => (
+                                  <li key={i} className="rounded border px-2 py-1 text-[11px]" style={{ borderColor: border, background: bg }}>
+                                    <span className="font-semibold" style={{ color: text }}>{c.author || (c.role === "admin" ? "Admin" : "Responsable")}: </span>
+                                    <span style={{ color: dim }}>{c.text}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ) : (<>
                         {/* Edición de la actividad (con botón Guardar) */}
                         <input value={leadEdit.title} onChange={(e) => setLeadEdit((s) => ({ ...s, title: e.target.value }))} placeholder="Título"
                           className="mb-1.5 w-full rounded border px-2 py-1 text-sm font-semibold" style={{ borderColor: border, background: bg, color: text }} />
@@ -752,6 +772,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                           className="mt-3 w-full rounded-md px-3 py-2 text-sm font-semibold text-white" style={{ background: leadSaved === t.id ? "#0D7A4F" : "#17727A" }}>
                           {leadSaved === t.id ? "Guardado ✓" : "Guardar cambios"}
                         </button>
+                        </>)}
+                        </div>)}
                       </div>
                     )}
 
