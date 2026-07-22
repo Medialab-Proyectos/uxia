@@ -124,6 +124,10 @@ function diasDesde(createdAt) {
   return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000);
 }
 
+// señalesIA a veces llega como string (dato viejo o respuesta del LLM) en vez de array; esto lo
+// normaliza a array para poder .slice()/.map() sin romper (crash en vacantes del Radar).
+const iaList = (v) => (Array.isArray(v) ? v : v ? [String(v)] : []);
+
 // Probabilidad de recordación según cuándo se capturó (created_at). Las empresas suelen
 // contratar en las primeras 48h; después de 3 días baja rápido; a los 5 se archiva.
 function frescura(createdAt) {
@@ -332,7 +336,7 @@ function localScore(job) {
   if (job.remoto === "remoto") s += 25;
   else if (job.remoto === "híbrido") s += 10;
   if (job.idioma === "español") s += 20;
-  if ((job.señalesIA || []).length > 0) s += Math.min(15, job.señalesIA.length * 5);
+  if (iaList(job.señalesIA).length > 0) s += Math.min(15, iaList(job.señalesIA).length * 5);
   if (/ux|ui|experiencia|product design/i.test(job.titulo || "")) s += 10;
   return Math.min(100, s);
 }
@@ -1454,7 +1458,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                               {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
                               {j.remoto === "híbrido" && <Badge color={C.amber} bg={`${C.amber}14`}>Híbrido</Badge>}
                               {j.idioma === "español" && <Badge color={C.cyan} bg={`${C.cyan}14`}>Español</Badge>}
-                              {(j.señalesIA || []).slice(0, 3).map((s) => (
+                              {iaList(j.señalesIA).slice(0, 3).map((s) => (
                                 <Badge key={s} color={C.coral} bg={`${C.coral}14`}>{s}</Badge>
                               ))}
                               {j.salario && j.salario !== "No especificado" && (
@@ -1931,7 +1935,7 @@ Score: base 25, LinkedIn o Google X-ray +10, Colombia/LATAM +25, español +30, r
                           {j.remoto === "remoto" && <Badge color={C.green} bg={`${C.green}14`}>Remoto</Badge>}
                           {j.remoto === "híbrido" && <Badge color={C.amber} bg={`${C.amber}14`}>Híbrido</Badge>}
                           {j.idioma === "español" && <Badge color={C.cyan} bg={`${C.cyan}14`}>Español</Badge>}
-                          {(j.señalesIA || []).slice(0, 3).map((s) => (
+                          {iaList(j.señalesIA).slice(0, 3).map((s) => (
                             <Badge key={s} color={C.coral} bg={`${C.coral}14`}>{s}</Badge>
                           ))}
                           {j.salario && j.salario !== "No especificado" && (
