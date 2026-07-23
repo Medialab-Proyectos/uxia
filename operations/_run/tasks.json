@@ -1,112 +1,44 @@
 {
   "tasks": [
-    {
-      "title": "AspenView: maquetar la página según el sitemap y pasarla para feedback",
-      "companyId": "por-asignar",
-      "client": "AspenView",
-      "description": "El cliente (AspenView) está frenado por prioridades internas: las últimas dos semanas su equipo (Santiago y Laura, solo 2 personas) estuvo dedicado a una plataforma de training para 50 vendedores nuevos en EEUU, y la página quedó en pausa de su lado. Acuerdo con Christian: MediaLab toma la iniciativa y empieza a MAQUETAR el diseño de la página con la estructura y el sitemap ya investigados, y se lo pasa al cliente para que dé feedback ('esto no parece de la empresa, ajustemos'). Así el proyecto no depende del tiempo del cliente. El mes de julio entra dentro del contrato actual; el proyecto arranca cuando arranque la página.",
-      "status": "ready",
-      "priority": "alta",
-      "dueDate": "2026-07-22",
-      "role": "Diseño UX/UI",
-      "category": "Diseño UX/UI",
-      "source": "Run diario 2026-07-17 (daily AspenView)",
-      "audience": "Externo cliente"
-    },
-    {
-      "title": "AspenView: pedir el brief de cambios de marca y voz de la última semana",
-      "companyId": "por-asignar",
-      "client": "AspenView",
-      "description": "Antes de maquetar hay que saber qué cambió en la marca comercial y la voz del cliente en la última semana (venían trabajando en alineación entre equipos que estaban en silos). Piden a AspenView un brief/resumen (el cliente dijo que lo puede generar con Claude a partir de lo que han hecho) que incluya: productos propios desarrollados con Agentic AI (hoy no están en la página y son su 'caballito de Troya' de ventas), el nuevo storytelling de compañía y que se bajó el protagonismo de los líderes. Ese insumo alimenta la maquetación.",
-      "status": "ready",
-      "priority": "alta",
-      "dueDate": "2026-07-19",
-      "role": "UX Research",
-      "category": "UX Research",
-      "source": "Run diario 2026-07-17 (daily AspenView)",
-      "audience": "Externo cliente"
-    },
-    {
-      "title": "PDF de riesgos: usar comas en vez de viñetas en 'estrategia de gestión'",
-      "companyId": "bid",
-      "client": "ClientPortal",
-      "description": "En el PDF de riesgos, la columna 'estrategia de gestión' debe listar los elementos separados por comas (comateo), no con viñetas como está en el Figma. Se validó en pantalla y se ve bien; reduce cantidad de hojas. Actualizar el Figma para reflejar el comateo.",
-      "status": "ready",
-      "priority": "media",
-      "dueDate": "2026-07-18",
-      "role": "Diseño UX/UI",
-      "category": "Diseño UX/UI",
-      "source": "Run diario 2026-07-17 (audio BID PDF riesgos)",
-      "audience": "Interno MediaLab"
-    },
-    {
-      "title": "PDF de riesgos: agregar la sección de 'riesgos nuevos'",
-      "companyId": "bid",
-      "client": "ClientPortal",
-      "description": "Al PDF de riesgos le falta la sección de 'riesgos nuevos' (ya está resuelto el bloque de 'riesgos activos'). Según el equipo es sencillo de montar. Completar esa sección para cerrar el informe.",
-      "status": "ready",
-      "priority": "media",
-      "dueDate": "2026-07-19",
-      "role": "Diseño UX/UI",
-      "category": "Diseño UX/UI",
-      "source": "Run diario 2026-07-17 (audio BID PDF riesgos)",
-      "audience": "Interno MediaLab"
-    },
-    {
-      "title": "Preparar la recepción del QA único para los 3 proyectos (Phoenix/Corvus/Backoffice)",
-      "companyId": "megalogic-phoenix",
-      "client": "Phoenix Mobile",
-      "description": "Con Hernán se definió que habrá UNA persona dedicada a QA de los 3 proyectos (posible nombre: Johan), que se une esta semana para recibir los 3 proyectos y hacer las pruebas. Preparar el onboarding/recepción: documento de plan de pruebas por proyecto, accesos y checklist de qué debe validar. Antony ya está creando el documento de pruebas del APK; alinear ese doc con el alcance de QA (ligado a MG02 'Definir alcance de QA').",
-      "status": "ready",
-      "priority": "media",
-      "dueDate": "2026-07-19",
-      "role": "Gestión de proyecto",
-      "category": "QA",
-      "source": "Run diario 2026-07-17 (daily Phoenix)",
-      "audience": "Interno MediaLab"
-    }
+    { "title": "Actualizar el board de Jira de FI y marcar en qué se está trabajando", "companyId": "bid", "client": "Interfaz Fiduciaria", "description": "Katia pidió revisar el board de Jira de Interfaz Fiduciaria (CFI/4279) y dejar marcado en qué tareas se está trabajando, para que el banco tenga visibilidad.", "status": "ready", "priority": "alta", "category": "Gestión de proyecto", "designPoints": 0.5, "assigneeId": "person-1784042630499-acc32c", "source": "katiabod7232026.PNG" },
+    { "title": "Revisar el comentario de Gina sobre UX (misión Bahamas)", "companyId": "bid", "client": "Interfaz Fiduciaria", "description": "Katia agregó en el board un comentario que mencionó Gina sobre UX surgido en la misión de Bahamas. Revisarlo y accionar.", "status": "ready", "priority": "media", "category": "UX Research", "designPoints": 1, "source": "katiabod7232026.PNG" },
+    { "title": "Stepper de enmiendas: ícono 'en revisión' cuando está en curso por el banco", "companyId": "bid", "client": "Interfaz Fiduciaria", "description": "En el flujo de enmiendas, cuando la enmienda está en curso por parte del equipo del banco, el ejecutor solo puede consultarla (sin acción). Agregar un ícono en el step (tipo 'actualizándose / en revisión') que comunique ese estado sin habilitar acción.", "status": "ready", "priority": "alta", "category": "Diseño UX/UI", "designPoints": 2, "source": "ifbid222026.txt" },
+    { "title": "Completar traducciones faltantes de la botonera de enmiendas (IF)", "companyId": "bid", "client": "Interfaz Fiduciaria", "description": "Faltan traducciones en algunos botones/títulos del flujo de enmiendas (p. ej. 'enmienda del monto'). Completar las últimas traducciones pendientes.", "status": "ready", "priority": "alta", "category": "Apoyo", "designPoints": 1, "source": "ifbid222026.txt" },
+
+    { "title": "Referenciar el diseño (Figma) en cada historia de usuario en Notion", "companyId": "arcus", "client": "Gestión", "description": "Cerrar la desconexión diseño↔historias: en Notion, cada user story debe llevar el link a la pantalla de Figma que le corresponde. Reduce bugs de 'faltó este botón' y alinea alcance con el cliente.", "status": "ready", "priority": "alta", "category": "Producto", "designPoints": 2, "source": "arucsPO222026.pdf" },
+    { "title": "Definir un paso de QA/checklist antes de la entrega (bugs pequeños)", "companyId": "arcus", "client": "Gestión", "description": "Hoy los desarrolladores hacen su propio testing y se saltan QA; los bugs pequeños (filtros, alineación, ortografía) golpean la percepción del cliente ('de los chiquitos les cobran lo grande'). Definir un checklist/paso de revisión de calidad antes de entregar.", "status": "ready", "priority": "alta", "category": "Producto", "designPoints": 2, "source": "arucsPO222026.pdf" },
+
+    { "title": "Definir plantilla de onboarding de cliente con fechas claras (≤1 semana)", "companyId": "metrics-lab", "client": "", "description": "El onboarding se alarga por falta de fechas claras (se pierde medio día). Definir una plantilla de onboarding con hitos y fechas comprometidas desde el momento de la compra, para que el equipo pueda correr a tiempo.", "status": "ready", "priority": "alta", "category": "Gestión de proyecto", "designPoints": 2, "source": "global-1784802020391.txt" },
+    { "title": "Producir creativos de Google Ads (PMAX y Demand Gen) — cadencia mensual", "companyId": "metrics-lab", "client": "", "description": "Banners muy simples (2-3 palabras, foto clara del servicio) para USA Dumpster y Nueva Vida Financial. Son el tráfico que mejor convierte; hay que renovarlos ~mensual para que no se 'mueran' las campañas. Alex comparte ejemplos y dimensiones.", "status": "ready", "priority": "media", "category": "Diseño gráfico", "designPoints": 2, "source": "global-1784802020391.txt" },
+    { "title": "Actualizar fichas de Google My Business / Facebook / Yelp (marcas +30 días)", "companyId": "metrics-lab", "client": "", "description": "Tarea de tiempos muertos, baja prioridad: para marcas con ~30 días de lanzamiento, revisar y mejorar las fichas de negocio (fotos, reviews) que hoy están 'crudas'. Pedir a Alex la lista de marcas anteriores.", "status": "ready", "priority": "baja", "category": "Apoyo", "designPoints": 1, "source": "global-1784802020391.txt" },
+    { "title": "Investigar email marketing con GoHighLevel + IA y presentar propuesta", "companyId": "metrics-lab", "client": "", "description": "Isabella investiga cómo montar campañas de correo (flujos de email) apalancando la data de los creativos y el CRM de GoHighLevel + agentes de IA (con Jason). Presentar propuesta a Alex. USA Dumpster y Nueva Vida no tienen flujos de correo.", "status": "ready", "priority": "media", "category": "UX Research", "designPoints": 2, "source": "global-1784802020391.txt" },
+    { "title": "Actualizar el contenido de la página de Metrics Lab", "companyId": "metrics-lab", "client": "", "description": "La página de Metrics Lab (canal por el que llegan clientes) está desactualizada en contenido y forma de promocionar la información. Trabajarla en tiempos muertos.", "status": "ready", "priority": "baja", "category": "Diseño UX/UI", "designPoints": 2, "source": "global-1784802020391.txt" },
+
+    { "title": "Hacer las pautas (ads) de UXBox y UXGreen", "companyId": "medialab", "client": "Proyectos internos", "description": "Preparar las pautas/publicidad para UXBox y UXGreen. Complementa la definición de logo de UXGreen (ME28) y la base de mail marketing (ME25).", "status": "ready", "priority": "media", "category": "Diseño gráfico", "designPoints": 2, "source": "global-1784801923591.txt" },
+    { "title": "Cumbreva: pitch para automóviles + lista de prioridad en la app móvil", "companyId": "medialab", "client": "Proyectos internos", "description": "Armar el pitch de postulación de Cumbreva para empresas de automóviles y sacar la lista de prioridad de Cumbreva dentro de la app móvil. Complementa el roadmap de Cumbreva (ME24).", "status": "ready", "priority": "media", "category": "Producto", "designPoints": 2, "source": "global-1784801923591.txt" },
+    { "title": "Postulación del curso con universidades + validar go-to-market", "companyId": "medialab", "client": "Proyectos internos", "description": "Iniciar las postulaciones del curso con universidades y validar cómo llevar al mercado el curso desde las universidades. Complementa el contacto UNAD (ME10) y las clases pendientes (ME20).", "status": "ready", "priority": "media", "category": "Gestión de proyecto", "designPoints": 2, "source": "global-1784801923591.txt" },
+    { "title": "Sincronizar contabilidad con Daniel (vía Alejandro) + push medicina prepagada y beneficios", "companyId": "medialab", "client": "Gestión y talento humano", "description": "Alejandro pone en contacto con Daniel para sincronizar el trabajo: actualizar cuentas y estados de cuenta en la plataforma de contabilidad, hacer push a la cuenta de medicina prepagada de la empresa y revisar beneficios (cine y otros) para los empleados.", "status": "ready", "priority": "media", "category": "Apoyo", "designPoints": 1, "assigneeId": "person-1784042630499-acc32c", "source": "global-1784801923591.txt" },
+
+    { "title": "Corvus: pulir el agente de generación de documentos (no ejecuta la herramienta)", "companyId": "megalogic-phoenix", "client": "Corvus", "description": "En el weekly se probó la generación de documentos (Excel/Word): responde pero no ejecuta la herramienta. Pulir esa parte para que genere el documento correctamente. Complementa MG08.", "status": "ready", "priority": "alta", "category": "Desarrollo de software", "designPoints": 2, "source": "phonix7222026weekly.txt" }
   ],
   "productSignals": [
-    {
-      "companyId": "por-asignar",
-      "client": "AspenView",
-      "force": "dependencias",
-      "intensity": 0.55,
-      "title": "AspenView frenado por prioridades internas del cliente",
-      "evidence": "Daily AspenView 2026-07-17: su equipo (2 personas) lleva 2 semanas en una plataforma de training para 50 vendedores; la página quedó en pausa. MediaLab propone maquetar para no depender del cliente.",
-      "source": "apenview7172026.txt"
-    },
-    {
-      "companyId": "megalogic-phoenix",
-      "client": "Phoenix Mobile",
-      "force": "tardanza",
-      "intensity": 0.4,
-      "title": "APK de Phoenix corrido de fecha (se planeó para ayer)",
-      "evidence": "Daily Phoenix 2026-07-17: el APK estaba planeado para el día anterior; Antony aún aprende a publicarlo. Sin bloqueante, pero con retraso.",
-      "source": "phoenix7172026.txt"
-    },
-    {
-      "companyId": "megalogic-phoenix",
-      "force": "salud",
-      "intensity": 0.3,
-      "title": "Se suma un QA dedicado para los 3 proyectos",
-      "evidence": "Daily Phoenix 2026-07-17: con Hernán se definió una persona (posible Johan) para QA de los 3 proyectos; entra esta semana. Refuerza calidad.",
-      "source": "phoenix7172026.txt"
-    },
-    {
-      "companyId": "bid",
-      "client": "ClientPortal",
-      "force": "usabilidad",
-      "intensity": 0.35,
-      "title": "PDF de riesgos denso (45 riesgos): márgenes y columnas difíciles de ajustar",
-      "evidence": "Audio BID 2026-07-17: el PDF tiene ~45 riesgos; cuesta dar espacio a la descripción sin que se pegue a estado, y los márgenes entre filas quedan disparejos.",
-      "source": "bid071720162.txt"
-    }
+    { "companyId": "arcus", "client": "Gestión", "force": "usabilidad", "intensity": 0.5, "title": "Desalineación diseño↔historias de usuario (~30% de proyectos: el cliente no entiende el alcance hasta ver el diseño)", "evidence": "Entrevista de proceso PO Arcus (José/Angie)", "source": "arucsPO222026.pdf" },
+    { "companyId": "arcus", "client": "Gestión", "force": "bugs", "intensity": 0.5, "title": "Bugs pequeños en entregas (filtros, alineación, ortografía) por falta de QA formal", "evidence": "Entrevista Angie/José", "source": "arucsPO222026.pdf" },
+    { "companyId": "arcus", "client": "Gestión", "force": "mercado", "intensity": 0.6, "title": "Caída fuerte de leads (Bubble dejó de referir: ~3/mes vs ~1/día antes)", "evidence": "Entrevista marketing Arcus (Mafer)", "source": "marketingarcus222026.txt" },
+    { "companyId": "metrics-lab", "force": "mercado", "intensity": 0.5, "title": "Creativos de Ads envejecidos: campañas PMAX/Demand Gen caen sin creativos nuevos mensuales", "evidence": "Reunión Alex Metrics Lab", "source": "global-1784802020391.txt" },
+    { "companyId": "metrics-lab", "force": "tardanza", "intensity": 0.4, "title": "Onboarding sin fechas claras genera retrasos (equipo se queda corto de tiempo)", "evidence": "Reunión Alex Metrics Lab", "source": "global-1784802020391.txt" },
+    { "companyId": "megalogic-phoenix", "client": "Corvus", "force": "dependencias", "intensity": 0.5, "title": "Despliegue de Corvus bloqueado esperando a Hernán (dependencia externa)", "evidence": "Weekly Phoenix/Corvus", "source": "phonix7222026weekly.txt" },
+    { "companyId": "megalogic-phoenix", "client": "Corvus", "force": "calidad", "intensity": 0.4, "title": "Agente de generación de documentos aún no ejecuta la herramienta (requiere pulido)", "evidence": "Weekly Phoenix/Corvus", "source": "phonix7222026weekly.txt" },
+    { "companyId": "bid", "client": "Interfaz Fiduciaria", "force": "usabilidad", "intensity": 0.35, "title": "Enmiendas: falta señal visual de 'en curso por el banco' (el ejecutor no sabe si solo consultar)", "evidence": "Reunión IF botones/stepper", "source": "ifbid222026.txt" }
   ],
   "processedInsumoIds": [
-    "ea5759de-3687-4650-9de3-4d9d84965d07",
-    "a1dc5b2c-faa9-4bf6-9618-ff3ac7576fee",
-    "dd8031dd-8b59-479b-b161-4ce6d7f9d62e"
-  ],
-  "keepFileInsumoIds": []
+    "09f5fcad-2786-4198-87f7-b9e4418ef398",
+    "229f318c-96cb-4d9d-b82f-ae10c8422a27",
+    "e57493fb-8434-420a-9d11-ab09057ed950",
+    "b70982d0-cf33-4a44-a40f-d39d4d29ed13",
+    "3a4811ad-fc0c-4721-8d70-9b23150ecbc8",
+    "316a02b3-0d06-408b-a349-c67de5738f1b",
+    "a57f3ad8-460e-47c6-8b38-5dc5e213ab57",
+    "416b4b24-b458-4d64-a727-cd7205ac635a"
+  ]
 }
