@@ -4,3 +4,15 @@ dist
 .vercel
 .DS_Store
 *.log
+
+# Insumos crudos del daily MD (documentos de clientes: NO versionar).
+# Los registros del run (tasks.json, oportunidades.json, etc.) sí se conservan.
+operations/_run/insumos.json
+operations/_run/*.pdf
+operations/_run/*.PNG
+operations/_run/*.png
+operations/_run/*.jpg
+operations/_run/*.jpeg
+operations/_run/*.txt
+operations/logos/*.txt
+operations/logos/*.pdf
