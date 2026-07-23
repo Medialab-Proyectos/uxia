@@ -235,6 +235,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const sDone = scoped.filter((t) => t.status === "done");
   const sOverdue = sActive.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado").length;
   const sNovelty = scoped.filter((t) => t.status !== "done" && hasNovelty(t)).length;
+  // Conteos del sub-filtro de novedad, TAMBIÉN acotados por los filtros de arriba (no globales),
+  // para que coincidan con la lista y con el indicador "Activas" del filtro de empresa.
+  const sNew = scoped.filter((t) => t.status !== "done" && isNew(t)).length;
+  const sCR = scoped.filter((t) => t.status !== "done" && hasChangeRequest(t)).length;
+  const sUpd = scoped.filter((t) => t.status !== "done" && isUpdatedByAdmin(t)).length;
   const tabCount = (k) => (k === "active" ? sActive.length : k === "all" ? scoped.length : k === "done" ? sDone.length : scoped.filter((t) => t.status === k).length);
 
   // Reporta las alertas al shell (la campana vive en el header del shell, junto al tema).
@@ -663,11 +668,11 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
           <div className="mb-3 -mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
             <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: dim }}>Novedad:</span>
             {[
-              ["all", `Todas (${active.length})`, "#17727A"],
-              ["any", `Con novedad${noveltyCount ? ` (${noveltyCount})` : ""}`, "#6D28D9"],
-              ["new", `Nuevas${nNew ? ` (${nNew})` : ""}`, "#0D7A4F"],
-              ["cr", `Cambios solicitados${nCR ? ` (${nCR})` : ""}`, "#B54708"],
-              ["updated", `Actualizadas por el admin${nUpd ? ` (${nUpd})` : ""}`, "#6D28D9"],
+              ["all", `Todas (${sActive.length})`, "#17727A"],
+              ["any", `Con novedad${sNovelty ? ` (${sNovelty})` : ""}`, "#6D28D9"],
+              ["new", `Nuevas${sNew ? ` (${sNew})` : ""}`, "#0D7A4F"],
+              ["cr", `Cambios solicitados${sCR ? ` (${sCR})` : ""}`, "#B54708"],
+              ["updated", `Actualizadas por el admin${sUpd ? ` (${sUpd})` : ""}`, "#6D28D9"],
             ].map(([k, l, col]) => {
               const on = novFilter === k;
               return (
