@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock } from "lucide-react";
+import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
@@ -168,6 +168,18 @@ function AppShell() {
       try { localStorage.setItem("uxia.activeModule", "radar"); } catch { /* ignore */ }
     }
   }, [esCEO, module]);
+  // Auto-refresco del ADMIN cada 10 min (el portal del empleado tiene el suyo, más suave). No
+  // recarga si la pestaña está oculta o si estás escribiendo/editando, para no perder cambios.
+  React.useEffect(() => {
+    if (!esCEO) return undefined;
+    const timer = setInterval(() => {
+      if (typeof document === "undefined" || document.hidden) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      window.location.reload();
+    }, 10 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [esCEO]);
   // Campana del empleado en el shell: alertas reportadas por el portal + vistas persistentes.
   const [empAlerts, setEmpAlerts] = React.useState([]);
   const [empBellOpen, setEmpBellOpen] = React.useState(false);
@@ -389,6 +401,9 @@ function AppShell() {
                 <BellRing size={18} />
               </button>
             )}
+            <button type="button" onClick={() => window.location.reload()} title="Actualizar plataforma" aria-label="Actualizar plataforma" className="inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: dk ? "#28313E" : "#E7E0D5", color: "#17727A" }}>
+              <RotateCw size={17} />
+            </button>
             <button type="button" onClick={toggleTheme} className="inline-flex h-9 w-9 items-center justify-center rounded-md border" style={{ borderColor: dk ? "#28313E" : "#E7E0D5", color: "#E8751A" }} aria-label="Tema">
               {dk ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -470,6 +485,9 @@ function AppShell() {
                   <BellRing size={18} />
                 </button>
               )}
+              <button type="button" onClick={() => window.location.reload()} title="Actualizar plataforma" aria-label="Actualizar plataforma" className={iconBtn} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: "#17727A" }}>
+                <RotateCw size={17} />
+              </button>
               <button type="button" onClick={toggleTheme} aria-label={dark ? "Modo claro" : "Modo oscuro"} title={dark ? "Modo claro" : "Modo oscuro"} className={iconBtn} style={{ borderColor: navBorder, backgroundColor: ctrlBg, color: "#E8751A" }}>
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
               </button>
