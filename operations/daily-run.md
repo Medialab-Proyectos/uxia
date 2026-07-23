@@ -166,10 +166,13 @@ Se guarda en la tabla `growth_practices` (ver `supabase/migration-growth-practic
 muestra con un botón (con logo) al lado de los indicadores; **cada ítem se puede convertir en tarea**.
 
 Cómo la arma el MD:
-- **Basado en marcos reales de influencia, ventas, crecimiento e innovación** (Cialdini/influencia;
-  Hormozi/oferta y valor; Godin/marketing del permiso; Sinek/propósito; Reis-Trout/posicionamiento;
-  Blank-Ries/lean startup; Cain/comunicación; Carnegie/relaciones; Duhigg/hábitos; Kahneman/decisión).
-  No citar por citar: **traducir** el marco en una práctica accionable para ESTE proyecto.
+- **En CADA corrida del MD se REVISA y ENRIQUECE** la lista de cada proyecto (no solo la primera vez):
+  agrega prácticas nuevas si el contexto/insumos cambiaron, ajusta las vigentes y retira las que ya no
+  apliquen. Sin duplicar (si una práctica sigue vigente, se deja; si evolucionó, se actualiza).
+- **Basado en la BIBLIOTECA DE REFERENCIA de abajo** (IA/innovación, decisión, hábitos/energía,
+  comunicación/influencia, ventas, liderazgo/estrategia, mindset). Para cada proyecto elige el/los
+  autor(es) y marco(s) MÁS PERTINENTES a su contexto y dolores — no citar por citar: **traducir** el
+  marco en una práctica accionable para ESTE proyecto, poniendo el autor/libro en el campo `marco`.
 - **Prioriza lo más VIABLE y de mayor IMPACTO**: pocas prácticas (3–6), que generen **conexión, apoyo
   y alivien los DOLORES** ya detectados (señales MDSSP + insumos), no genéricas.
 - **Escucha el CONTEXTO y la VOZ**: usa el contexto del subproyecto, la **voz/tono del CEO** (lo que
@@ -179,6 +182,40 @@ Cómo la arma el MD:
 
 **Lead por subproyecto (para escuchar su voz):** al leer insumos, identificar quién es el **lead** de
 cada subproyecto (si se menciona) y registrarlo; su voz/tono alimenta tanto las tareas como esta lista.
+
+### Biblioteca de referencia (para la lista de crecimiento)
+
+El MD elige, por proyecto, el/los autor(es) más pertinentes de esta biblioteca y traduce su marco en
+una práctica accionable. El `marco` de cada práctica cita el libro/autor concreto.
+
+- **IA · futuro · innovación** (posicionar al cliente frente a la ola de IA, diferenciarse, crear):
+  *La ola que viene / The Coming Wave* (Mustafa Suleyman) · *Homo Deus* (Yuval Noah Harari) ·
+  *Artificial* (Mariano Sigman; Santiago Bilinkis) · *¡Crear o Morir!* (Andrés Oppenheimer) ·
+  *Los disruptores* (Sally Percy) · *Estrategia emergente* (Adrienne Maree Brown).
+- **Pensamiento · decisión · claridad** (asesorar y decidir mejor, evitar sesgos):
+  *Pensar rápido, pensar despacio* (Daniel Kahneman) · *Al límite* (Nate Silver) ·
+  *Pensar con claridad* (Shane Parrish) · *La vida secreta de la mente* (Mariano Sigman) ·
+  *El poder de las palabras* (Mariano Sigman) · *Micro Experiments* (Anne-Laure Le Cunff).
+- **Hábitos · foco · energía · bienestar** (ejecución sostenible del equipo y del cliente):
+  *Atomic Habits* (James Clear) · *Neurohábitos* (Nicole Vignola) · *No te comas el coco* (Julia Pascual) ·
+  *Más hábitos menos dramas* (Mónica González) · *Inmune a la distracción* (Nir Eyal) ·
+  *Hyper Efficient* (Mithu Storoni) · *Dopamina* (Lieberman; Long) · *Respira* (James Nestor) ·
+  *Distánciate* (Bilinkis; Sigman) · *La regla de los 3 minutos* (Brant Pinvidic, pitch) · *Ikigai* (García; Miralles).
+- **Comunicación · influencia · relaciones** (vender ideas, ganar confianza, negociar):
+  *Cómo ganar amigos e influir sobre las personas* (Dale Carnegie) · *Hable como TED* (Carmine Gallo) ·
+  *Nueva conversación* (Charles Duhigg) · *Cómo trabajar con gente complicada* (Ryan Leak) ·
+  *Inteligencia emocional* (Daniel Goleman) · *Power Skills* (Korn Ferry) · *Nunca dividas la diferencia* (Chris Voss).
+- **Ventas · crecimiento comercial · precio/valor**:
+  *Ventas salvajes* (Álex Dey) · *El pequeño libro rojo de las ventas* (Jeffrey Gitomer) ·
+  *Bueno, bonito y carito* (Mónica Mendoza) · *Negocios inteligentes* (Santiago Martínez Vela) ·
+  *Código del éxito* (Brian Tracy) · *La ciencia de hacerse rico* (Wallace D. Wattles).
+- **Liderazgo · estrategia · gestión · talento**:
+  *Mide lo que importa / OKR* (John Doerr) · *Creatividad S.A.* (Ed Catmull) ·
+  *Lecciones de liderazgo creativo* (Robert Iger) · *Los 7 hábitos de la gente altamente efectiva* (Stephen Covey) ·
+  *Los líderes comen al final* (Simon Sinek) · *Los primeros 90 días* (Michael Watkins) ·
+  *Hidden Potential* (Adam Grant) · *Control* (Freddy Vega) · *Open to Work* (LinkedIn Editorial).
+- **Mindset · propósito · resiliencia**:
+  *Meditaciones* (Marco Aurelio) · *Las siete leyes espirituales del éxito* (Deepak Chopra) · *El peregrino* (Paulo Coelho).
 
 ## Priorizacion de tareas (SIEMPRE, despues de analizar)
 
