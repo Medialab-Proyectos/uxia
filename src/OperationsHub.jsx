@@ -1242,7 +1242,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
           return;
         }
         await opsData.saveInsumo(token, { companyId: company.id, client, file, kind: "pdf" });
-        setNotice(`Insumo (PDF) guardado para ${client}. Se convierte en tareas cuando corra el MD diario.`);
+        setNotice(`Insumo (PDF) guardado para ${client || "toda la empresa"}. Se convierte en tareas cuando corra el MD diario.`);
         loadInsumos();
         return;
       }
@@ -1251,7 +1251,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         // (con su contenido en raw_text) y la corrida diaria del MD lo interpreta.
         const text = await file.text();
         await opsData.saveInsumo(token, { companyId: company.id, client, file, kind: "texto", rawText: text });
-        setNotice(`Insumo (texto) guardado para ${client}. Se convierte en tareas cuando corra el MD diario.`);
+        setNotice(`Insumo (texto) guardado para ${client || "toda la empresa"}. Se convierte en tareas cuando corra el MD diario.`);
         loadInsumos();
         return;
       }
@@ -1263,7 +1263,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       }
       const named = prepared instanceof File ? prepared : new File([prepared], file.name, { type: prepared.type || file.type });
       await opsData.saveInsumo(token, { companyId: company.id, client, file: named, kind: "imagen" });
-      setNotice(`Insumo (imagen) guardado para ${client}. Queda en "Insumos pendientes".`);
+      setNotice(`Insumo (imagen) guardado para ${client || "toda la empresa"}. Queda en "Insumos pendientes".`);
       loadInsumos();
     } catch (error) {
       setNotice(`No pude subir el insumo. ${error.message || "Revisa políticas de Storage."}`);
@@ -1351,7 +1351,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
           ? { ...item, projectImages: { ...(item.projectImages || {}), [client]: image } }
           : item
       )));
-      setNotice(`Imagen actualizada para ${client}.`);
+      setNotice(`Imagen actualizada para ${client || "toda la empresa"}.`);
     } catch (error) {
       setNotice(`No pude subir la imagen. ${error.message || "Revisa políticas de Storage."}`);
     }
@@ -3554,6 +3554,19 @@ function CompanyPanel({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Insumo a NIVEL EMPRESA: para reuniones que tocan varios subproyectos (sin elegir uno).
+              El MD lo reparte entre los subproyectos de la empresa. Compacto (ícono), no infla el layout. */}
+          {!isBandeja && (
+            <label
+              title="Subir insumo para toda la empresa (reunión de varios subproyectos)"
+              aria-label="Subir insumo de empresa"
+              className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-[#17727A] text-[#17727A]"
+            >
+              <Paperclip size={16} />
+              <input type="file" accept=".md,.txt,.pdf,image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadSourceDocument("", f); e.target.value = ""; }} />
+            </label>
+          )}
           <button
             type="button"
             onClick={onToggleLogoBg}

@@ -62,6 +62,31 @@ Cuando se sube un insumo:
 - No debe dejar una lista visible de "fuentes procesadas" como si fueran el resultado.
 - Si el insumo no contiene informacion accionable, se elimina o se ignora.
 
+### Tareas de GESTIÓN y seguimiento (OBLIGATORIO — no solo tareas técnicas)
+
+El error más caro NO es no crear una tarea técnica ("meter X en Figma"): es **perder las tareas de
+gestión y seguimiento** que viven en la conversación. Cuando el cliente dice "yo hoy te lo mando",
+"quedamos en", "necesito", "hay que agendar", "me comprometo a", "vamos a entregar" — eso es una
+**tarea de seguimiento con dueño y fecha**, no un comentario. Si no se mide, se cae, no se entrega y
+puede costar una **multa** o perder al cliente (la queja #1: "escuchan todo pero no gestionan").
+
+Al analizar CADA grabación/insumo, el MD DEBE extraer explícitamente:
+
+1. **Compromisos del cliente** ("te lo mando hoy", "te paso el brief/documento"): crear una tarea de
+   **SEGUIMIENTO** (categoría Gestión de proyecto) con dueño (el PO/líder) y fecha del compromiso
+   —aunque el entregable sea del cliente— para que alguien lo persiga y no quede en el limbo.
+2. **Compromisos de MediaLab** ("nosotros maquetamos", "les pasamos para feedback"): tarea con fecha.
+3. **Reuniones/agenda acordadas** ("touch base el martes 10 AM"): tarea de agendar/confirmar.
+4. **Entregables y documentos formales** ("recopilar en un documento estable para el CEO",
+   "entregar el resultado de la investigación para feedback"): tarea de PRODUCIR ese documento,
+   no solo la parte visual.
+5. **Cambios de contexto/negocio** (nueva alineación de marca, nuevo caballito de Troya de venta,
+   prioridades que cambiaron): tarea de actualizar el trabajo + señal MDSSP si aplica.
+
+Si una reunión de "puro seguimiento" no deja NINGUNA tarea, casi siempre es una señal de que el MD
+la leyó demasiado literal: releerla buscando compromisos, fechas y entregables. Una reunión de valor
+SIEMPRE deja al menos una tarea de gestión.
+
 ## Documentos SIN tareas → mediciones de producto (modelo MDSSP)
 
 No todo insumo produce tareas. Un documento puede ser **feedback o contexto para vigilar
