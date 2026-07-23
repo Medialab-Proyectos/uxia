@@ -105,7 +105,8 @@ export function sectionTitle(doc, y, text, sub = "") {
   const x = PAGE.mx;
   setText(doc, C.teal); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
   doc.text(t(text), x, y);
-  if (sub) { setText(doc, C.gray); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text(t(sub), x + doc.getTextWidth(t(text)) + 3, y); }
+  const titleW = doc.getTextWidth(t(text)); // medir con la fuente del título (12pt bold), no la del sub
+  if (sub) { setText(doc, C.gray); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text(t(sub), x + titleW + 3, y); }
   y += 1.5;
   setDraw(doc, C.teal); doc.setLineWidth(0.5); doc.line(x, y, PAGE.w - PAGE.mx, y);
   return y + 5;
