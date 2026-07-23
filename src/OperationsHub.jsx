@@ -2327,6 +2327,7 @@ function TasksTable({
             ["blocked", "Bloqueadas"],
             ["review", "En revisión"],
             ["verificacion", "Lista · por notificar"],
+            ["notificado", "Notificado"],
             ["done", "Finalizadas (archivo)"],
           ].map(([key, label]) => (
             <button
