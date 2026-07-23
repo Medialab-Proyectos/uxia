@@ -388,6 +388,26 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
    **Validar** en cada run que el índice tiene base real y reportar cuántas tareas calificadas +
    entregas con fecha lo alimentan (lo que falte, "por instrumentar", NO inventar).
    Requiere `migration-indice-proyectos.sql`.
+4-ter. **Leer y ANALIZAR TODOS los comentarios de las tareas y los mensajes de los request review (CR).**
+   No son ruido: son la voz cruda del cliente y del equipo. HOY el análisis solo usa el `rating`
+   numérico y el CONTEO de CR, así que **ese texto se pierde**. En CADA corrida el MD consulta las
+   tareas **con sus `comments` y `changeRequests`** desde el Centro de Operaciones (no solo los insumos
+   nuevos) y los traduce en dato accionable:
+   - **Satisfacción:** si un comentario o un CR revela feedback del cliente sobre un entregable
+     (elogio, queja, frustración, "otra vez lo mismo", "esto no era lo pedido"), **registrar o ajustar
+     el `rating` (1–5)** de esa tarea para que el índice lo refleje. Un cliente molesto en los
+     comentarios pero sin rating = satisfacción **sobreestimada**; corregirlo. No inventar ratings donde
+     no hay señal, pero tampoco ignorar la que sí existe en el texto.
+   - **Señales de producto (MDSSP):** subir/actualizar `productSignals` (`satisfaccion_equipo`,
+     `calidad`, `usabilidad`, `bugs`, `dependencias`, `presupuesto`, `salud`…) a partir de lo que digan
+     los comentarios y los CR, con `evidence` **citando el comentario** concreto.
+   - **Retrabajo y alcance:** un CR del cliente es señal de alcance mal cerrado; leer su mensaje
+     (`changeRequests[].message`, `resolved_comment`) para entender la causa, no solo contarlo.
+   - **Gestión oculta:** si un comentario contiene un compromiso, fecha o pedido del cliente que no
+     está como tarea, **crear la tarea de seguimiento** (ver norma de GESTIÓN) para que no quede en el
+     limbo. Muchas multas/quejas nacen de un comentario que nadie convirtió en tarea.
+   Regla: **ningún comentario ni CR se descarta como charla**; o se convierte en dato (rating/señal) o
+   en tarea (gestión), o se justifica por qué no aplica.
 5. **Validar la cobertura**: al terminar, reportar que **NINGUNA tarea activa quedó sin puntos**
    (cero sin estimar) y qué empresas no tienen datos suficientes para los demás indicadores del
    reporte (utilización, defectos, consumo de IA). No inventar numeros.
