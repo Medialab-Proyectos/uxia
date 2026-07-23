@@ -36,7 +36,7 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const active = ct.filter((tk) => tk.status !== "done");
   const doneAll = ct.filter((tk) => tk.status === "done");
   const done = doneAll.filter((tk) => tk.completedAt && new Date(tk.completedAt) >= cutoff);
-  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review";
+  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
   const overdue = active.filter(isOverdue);
   const blocked = active.filter((tk) => tk.status === "blocked");
   const review = active.filter((tk) => tk.status === "review");

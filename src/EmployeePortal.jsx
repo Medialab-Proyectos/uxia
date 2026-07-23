@@ -23,7 +23,7 @@ function scoreTask(t) {
   let s = t.priority === "alta" ? 40 : t.priority === "baja" ? 8 : 20;
   const today = todayIso();
   if (t.dueDate) {
-    if (t.status !== "review" && t.status !== "verificacion" && t.dueDate < today) s += 35;
+    if (t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.dueDate < today) s += 35;
     else {
       const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);
       s += d <= 2 ? 25 : d <= 7 ? 15 : 5;
@@ -223,7 +223,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
 
   const active = tasks.filter((t) => t.status !== "done");
   const done = tasks.filter((t) => t.status === "done");
-  const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion").length;
+  const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado").length;
 
   // Conjunto ACOTADO por los filtros de arriba (empresa + subproyecto + creadas por mí), SIN el
   // filtro de estado, para que indicadores y tabs muestren las cantidades reales del filtro.
@@ -233,7 +233,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     && !(mineOnly && String(t.created_by || "").toLowerCase() !== email));
   const sActive = scoped.filter((t) => t.status !== "done");
   const sDone = scoped.filter((t) => t.status === "done");
-  const sOverdue = sActive.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion").length;
+  const sOverdue = sActive.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado").length;
   const sNovelty = scoped.filter((t) => t.status !== "done" && hasNovelty(t)).length;
   const tabCount = (k) => (k === "active" ? sActive.length : k === "all" ? scoped.length : k === "done" ? sDone.length : scoped.filter((t) => t.status === k).length);
 
@@ -244,7 +244,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const crTasks = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t));
   const newTasks = tasks.filter((t) => t.status !== "done" && isNew(t));
   const updTasks = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t));
-  const overdueTasks = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion");
+  const overdueTasks = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado");
   const nNew = newTasks.length;
   const nCR = crTasks.length;
   const nUpd = updTasks.length;
@@ -282,7 +282,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     if (qLow) return `${t.title || ""} ${t.client || ""} ${nameOf(t.company_id)} ${t.task_ref || ""} ${t.role || ""}`.toLowerCase().includes(qLow);
     // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
     if (statusFilter === "new") return (hasNovelty(t) || t.id === openId) && t.status !== "done";
-    if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion";
+    if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado";
     if (statusFilter === "active") {
       if (t.status === "done") return false;
       // Sub-filtro de novedades (solo dentro de Activas). La tarea abierta se mantiene visible.

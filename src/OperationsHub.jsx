@@ -450,8 +450,9 @@ function attachmentUrl(attachment) {
 }
 
 function taskIsOverdue(task) {
-  // "En revisión" no cuenta como vencida: está esperando feedback, no atrasada.
-  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion");
+  // "En revisión", "Lista · por notificar" y "Notificado" no cuentan como vencidas: ya salieron de
+  // manos del equipo (esperan feedback / entrega / ya se notificó al cliente), no están atrasadas.
+  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado");
 }
 
 function isValidPhone(value) {
@@ -1937,7 +1938,7 @@ function scoreTask(task) {
   // Urgencia (fecha): vencida > hoy/pronto > esta semana.
   const today = todayIso();
   if (task.dueDate) {
-    if (task.status !== "review" && task.status !== "verificacion" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
+    if (task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
     else {
       const days = Math.round((new Date(task.dueDate) - new Date(today)) / 86400000);
       if (days <= 2) { score += 25; reasons.push("Vence pronto"); }
@@ -2058,7 +2059,7 @@ function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatu
 
   // Foco para HOY (vence hoy o vencidas) y ESTA SEMANA (proximos 7 dias), por prioridad.
   const today = todayIso();
-  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review" && t.status !== "verificacion");
+  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado");
   const semana = ranked.filter((t) => {
     if (!t.dueDate || t.dueDate <= today) return false;
     const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);

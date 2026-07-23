@@ -24,7 +24,7 @@ export async function openActiveTasksReport({ company, tasks = [], people = [], 
   const today = todayIso();
   const now = new Date();
   const nameOf = (id) => people.find((p) => p.id === id)?.name || "";
-  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review";
+  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
 
   const ct = tasks.filter((tk) => tk.companyId === company.id && tk.status !== "done" && (!client || (tk.client || "") === client));
   const subs = [...new Set(ct.map((tk) => tk.client || "Sin subproyecto"))].sort((a, b) => a.localeCompare(b));
