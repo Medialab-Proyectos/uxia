@@ -17,7 +17,12 @@
     "opp-z0eu59",
     "opp-4nw8nq",
     "opp-uudid4",
-    "opp-6ekvjx"
+    "opp-6ekvjx",
+    "opp-wswyo",
+    "opp-gncfhw",
+    "opp-rvu5te",
+    "opp-wlqj2j",
+    "opp-gu9uic"
   ],
   "items": [
     {
@@ -163,6 +168,46 @@
       "url": "https://co.indeed.com/q-ux-ui-designer-empleos.html",
       "fecha": "",
       "archivedAt": "2026-07-18T23:39:52.150Z"
+    },
+    {
+      "id": "opp-wswyo",
+      "kind": "oportunidades",
+      "empresa": "Luable (MejorCDT)",
+      "url": "https://blog.mean.ceo/startups-colombia-news-july-2026/#luable",
+      "fecha": "",
+      "archivedAt": "2026-07-23T19:26:29.788Z"
+    },
+    {
+      "id": "opp-gncfhw",
+      "kind": "oportunidades",
+      "empresa": "Depay",
+      "url": "https://ecosistemastartup.com/depay-levanta-us4m-seed-para-pagos-en-latam/",
+      "fecha": "",
+      "archivedAt": "2026-07-23T19:26:29.788Z"
+    },
+    {
+      "id": "opp-rvu5te",
+      "kind": "oportunidades",
+      "empresa": "500 Global — convocatoria LATAM",
+      "url": "https://techla.pro/2026/06/24/500-global-seleccionara-cinco-startups-de-latam-para-invertir-300000-dolares/",
+      "fecha": "",
+      "archivedAt": "2026-07-23T19:26:29.788Z"
+    },
+    {
+      "id": "opp-wlqj2j",
+      "kind": "oportunidades",
+      "empresa": "Guama",
+      "url": "https://blog.mean.ceo/startups-colombia-news-july-2026/",
+      "fecha": "",
+      "archivedAt": "2026-07-23T19:26:29.788Z"
+    },
+    {
+      "id": "opp-gu9uic",
+      "kind": "vacantes",
+      "empresa": "Remotos LATAM (listado)",
+      "url": "https://remotoslatam.com/empleos/diseno-grafico",
+      "fecha": "",
+      "archivedAt": "2026-07-23T19:26:30.068Z"
     }
   ]
 }
