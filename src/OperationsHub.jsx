@@ -4196,16 +4196,25 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   const enRevision = companyTasks.filter((t) => t.status === "review").length;
   const bloqueadas = companyTasks.filter((t) => t.status === "blocked").length;
   const pendientes = companyTasks.filter((t) => t.status === "ready" || t.status === "backlog").length;
+  // "Notificado" = entregada/cumplida (el cliente ya fue notificado); los ajustes posteriores son
+  // change requests, no reabren la tarea como pendiente. "Lista · por notificar" (verificacion) ya
+  // está lista, a la espera de avisar. Antes quedaban invisibles en el desglose.
+  const notificadas = companyTasks.filter((t) => t.status === "notificado").length;
+  const porNotificar = companyTasks.filter((t) => t.status === "verificacion").length;
   const vencidas = companyTasks.filter(taskIsOverdue).length;
   // Índice de cumplimiento (periodo) = cumplidas a tiempo ÷ (cumplidas + vencidas sin hacer).
   // "A tiempo" = cumplida sin fecha (no hay plazo que incumplir) o cerrada <= su fecha.
   // Las cumplidas tarde y las vencidas sin hacer bajan el índice.
+  // "Notificado"/"Lista · por notificar" YA se cumplieron (entregadas): cuentan como cumplidas a
+  // tiempo (no están vencidas; los ajustes posteriores son change requests, no reabren la tarea).
   const overdueActive = companyTasks.filter((t) => t.status !== "done" && taskIsOverdue(t));
-  const doneOnTime = doneInPeriod.filter((t) => !t.dueDate || (t.completedAt && t.completedAt.slice(0, 10) <= t.dueDate)).length;
-  const cumplDenom = doneInPeriod.length + overdueActive.length;
+  const entregadasReady = companyTasks.filter((t) => t.status === "notificado" || t.status === "verificacion").length;
+  const doneOnTime = doneInPeriod.filter((t) => !t.dueDate || (t.completedAt && t.completedAt.slice(0, 10) <= t.dueDate)).length + entregadasReady;
+  const cumplDenom = doneInPeriod.length + entregadasReady + overdueActive.length;
   const onTimePct = cumplDenom ? Math.round((doneOnTime / cumplDenom) * 100) : null;
   const seg = [
-    ["Entregadas", done.length, "#0D7A4F"],
+    ["Entregadas", done.length + notificadas, "#0D7A4F"],
+    ["Por notificar", porNotificar, "#0D7A4F"],
     ["En revisión", enRevision, "#17727A"],
     ["En progreso", enProgreso, "#1570EF"],
     ["Bloqueadas", bloqueadas, "#B42318"],

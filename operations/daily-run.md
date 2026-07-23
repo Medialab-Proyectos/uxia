@@ -551,6 +551,13 @@ tarea sea "Cambio solicitado" para el empleado (prioridad sobre "Nueva"/"Actuali
 El MD normalmente NO crea CRs (los abre el admin al revisar); solo si un insumo describe
 explícitamente un cambio pedido por el cliente sobre un entregable ya aprobado, puede registrarlo.
 
+**`notificado` y `verificacion` ("Lista · por notificar") = tarea CUMPLIDA/ENTREGADA, NO vencida.**
+Una tarea notificada ya se entregó al cliente (o está lista para avisarle): **NO cuenta como vencida**
+aunque su fecha haya pasado, y **SÍ cuenta como cumplida/entregada** en los indicadores (desglose de
+estado, "Entregadas", índice de cumplimiento). Lo que venga después son **change requests** (ajustes
+hacia adelante): se registran como CR y pueden generar tareas de seguimiento; **no reabren la tarea
+como pendiente ni la marcan vencida**. El cierre formal (`done`) sigue abriendo el modal de satisfacción.
+
 ## Interfaz del Centro de Operaciones (normas de UI refinadas)
 
 Reglas de presentación acordadas con el CEO (para que la app no se sature y sea consistente):
