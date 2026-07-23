@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound, ExternalLink, Download } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound, ExternalLink, Download, ChevronRight } from "lucide-react";
 import { notifyEvent } from "./notify.js";
 import * as opsData from "./opsData.js";
 
@@ -715,9 +715,14 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                   <div className="border-t px-3 py-3" style={{ borderColor: border }}>
                     {t.description && <p className="mb-3 whitespace-pre-line text-sm" style={{ color: dim }}>{t.description}</p>}
 
-                    {/* Enlaces y documentos anexos de la tarea (repositorios, PDFs, imágenes…) */}
+                    {/* Enlaces y documentos anexos de la tarea (repositorios, PDFs, imágenes…).
+                        Colapsable cuando son muchos (abierto si son pocos). */}
                     {Array.isArray(t.attachments) && t.attachments.length > 0 && (
-                      <ul className="mb-3 space-y-1 rounded-md border p-2" style={{ borderColor: border, background: bg }}>
+                      <details open={t.attachments.length <= 4} className="mb-3 rounded-md border" style={{ borderColor: border, background: bg }}>
+                        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-xs font-semibold" style={{ color: text }}>
+                          <ChevronRight size={13} className="ops-caret" /> Enlaces y anexos ({t.attachments.length})
+                        </summary>
+                        <ul className="space-y-1 px-2 pb-2">
                         {t.attachments.map((a, i) => {
                           const isLink = a.type === "link" || (!a.path && a.url);
                           const href = a.url || (a.path ? `/operations-files/${String(a.path).replace(/\\/g, "/").replace(/^operations\//, "")}` : "");
@@ -734,7 +739,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                             </li>
                           );
                         })}
-                      </ul>
+                        </ul>
+                      </details>
                     )}
 
                     {/* GESTIÓN DE LÍDER: solo en las actividades que YO creé. Estado (limitado) + pedir cambios.

@@ -3289,7 +3289,12 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
           </button>
         </div>
         {(task.attachments || []).length > 0 && (
-          <ul className="space-y-1 rounded-md border border-[#E4DED6] bg-white p-2">
+          // Colapsable cuando son muchos enlaces/anexos (abierto si son pocos).
+          <details open={task.attachments.length <= 4} className="rounded-md border border-[#E4DED6] bg-white">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1.5 text-xs font-semibold text-[#475467]">
+              <ChevronRight size={14} className="ops-caret" /> Enlaces y anexos ({task.attachments.length})
+            </summary>
+            <ul className="space-y-1 px-2 pb-2">
             {task.attachments.map((attachment, index) => {
               const isLink = attachment.type === "link" || (!attachment.path && attachment.url);
               return (
@@ -3319,7 +3324,8 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
               </li>
               );
             })}
-          </ul>
+            </ul>
+          </details>
         )}
         {task.status === "done" && (
           <div className="rounded-md border border-[#A6D9C4] bg-[#E5F5EE] p-2">
