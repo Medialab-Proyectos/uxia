@@ -1,6 +1,6 @@
 // Listado descargable de TAREAS VIGENTES (activas, sin cerrar) por empresa y subproyecto.
-// Se abre en una ventana lista para "Guardar como PDF" con el impresor nativo del navegador
-// (mismo enfoque que el reporte DesignOps: conserva formato exacto, sin dependencias externas).
+// Descarga directa a PDF (archivo), agrupado por subproyecto.
+import { downloadHtmlAsPdf } from "./pdf.js";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 function esc(s) { return String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
@@ -135,20 +135,9 @@ export function buildActiveTasksReportHtml({ company, tasks = [], people = [], c
 </div></body></html>`;
 }
 
-function openReportPrintWindow(html) {
-  const w = window.open("", "_blank");
-  if (!w) { alert("Habilita las ventanas emergentes para descargar el listado."); return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  let printed = false;
-  const doPrint = () => { if (printed) return; printed = true; try { w.focus(); w.print(); } catch { /* ignore */ } };
-  w.onload = doPrint;
-  setTimeout(doPrint, 900);
-}
-
-// Abre el listado de tareas vigentes listo para "Guardar como PDF".
+// Descarga el listado de tareas vigentes como archivo PDF (sin diálogo de impresión).
 export function openActiveTasksReport(args) {
   const html = buildActiveTasksReportHtml(args);
-  openReportPrintWindow(html);
+  const scope = args.client ? `${args.company?.name}-${args.client}` : args.company?.name;
+  return downloadHtmlAsPdf(html, `Tareas-vigentes-${scope}`);
 }

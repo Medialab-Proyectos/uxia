@@ -1,7 +1,7 @@
 // Reporte semanal DesignOps por empresa. Se genera desde los datos reales del Centro
-// de Operaciones (tareas, estados, fechas, satisfacción) y se abre en una ventana lista
-// para "Guardar como PDF". Sin dependencias externas: usa el diálogo de impresión del
-// navegador. La estructura sigue la propuesta DesignOps (4 categorías + puntos de diseño).
+// de Operaciones (tareas, estados, fechas, satisfacción) y se DESCARGA como archivo PDF.
+// La estructura sigue la propuesta DesignOps (4 categorías + puntos de diseño).
+import { downloadHtmlAsPdf } from "./pdf.js";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 function esc(s) { return String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
@@ -326,24 +326,10 @@ export function buildDesignOpsReportHtml({ company, tasks = [], people = [], cli
 </div></body></html>`;
 }
 
-// Abre el reporte en una ventana nueva y lanza el diálogo de impresión (Guardar como PDF).
-// Respaldo: abre el reporte en una ventana lista para "Guardar como PDF" (diálogo de impresión).
-function openReportPrintWindow(html) {
-  const w = window.open("", "_blank");
-  if (!w) { alert("Habilita las ventanas emergentes para el reporte DesignOps."); return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  let printed = false;
-  const doPrint = () => { if (printed) return; printed = true; try { w.focus(); w.print(); } catch { /* ignore */ } };
-  w.onload = doPrint;
-  setTimeout(doPrint, 900);
-}
-
-// Genera el reporte con el IMPRESOR NATIVO del navegador (Guardar como PDF). Es la única forma
-// de conservar el formato exacto (texto vectorial, colores, tablas, saltos de página) — html2pdf
-// rasteriza y degrada el resultado. Se abre la ventana del reporte y se lanza "Guardar como PDF".
+// Descarga el reporte DesignOps como archivo PDF (sin diálogo de impresión). El reporte usa colores
+// hex y flex (no CSS vars ni grid), que html2canvas sí resuelve, así el formato se conserva.
 export async function openDesignOpsReport(args) {
   const html = buildDesignOpsReportHtml(args);
-  openReportPrintWindow(html);
+  const period = args.period || "trimestre";
+  return downloadHtmlAsPdf(html, `Reporte-DesignOps-${args.company?.name}-${period}`);
 }
