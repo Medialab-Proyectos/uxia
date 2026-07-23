@@ -56,7 +56,13 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const withPts = ct.filter((tk) => tk.designPoints != null);
   const ptsDoneP = done.reduce((a, tk) => a + (Number(tk.designPoints) || 0), 0);
   const velocity = withPts.length ? +(ptsDoneP / weeks).toFixed(1) : null;
-  const cap = velocity && velocity > 0 ? velocity : 10;
+  // Capacidad de referencia por diseñador para la UTILIZACIÓN. NO usar la velocidad medida como
+  // divisor: en proyectos con poca historia cerrada tiende a ~0 y dispara la utilización a cientos o
+  // miles de % (200%–4000%). Se usa una capacidad ESTABLE = ritmo senior de referencia × horizonte
+  // de carga cercana (~1 sprint), así el % es acotado e interpretable respecto de la meta 70–90%.
+  const REF_WEEKLY = 10;   // pts/semana de referencia (senior; banda 8–12)
+  const PLAN_WEEKS = 2;    // horizonte de carga cercana (~1 sprint)
+  const cap = REF_WEEKLY * PLAN_WEEKS; // capacidad de referencia por diseñador (pts)
   const byDesigner = {};
   for (const tk of active) if (tk.assigneeId && tk.designPoints != null) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + Number(tk.designPoints);
   const utils = Object.entries(byDesigner).map(([id, p]) => ({ name: nameOf(id) || "—", pct: Math.round((p / cap) * 100), pts: p }));
