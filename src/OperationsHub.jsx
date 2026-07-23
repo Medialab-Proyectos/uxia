@@ -4,6 +4,7 @@ import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
+import { openActiveTasksReport } from "./activeTasksReport.js";
 import { notifyEvent } from "./notify.js";
 import { encodeCompanyToken } from "./companyLink.js";
 
@@ -3877,6 +3878,15 @@ function CompanyPanel({
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
+                      onClick={() => openActiveTasksReport({ company, tasks, people, logoUrl, client })}
+                      title="Descargar las tareas vigentes de este subproyecto"
+                      aria-label="Descargar tareas vigentes del subproyecto"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#B76E00] bg-[#FFF7E6] text-[#B76E00]"
+                    >
+                      <Download size={14} />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onToggleProjectImageBg(client)}
                       title="Fondo de la imagen (negro / blanco)"
                       aria-label="Cambiar fondo de la imagen"
@@ -4247,6 +4257,8 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
             <button key={k} type="button" onClick={() => setPeriod(k)} className="rounded-full border px-2.5 py-1 text-xs font-semibold" style={period === k ? { borderColor: "#17727A", background: "#EAF4F2", color: "#17727A" } : { borderColor: "#D0D5DD", color: "#667085" }}>{l}</button>
           ))}
           <button type="button" onClick={() => openDesignOpsReport({ company, tasks, people, clients, logoUrl, period })} className="no-print ml-1 inline-flex items-center gap-1 rounded-full border border-[#17727A] bg-[#EAF4F2] px-2.5 py-1 text-xs font-semibold text-[#17727A]" title={`Descargar el reporte DesignOps (${period}, a corte de hoy)`}><Download size={12} /><span className="hidden sm:inline"> Reporte DesignOps</span></button>
+          {/* Listado simple de tareas VIGENTES (activas) de la empresa, agrupado por subproyecto. */}
+          <button type="button" onClick={() => openActiveTasksReport({ company, tasks, people, logoUrl })} className="no-print inline-flex items-center gap-1 rounded-full border border-[#B76E00] bg-[#FFF7E6] px-2.5 py-1 text-xs font-semibold text-[#B76E00]" title="Descargar las tareas vigentes de la empresa (todas por subproyecto)"><Download size={12} /><span className="hidden sm:inline"> Tareas vigentes</span></button>
           {/* Botón de CRECIMIENTO: buenas prácticas del proyecto (las genera el MD). */}
           <button type="button" onClick={() => setGrowthOpen(true)} className="no-print inline-flex items-center gap-1 rounded-full border border-[#6941C6] bg-[#F4F1FD] px-2.5 py-1 text-xs font-semibold text-[#6941C6]" title="Buenas prácticas para crecer con este proyecto">
             <Sparkles size={12} /><span className="hidden sm:inline"> Crecimiento</span>{myPractices.length ? ` · ${myPractices.length}` : ""}
