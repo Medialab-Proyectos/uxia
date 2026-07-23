@@ -743,7 +743,9 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       return hay.includes(taskQ);
     }
     if (activeStatus === "open") return task.status !== "done";
-    if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done";
+    // "Por vencer" excluye lo ya entregado/fuera de manos (review/verificacion/notificado): esas
+    // ya se cumplieron, no vencen. Mismo criterio que "vencidas".
+    if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado";
     // "updated" = tocadas por un empleado y aún sin revisar por el admin.
     if (activeStatus === "updated") return Boolean(task.employeeTouchedAt);
     // "mdtouched" = la IA (MD) complementó la tarea (mdTouchedAt) y falta que el admin la revise.
@@ -755,7 +757,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const open = tasks.filter((task) => task.status !== "done");
     return {
       open: open.length,
-      dueToday: open.filter((task) => task.dueDate <= todayIso()).length,
+      dueToday: open.filter((task) => task.dueDate <= todayIso() && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado").length,
       blocked: open.filter((task) => task.status === "blocked").length,
       companies: companies.length,
       // Actualizadas por un empleado y aún sin revisar (employeeTouchedAt presente).
