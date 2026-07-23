@@ -2317,8 +2317,9 @@ function TasksTable({
           placeholder="Buscar en todas las tareas por palabras (incluye finalizadas)…"
           className="mt-3 w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm text-[#344054] outline-none focus:border-[#17727A]"
         />
-        {/* Chips de estado como carrusel horizontal (no consumen tanto alto) */}
-        <div className={`mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 ${taskQuery.trim() ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+        {/* Chips de estado: en móvil carrusel horizontal (swipe); en web (sm+) se envuelven en
+            varias líneas para poder tocarlos todos sin barra de scroll oculta. */}
+        <div className={`mt-3 -mx-1 flex flex-nowrap gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-x-visible ${taskQuery.trim() ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
           {[
             ["open", "Abiertas"],
             ["updated", "Actualizadas"],
