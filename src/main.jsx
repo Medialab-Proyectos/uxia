@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw } from "lucide-react";
+import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw, ChevronUp } from "lucide-react";
 import OperationsHub from "./OperationsHub.jsx";
 import RadarUXIA from "./RadarUXIA.jsx";
 import EmployeePortal from "./EmployeePortal.jsx";
@@ -74,6 +74,31 @@ async function refreshSession(session) {
 // Si no se define, no se restringe (compatibilidad). Configúralo en Vercel para limitar el acceso.
 const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
   .toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+
+// Botón flotante "volver al inicio": aparece al bajar bastante en listas largas (scroll de ventana)
+// y sube suave al tope. Sirve igual en el Centro de Operaciones (admin) y en el portal del empleado.
+function BackToTop({ dark }) {
+  const [show, setShow] = React.useState(false);
+  React.useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 600);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  if (!show) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      aria-label="Volver al inicio"
+      title="Volver al inicio"
+      className="fixed bottom-4 right-4 z-[60] inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-lg"
+      style={{ background: dark ? "#1B232E" : "#17727A", borderColor: dark ? "#28313E" : "#17727A", color: "#fff" }}
+    >
+      <ChevronUp size={20} />
+    </button>
+  );
+}
 
 function AppShell() {
   // Login por empresa: la empresa se toma SOLO del token de la URL (?c=<token>). Sin token, la base
@@ -413,6 +438,7 @@ function AppShell() {
           </div>
         </nav>
         <EmployeePortal token={session.access_token} user={session.user} theme={theme} onAlerts={setEmpAlerts} focus={empFocus} onFocusHandled={() => setEmpFocus(null)} companyId={linkCompanyId} companyName={brand?.name || ""} />
+        <BackToTop dark={dk} />
       </div>
     );
   }
@@ -553,6 +579,7 @@ function AppShell() {
         </div>
       )}
       {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} focus={opsFocus} onFocusHandled={() => setOpsFocus(null)} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
+      <BackToTop dark={dark} />
     </div>
   );
 }
