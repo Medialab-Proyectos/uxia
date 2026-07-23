@@ -1,0 +1,521 @@
+Archivo de audio 
+
+phoenxiweekl722.m4a 
+
+ 
+
+Transcripción 
+
+00:00:00 Orador 1 
+
+Ya les envío el link para que ustedes puedan ver las historias que tenemos montadas, las alcance a refinar un poquito estos días de que es todo lo que me ha me ha comentado por ahí Hernán y pues cositas que tenemos ahí, pero entonces vamos a arrancar. 
+
+00:00:13 Orador 1 
+
+Empecemos por el proyecto de Corvus. 
+
+00:00:16 Orador 1 
+
+Primero, pues gracias Jairo por el video, sirvió muchísimo. 
+
+00:00:20 Orador 1 
+
+Sí, con eso ya estoy como poniendo prototipar el flujo como tal. 
+
+00:00:25 Orador 1 
+
+sí. 
+
+00:00:27 Orador 1 
+
+El viernes pasado hablé con Hernán de exactamente de que necesitaba que lo desplegáramos, quedó que es una tarea de parte de él. 
+
+00:00:37 Orador 1 
+
+Le estoy haciendo mucho push toda esta semana, no sé si has tenido alguna comunicación con él, así que pues. 
+
+00:00:45 Orador 2 
+
+No de vuelta nada. 
+
+00:00:46 Orador 1 
+
+Pues sí, eso ha sido como el único, el único punto de que se ha tenido ahí que pues no lo no lo hemos podido como solucionar. 
+
+00:00:55 Orador 1 
+
+Bueno, ahora sí miremos tareas que teníamos pendientes para el día de hoy. 
+
+00:01:00 Orador 1 
+
+Yo tenía marcadas por aquí en este roadmap había marcado por aquí la tarea de lectura y generación de documentos. 
+
+00:01:09 Orador 1 
+
+¿Cómo vamos con ello? 
+
+00:01:10 Orador 1 
+
+¿Pasó o no pasó? 
+
+00:01:11 Orador 1 
+
+¿Funcionó o no funcionó? 
+
+00:01:15 Orador 1 
+
+Check, check ahí también miren, sacamos como un chequeo ahí. 
+
+00:01:23 Orador 2 
+
+Ya, ahí ustedes pueden ver. 
+
+00:01:28 Orador 2 
+
+Ahora sí se ha visitado la parte de escribir documentos, antes no entretenía Vamos a probarle, vamos a decir "video doble primeramente" para que agarre la ventana de chat y bien, me responda y vamos a cargar un documento o mejor que genere uno, ¿no? 
+
+00:01:46 Orador 3 
+
+Gérame un documento. 
+
+00:01:52 Orador 2 
+
+Un documento de usuarios con datos 
+
+00:01:57 Orador 2 
+
+datos random todo esto y le lleva un documento Excel por ejemplo de 5 usuarios con datos fondo, nada seguimos en el box 
+
+00:02:28 Orador 2 
+
+Ven, es un agente de conversación, vamos a traer la respuesta. 
+
+00:03:18 Orador 1 
+
+¿Demora un poco o no? 
+
+00:03:26 Orador 2 
+
+Sí, ya respondió pero estoy viendo que respecto a pulir algo más porque no ha ejecutado una herramienta y viendo que no me falta revisar esa parte bien, pulirlo bien pero me parece extraño porque si está funcionando esto 
+
+00:03:46 Orador 2 
+
+Word por ejemplo, porque si lo tengo en Excel Word como es una de las primeras llamadas, como hablar de que es un poco más rápido tranquilo ver esta información, como a mi se me generó no, pues esta sentando. 
+
+00:04:11 Orador 1 
+
+Entonces ahí como hay unos punticos que tenemos que revisarlos, ok? 
+
+00:04:15 Orador 2 
+
+Si, si, si, voy a ver con la generación de Word y de Excel pero la lectura de documentos sube por ejemplo acá tengo 
+
+00:04:23 Orador 2 
+
+un excel con varios datos con puros incidentes y si yo lo subo, incidentes random he leído que la cosa hay para la parte de lectura. 
+
+00:05:01 Orador 1 
+
+Ok, es decir, por la parte, la parte de escritura es la que falta, la generación. 
+
+00:05:09 Orador 2 
+
+Si, la parte de la escritura lo voy a revisar porque si esta funcionando, seguramente hay algo ahí que falta buscar, pero si, habían 10 registros y los 10 registros no se han leído. 
+
+00:05:19 Orador 2 
+
+Entonces ahora, que hago con estos datos, les puedo decir directamente, créanme todos estos, es decir que esto. 
+
+00:05:28 Orador 1 
+
+Este ajuste, ¿tú crees que lo podemos tener ajustado para mañana? 
+
+00:05:33 Orador 2 
+
+Sí, ahí lo reviso, finalizamos la reunión para ver qué pasa. 
+
+00:05:43 Orador 2 
+
+Y le digo, créame en todos estos incidentes tickets. 
+
+00:05:53 Orador 2 
+
+Y para esta solicitud escogí la agenda de agregar tickets. 
+
+00:05:57 Orador 2 
+
+Listo. 
+
+00:05:58 Orador 2 
+
+entonces se acaba de borrar un poco, ya hice login, esto que me dice, me devuelve el token y ahora va a ser la siguiente llamada para ir agregando los tickets sobre el producto, no es necesario que yo le pase cada ticket porque yo tenga el contexto de lo que le mande el token. 
+
+00:06:13 Orador 1 
+
+Perfecto, super, entonces nos hace falta la parte de generación de lectura de generación y ya con eso cerramos la store Si? 
+
+00:06:21 Orador 2 
+
+Falta revisarlo, acá en la parte de repuesta vemos que 
+
+00:06:28 Orador 2 
+
+Hizo el login y luego creó los tickets 1 que uno. 
+
+00:06:31 Orador 2 
+
+Falta, tal, tal, tal. 
+
+00:06:32 Orador 2 
+
+Entonces sí, sí los guardo en la plataforma. 
+
+00:06:35 Orador 1 
+
+Hay que revisar, porque no está generando. 
+
+00:06:41 Orador 2 
+
+Sí, la parte de la generación de documentos falta revisar. 
+
+00:06:44 Orador 2 
+
+Acá si podemos, si registro los tickets, si ven la hora ofrece, bueno, fue a las 13:49, pero sí creo los tickets. 
+
+00:06:53 Orador 1 
+
+Entonces si está ejecutando las herramientas, está leyendo los documentos, lo único pendiente que ahora que voy a revisar es que me encantaron Perfecto, entonces tenemos ahí un request para ti sobre esa historia, super, listo, entonces vamos bien por ese lado, miremos otra que tenemos por acá, las demás tareas están dadas para el 24, tenemos el auto por la plataforma de la Token, para el 24 la priorizar versión mínima mostrable 
+
+00:07:21 Orador 1 
+
+Y que más tenemos? 
+
+00:07:23 Orador 1 
+
+Creo que esos son los dos puntos que teníamos ahí pendientes ya para este viernes que ya tenemos que sacar la versión de acuerdo ya para finalizar listo lo demás pues estamos en desarrollo Ah bueno hay unas cosas que quedaron ya por fuera que eso ya lo vamos a ver después que son activar límites por tokens por cuota, el agente de clasificador dinámico, el segundo factor de autenticación y listo y aquí hay una tarea que sigue todavía pendiente que es el push 
+
+00:07:49 Orador 1 
+
+para el despliegue que aunque lo hice no he tenido respuesta por parte de Erna, listo, ah y bueno también queda la auditoría completa de interacciones que eso también quedó para agosto, listo chicos, hasta ahí vamos, listo, Jairo, listo, perfecto, por este lado Anthony vamos con Mobile, por la parte de Mobile pues ya se entregó, esta en verificación pues ya el APK, si, 
+
+00:08:18 Orador 1 
+
+Por ahí vi el documento también de pruebas, le estuve como echando una ojerita. 
+
+00:08:23 Orador 1 
+
+Sí, ahí te dejo un par de comentarios ahorita en la tarde para que lo revisemos. 
+
+00:08:29 Orador 1 
+
+Y con respecto al definición y al alcance del cual les cuento que ya sabemos quién es la persona, pero no hemos podido formalizar exactamente la contratación, pues porque Hernán no ha estado durante la pasada semana y están pues poco me ha respondido, de acuerdo. 
+
+00:08:43 Orador 1 
+
+Entonces espero que al finalizar este viernes tengamos ya una contratación un poco más estable para iniciar con la parte del cuba. 
+
+00:08:50 Orador 1 
+
+Listo, no sé si. 
+
+00:08:54 Orador 4 
+
+A mí debe decir que a ****** me mencionó que se lo iba a conectar a Isa. 
+
+00:09:01 Orador 1 
+
+Space está súper súper ajetreada. 
+
+00:09:04 Orador 1 
+
+Sí, Isa tiene como 20000 cosas y Daniel también le acabo de mandar. 
+
+00:09:07 Orador 1 
+
+a ISA entonces está como súper agitada para hacer QA entonces pues esperemos a ver qué pasa durante esa semana con el nuevo recurso que nos puede apoyar con ese tipo de cosas igual le haré push también a ISA para saber cómo va con ello ¿listo? 
+
+00:09:24 Orador 1 
+
+algo pendiente pues ya sabemos que estamos ahorita en pruebas se ha avanzado en algo, han tenido algún bloqueo que tengas para el viernes para la muestra con Hernan, algún punto que quieras levantarlo? 
+
+00:09:39 Orador 4 
+
+No, de momento lo que estoy haciendo justo ahora es que como he generado el APK y genere el documento este de pruebas, basándome en ese documento estoy haciendo pruebas en el iPhone también, ya que en el iPhone no tienes. 
+
+00:09:55 Orador 1 
+
+Que generarlo, es otro tipo de ejecutable. 
+
+00:10:03 Orador 1 
+
+Listo, es decir algún punto. 
+
+00:10:05 Orador 1 
+
+Perfecto, entonces vamos bien por ser ahorita únicamente esta semana estamos en revisión de la plataforma y puesta en marcha que está pendiente Anthony de la plataforma sabemos que más o menos en la reunión que tuvimos con Hernán habla así de que la plataforma estaba con un 90% sí 80 90%. 
+
+00:10:22 Orador 4 
+
+Sería sería lo que salga de esta revisión y o sea los cambios o los ajustes 
+
+00:10:30 Orador 4 
+
+y también en el contexto de las secciones de la parte de las pestañas de abajo, sería inicio, todo lo que es la vista de inicio y la vista del botón de guía, son esos dos los que están pendientes. 
+
+00:10:45 Orador 1 
+
+Perfecto, entonces ya son esas dos partes y funcionalidades que quedan, incluido el feedback que sería la plataforma. 
+
+00:10:56 Orador 1 
+
+Súper, entonces ya con eso lo dejamos como terminado. 
+
+00:10:59 Orador 1 
+
+Listo, y finalmente vamos para BackOffice. 
+
+00:11:04 Orador 1 
+
+Danny, yo sé que se entregó ya. 
+
+00:11:08 Orador 1 
+
+Bueno, aquí vi una tarea que era del día de ayer, que no sé pues si ya se cumplió o no. 
+
+00:11:15 Orador 1 
+
+Pero yo entiendo que tú ya le enviaste todas las tareas a ISA, ¿sí o no? 
+
+00:11:21 Orador 1 
+
+para la revisión. 
+
+00:11:25 Orador 5 
+
+Sí, con la parte del QA. 
+
+00:11:26 Orador 1 
+
+Ok, soy yo. 
+
+00:11:28 Orador 5 
+
+Entonces ahí ya también le mandé pues la lista de cambios, entonces ya sabe exactamente como querré Isa. 
+
+00:11:34 Orador 1 
+
+Bueno, pero eso es el QA, pero al final se le pidió el caso a Isa especial de las vistas que faltaban para poderlas evaluar. 
+
+00:11:45 Orador 5 
+
+No, porque no están programadas para el espejo, hay otras tareas que para. 
+
+00:11:49 Orador 1 
+
+Entonces ese caso, ese pedir plazo a Isabel para cuando quedan? 
+
+00:11:55 Orador 5 
+
+Yo espero, como no te he dicho para la otra semana, estamos hablando de. 
+
+00:12:01 Orador 5 
+
+Viene otra persona nueva acompañando, no? 
+
+00:12:04 Orador 5 
+
+Si entonces. 
+
+00:12:05 Orador 5 
+
+En la parte de Proneer, entonces, pero nuestro sprint se acabó el bien, si Entonces, para hacer como bien un empalme ahí, lo ideal sería ajustar esas tareas, si? 
+
+00:12:21 Orador 5 
+
+como el sprint planning hay que hacerlo el 27, sí, pero el sprint se acaba el 7, lo ideal sería planificar esas tareas con ISA de las vistas, planificarlas para que. 
+
+00:12:32 Orador 5 
+
+Es decir, pero entonces. 
+
+00:12:36 Orador 5 
+
+Entonces yo me reúno con ISA aproximadamente entre el 29. 
+
+00:12:40 Orador 1 
+
+Es decir que para el, es decir, la propuesta es, pues para que no se nos vaya muy lejos y tengas todo el recurso, 
+
+00:12:47 Orador 1 
+
+¿Te parece si ese caso establecido con ISA lo tenemos validado para el 3 de agosto? 
+
+00:12:56 Orador 1 
+
+Sí, la otra entonces ya tú me entregamos y tenemos listo el caso, el caso, el caso, el caso donde se vean las otras pantallas para verlo, porque era lo que estábamos pidiendo, ¿no? 
+
+00:13:10 Orador 5 
+
+Sí, pero hay que revisar. 
+
+00:13:12 Orador 1 
+
+Ok, entonces eso queda para 3 de agosto esta tarea, listo. 
+
+00:13:19 Orador 1 
+
+sale del contexto del sprint print, tenemos aqui esto, sale del interest del sprint. 
+
+00:13:27 Orador 1 
+
+Listo, bien, entonces esa tarea queda como un poco en pendiente. 
+
+00:13:32 Orador 1 
+
+Ok, el diagrama de proceso ya se entregó, que es la conexión. 
+
+00:13:37 Orador 1 
+
+Yo tenia aquí una tarea que se ha hablado, Dani, que quiero como revisarla contigo, que es conectar el diagrama del proceso del front end con el backend para la vista del viernes pasado. 
+
+00:13:46 Orador 1 
+
+el componente visual y la librería ya existen, pero el diagrama funcional como maqueta y al fallback falta integrarlo con datos reales. 
+
+00:13:54 Orador 1 
+
+¿Eso ya se logró. 
+
+00:13:58 Orador 5 
+
+¿Estás leyéndolo en Notion? 
+
+00:14:00 Orador 1 
+
+No, no es que yo lo tengo, la escribí por acá, la escribí por acá como la tarea que la realizamos ese día y como que la dejé anotado. 
+
+00:14:08 Orador 1 
+
+Entonces tú decías que faltaba la conexión del diagrama de proceso. 
+
+00:14:12 Orador 1 
+
+Entonces no sé si eso ya se logró o eso tenía que ver con la entrega que se hizo el viernes. 
+
+00:14:19 Orador 5 
+
+No, no, no, por eso te hice la lista de cambios. 
+
+00:14:24 Orador 5 
+
+Así que la última vez que nosotros nos reunimos fue el miércoles, ¿no? 
+
+00:14:30 Orador 5 
+
+Ok. 
+
+00:14:30 Orador 5 
+
+Nosotros tenemos control el jueves, ¿no? 
+
+00:14:33 Orador 5 
+
+Entonces hay dos tareas que salieron ahí me dice, tú te metes en el Nation, hay dos tareas que salieron como de más, 
+
+00:14:40 Orador 5 
+
+esos fueron lo del dropdown, listo y la conexión de los filtros de ticket, entonces esas tareas entraron a reemplazar el tiempo de la conexión de la vista. 
+
+00:14:53 Orador 1 
+
+Si, se aplazó por nuevas vistas? 
+
+00:14:55 Orador 5 
+
+Entonces la conexión de V. 
+
+00:14:57 Orador 5 
+
+si, se aplazó hasta semana, osea se hizo como un change, como el cambio. 
+
+00:15:02 Orador 5 
+
+Entonces entonces en el notion, esa conexión de las vistas 
+
+00:15:06 Orador 5 
+
+con el diagrama se está haciendo ahorita, está pronosticado para terminarse el, yo te digo, como el 23. 
+
+00:15:14 Orador 5 
+
+Ah, o sea, mañana. 
+
+00:15:16 Orador 5 
+
+Sí, pero es mañana todo el día. 
+
+00:15:18 Orador 1 
+
+Sí, no, es que yo lo tengo por el interés, por eso te había dejado eso de conectar el proceso de diseño, sí. 
+
+00:15:23 Orador 1 
+
+Sí, sí, sí. 
+
+00:15:24 Orador 5 
+
+Eso está para el 23. 
+
+00:15:25 Orador 1 
+
+Perfecto, la entrega del. 
+
+00:15:28 Orador 1 
+
+Ah, la entrega. 
+
+00:15:29 Orador 1 
+
+Ah, pero pues yo tengo tal con esto. 
+
+00:15:33 Orador 1 
+
+Ok hay una, bueno el demo ya se entregó y estamos esperando pruebas no más pero yo había anotado por aquí que teníamos un demo, otro demo para el 28 porque Demo para el 28 no hay entonces este fue el que ya se entregó No, de hecho el 28 cae un miércoles 
+
+00:16:03 Orador 1 
+
+Entonces tener una versión de estable de descarga para el demo y hacer pruebas. 
+
+00:16:11 Orador 1 
+
+Ok, entonces esta era una tarea que esa fue una tarea que se entregó la pasada semana, que se desplegó el demo estable. 
+
+00:16:20 Orador 5 
+
+Ok, esto se entregó. 
+
+00:16:28 Orador 1 
+
+Bueno sí, pero fue para desarrollo. 
+
+00:16:33 Orador 1 
+
+decir la programación de la fecha ok perfecto algún punto adicional Dani algún bloqueante que tengas que tu digas oye no en este momento tenemos un bloqueante que necesitamos resolverlo que hay que hablarlo con Hernán. 
+
+00:17:06 Orador 1 
+
+Listo, mañana tenemos revisión con Hernán, así que pendiente a ello de acuerdo para entregar lo que estoy atento a hacerse, listo, listo y pues con Jairo y con Anthony tenemos la reunión el viernes con Hernán para también hacerle seguimiento al proceso, les estaré contando pues como el viernes no se pudo subir a Hernán, creo que no estaba disponible y no sé si está disponible esta semana, pero 
+
+00:17:33 Orador 1 
+
+pero el día de mañana temprano les notifico si igual antes de la reunión pues a veces me escribe me dice hoy no voy a poder estar en la reunión entonces ya sé que durante esta semana está en la reunión si no nos si nos dice que no pues hacemos una hacemos un chequeo también de tareas el viernes cerramos las historias y pues ya dejamos como claro el siguiente paso de acuerdo chicos listo ¿Algún punto cerramos ahí entonces? 
+
+00:18:03 Orador 1 
+
+si no 
+
+00:18:04 Orador 1 
+
+Cerramos chicos, bueno, gracias a todos que pasen buena tarde chicos, cuídense, chao, chao. 
+
+ 
