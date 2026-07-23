@@ -12,7 +12,7 @@ const LEAD_STATUSES = [["ready", "Sin iniciar"], ["doing", "En progreso"], ["blo
 
 const STATUS_LABEL = {
   backlog: "Pendiente", ready: "Pendiente", doing: "En progreso",
-  review: "En revisión", verificacion: "Verificación", blocked: "Bloqueada", actualizada: "Actualizada", done: "Finalizada",
+  review: "En revisión", verificacion: "Lista · por notificar", blocked: "Bloqueada", actualizada: "Actualizada", done: "Finalizada",
 };
 const PRIORITY_COLOR = { alta: "#B42318", media: "#B76E00", baja: "#1570EF" };
 

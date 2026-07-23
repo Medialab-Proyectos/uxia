@@ -12,7 +12,7 @@ const STATUS = {
   ready: "Pendiente",
   doing: "En proceso",
   review: "En revisión",
-  verificacion: "Verificación",
+  verificacion: "Lista · por notificar",
   blocked: "Bloqueada",
   actualizada: "Actualizada",
   done: "Finalizada",
@@ -2036,7 +2036,7 @@ function buildTaskRefs(tasks, companies) {
 }
 
 // Estados que el admin puede fijar rápido desde la vista de prioridad.
-const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Verificación", Send], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
+const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Lista · por notificar", Send], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
 
 function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatus }) {
   const [openId, setOpenId] = useState(null);
@@ -2794,7 +2794,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     ["ready", "Pendiente", Circle],
     ["doing", "En proceso", LoaderCircle],
     ["review", "En revisión", Clock],
-    ["verificacion", "Verificación", Send],
+    ["verificacion", "Lista · por notificar", Send],
     ["blocked", "Bloqueada", AlertTriangle],
     ["done", "Finalizada", CheckCircle2],
   ];
