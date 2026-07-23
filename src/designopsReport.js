@@ -340,43 +340,10 @@ function openReportPrintWindow(html) {
   setTimeout(doPrint, 900);
 }
 
-// DESCARGA directa del PDF (sin diálogo de imprimir). Renderiza el reporte en un iframe
-// aislado (para no contaminar los estilos de la app) y usa html2pdf. Si algo falla, cae al
-// respaldo de imprimir.
+// Genera el reporte con el IMPRESOR NATIVO del navegador (Guardar como PDF). Es la única forma
+// de conservar el formato exacto (texto vectorial, colores, tablas, saltos de página) — html2pdf
+// rasteriza y degrada el resultado. Se abre la ventana del reporte y se lanza "Guardar como PDF".
 export async function openDesignOpsReport(args) {
-  const company = args?.company;
-  const period = args?.period || "trimestre";
-  const filename = `Reporte-DesignOps-${(company?.name || "empresa").replace(/[^\w-]+/g, "_")}-${period}.pdf`;
   const html = buildDesignOpsReportHtml(args);
-
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;height:1200px;border:0;";
-  document.body.appendChild(iframe);
-  try {
-    const doc = iframe.contentDocument;
-    doc.open(); doc.write(html); doc.close();
-    // Espera a que carguen imágenes (el logo) antes de rasterizar.
-    await new Promise((resolve) => {
-      let done = false;
-      const finish = () => { if (!done) { done = true; resolve(); } };
-      iframe.onload = finish;
-      setTimeout(finish, 1200);
-    });
-    const el = doc.querySelector(".wrap") || doc.body;
-    const mod = await import("html2pdf.js");
-    const html2pdf = mod.default || mod;
-    await html2pdf().set({
-      margin: [10, 10, 12, 10],
-      filename,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 820 },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      pagebreak: { mode: ["css", "avoid-all"] },
-    }).from(el).save();
-  } catch (e) {
-    // Si la descarga directa falla, abre la ventana imprimible como respaldo.
-    openReportPrintWindow(html);
-  } finally {
-    setTimeout(() => { try { document.body.removeChild(iframe); } catch { /* ignore */ } }, 500);
-  }
+  openReportPrintWindow(html);
 }
