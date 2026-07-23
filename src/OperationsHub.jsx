@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, BarChart3, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -13,6 +13,7 @@ const STATUS = {
   doing: "En proceso",
   review: "En revisión",
   verificacion: "Lista · por notificar",
+  notificado: "Notificado",
   blocked: "Bloqueada",
   actualizada: "Actualizada",
   done: "Finalizada",
@@ -25,6 +26,7 @@ const STATUS_TONE = {
   doing:   { border: "#9CC7E4", bg: "#EAF2FB", text: "#1D5A99" },
   review:  { border: "#B7D8D4", bg: "#EAF4F2", text: "#17727A" },
   verificacion: { border: "#9CC7E4", bg: "#EAF2FB", text: "#175CD3" },
+  notificado: { border: "#A6D9C4", bg: "#EAF4F2", text: "#0D7A4F" },
   blocked: { border: "#F3B0A8", bg: "#FEF3F2", text: "#B42318" },
   actualizada: { border: "#C4B5FD", bg: "#F5F3FF", text: "#6D28D9" },
   done:    { border: "#A6D9C4", bg: "#E5F5EE", text: "#0D7A4F" },
@@ -2036,7 +2038,7 @@ function buildTaskRefs(tasks, companies) {
 }
 
 // Estados que el admin puede fijar rápido desde la vista de prioridad.
-const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Lista · por notificar", Send], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
+const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Lista · por notificar", Send], ["notificado", "Notificado", Bell], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
 
 function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatus }) {
   const [openId, setOpenId] = useState(null);
@@ -2795,6 +2797,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     ["doing", "En proceso", LoaderCircle],
     ["review", "En revisión", Clock],
     ["verificacion", "Lista · por notificar", Send],
+    ["notificado", "Notificado", Bell],
     ["blocked", "Bloqueada", AlertTriangle],
     ["done", "Finalizada", CheckCircle2],
   ];
