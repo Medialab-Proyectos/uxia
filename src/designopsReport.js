@@ -56,15 +56,15 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const withPts = ct.filter((tk) => tk.designPoints != null);
   const ptsDoneP = done.reduce((a, tk) => a + (Number(tk.designPoints) || 0), 0);
   const velocity = withPts.length ? +(ptsDoneP / weeks).toFixed(1) : null;
-  // Capacidad de referencia por diseñador para la UTILIZACIÓN. NO usar la velocidad medida como
-  // divisor: en proyectos con poca historia cerrada tiende a ~0 y dispara la utilización a cientos o
-  // miles de % (200%–4000%). Se usa una capacidad ESTABLE = ritmo senior de referencia × horizonte
-  // de carga cercana (~1 sprint), así el % es acotado e interpretable respecto de la meta 70–90%.
-  const REF_WEEKLY = 10;   // pts/semana de referencia (senior; banda 8–12)
-  const PLAN_WEEKS = 2;    // horizonte de carga cercana (~1 sprint)
-  const cap = REF_WEEKLY * PLAN_WEEKS; // capacidad de referencia por diseñador (pts)
+  // Utilización = carga de diseño PENDIENTE ÷ capacidad del PERIODO (ritmo senior 10 pts/sem × semanas
+  // del periodo). NO se divide por la velocidad medida (con poca historia tiende a ~0 y dispara el %
+  // a cientos/miles). La carga cuenta solo trabajo por hacer: excluye lo entregado/fuera de manos
+  // (review, "lista por notificar", notificado), que no es carga real del diseñador.
+  const REF_WEEKLY = 10;                 // pts/semana de referencia (senior; banda 8–12)
+  const cap = REF_WEEKLY * weeks;        // capacidad del periodo por diseñador (pts)
+  const isPendingLoad = (tk) => tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
   const byDesigner = {};
-  for (const tk of active) if (tk.assigneeId && tk.designPoints != null) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + Number(tk.designPoints);
+  for (const tk of active) if (tk.assigneeId && tk.designPoints != null && isPendingLoad(tk)) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + Number(tk.designPoints);
   const utils = Object.entries(byDesigner).map(([id, p]) => ({ name: nameOf(id) || "—", pct: Math.round((p / cap) * 100), pts: p }));
   const avgUtil = utils.length ? Math.round(utils.reduce((a, u) => a + u.pct, 0) / utils.length) : null;
   const devs = done.filter((tk) => tk.dueDate && tk.createdAt && tk.completedAt).map((tk) => {

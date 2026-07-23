@@ -4217,10 +4217,16 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   const wip = enProgreso;
   const withPts = companyTasks.filter((t) => t.designPoints != null);
   const velocity = withPts.length ? +(doneInPeriod.reduce((a, t) => a + (Number(t.designPoints) || 0), 0) / weeksP).toFixed(1) : null;
-  const capV = velocity && velocity > 0 ? velocity : 10;
+  // Utilización = carga de diseño PENDIENTE ÷ capacidad del PERIODO (ritmo senior 10 pts/sem × semanas
+  // del periodo). NO se divide por la velocidad medida (con poca historia tiende a ~0 y dispara el %
+  // a cientos). La carga cuenta solo trabajo por hacer: excluye lo entregado/fuera de manos
+  // (review, "lista por notificar", notificado), que no es carga real del diseñador.
+  const REF_WEEKLY_PTS = 10;
+  const capPeriod = REF_WEEKLY_PTS * weeksP;
+  const isPendingLoad = (t) => t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado";
   const byDes = {};
-  for (const t of activas) if (t.assigneeId && t.designPoints != null) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + Number(t.designPoints);
-  const utilVals = Object.values(byDes).map((p) => Math.round((p / capV) * 100));
+  for (const t of activas) if (t.assigneeId && t.designPoints != null && isPendingLoad(t)) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + Number(t.designPoints);
+  const utilVals = Object.values(byDes).map((p) => Math.round((p / capPeriod) * 100));
   const avgUtil = utilVals.length ? Math.round(utilVals.reduce((a, b) => a + b, 0) / utilVals.length) : null;
   const devArr = doneInPeriod.filter((t) => t.dueDate && t.createdAt && t.completedAt).map((t) => { const est = (new Date(t.dueDate) - new Date(t.createdAt)) / DAY_MS; const real = (new Date(t.completedAt) - new Date(t.createdAt)) / DAY_MS; return est > 0 ? (real - est) / est : null; }).filter((v) => v != null);
   const deviationPct = devArr.length ? Math.round((devArr.reduce((a, b) => a + b, 0) / devArr.length) * 100) : null;
