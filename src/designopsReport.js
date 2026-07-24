@@ -56,12 +56,13 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const withPts = ct.filter((tk) => tk.designPoints != null);
   const ptsDoneP = done.reduce((a, tk) => a + (Number(tk.designPoints) || 0), 0);
   const velocity = withPts.length ? +(ptsDoneP / weeks).toFixed(1) : null;
-  // Utilización = carga de diseño PENDIENTE ÷ capacidad del PERIODO (ritmo senior 10 pts/sem × semanas
-  // del periodo). NO se divide por la velocidad medida (con poca historia tiende a ~0 y dispara el %
-  // a cientos/miles). La carga cuenta solo trabajo por hacer: excluye lo entregado/fuera de manos
-  // (review, "lista por notificar", notificado), que no es carga real del diseñador.
+  // Utilización = carga de diseño PENDIENTE ÷ capacidad de CORTO PLAZO (un sprint ~2 semanas al ritmo
+  // senior de 10 pts/sem = 20 pts). Mide la carga cercana AHORA, no una fracción del periodo (medir
+  // contra el trimestre diluía la carga). Independiente del periodo. NO usa la velocidad medida.
+  // La carga es solo trabajo por hacer: excluye lo entregado/fuera de manos (review/verificacion/notificado).
   const REF_WEEKLY = 10;                 // pts/semana de referencia (senior; banda 8–12)
-  const cap = REF_WEEKLY * weeks;        // capacidad del periodo por diseñador (pts)
+  const PLAN_WEEKS = 2;                  // horizonte de carga cercana (~1 sprint)
+  const cap = REF_WEEKLY * PLAN_WEEKS;   // capacidad de corto plazo por diseñador (pts)
   const isPendingLoad = (tk) => tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
   const byDesigner = {};
   for (const tk of active) if (tk.assigneeId && tk.designPoints != null && isPendingLoad(tk)) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + Number(tk.designPoints);

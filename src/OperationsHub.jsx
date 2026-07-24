@@ -4235,16 +4235,19 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   const wip = enProgreso;
   const withPts = companyTasks.filter((t) => t.designPoints != null);
   const velocity = withPts.length ? +(doneInPeriod.reduce((a, t) => a + (Number(t.designPoints) || 0), 0) / weeksP).toFixed(1) : null;
-  // Utilización = carga de diseño PENDIENTE ÷ capacidad del PERIODO (ritmo senior 10 pts/sem × semanas
-  // del periodo). NO se divide por la velocidad medida (con poca historia tiende a ~0 y dispara el %
-  // a cientos). La carga cuenta solo trabajo por hacer: excluye lo entregado/fuera de manos
-  // (review, "lista por notificar", notificado), que no es carga real del diseñador.
-  const REF_WEEKLY_PTS = 10;
-  const capPeriod = REF_WEEKLY_PTS * weeksP;
+  // Utilización = carga de diseño PENDIENTE ÷ capacidad de CORTO PLAZO (un sprint ~2 semanas al ritmo
+  // senior de 10 pts/sem = 20 pts). Mide "qué tan llena está tu agenda cercana AHORA", NO una fracción
+  // de un trimestre: medir contra todo el periodo diluía la carga (16 pts pendientes salían 14% cuando
+  // en realidad son ~80% de un sprint). Independiente del periodo del reporte. NO usa la velocidad
+  // medida (con poca historia tiende a ~0 y dispara el %). La carga es solo trabajo por hacer: excluye
+  // lo entregado/fuera de manos (review, "lista por notificar", notificado).
+  const REF_WEEKLY_PTS = 10;   // pts/semana de referencia (senior; banda 8–12)
+  const PLAN_WEEKS = 2;        // horizonte de carga cercana (~1 sprint)
+  const capNear = REF_WEEKLY_PTS * PLAN_WEEKS; // capacidad de corto plazo por diseñador (pts)
   const isPendingLoad = (t) => t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado";
   const byDes = {};
   for (const t of activas) if (t.assigneeId && t.designPoints != null && isPendingLoad(t)) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + Number(t.designPoints);
-  const utilVals = Object.values(byDes).map((p) => Math.round((p / capPeriod) * 100));
+  const utilVals = Object.values(byDes).map((p) => Math.round((p / capNear) * 100));
   const avgUtil = utilVals.length ? Math.round(utilVals.reduce((a, b) => a + b, 0) / utilVals.length) : null;
   const devArr = doneInPeriod.filter((t) => t.dueDate && t.createdAt && t.completedAt).map((t) => { const est = (new Date(t.dueDate) - new Date(t.createdAt)) / DAY_MS; const real = (new Date(t.completedAt) - new Date(t.createdAt)) / DAY_MS; return est > 0 ? (real - est) / est : null; }).filter((v) => v != null);
   const deviationPct = devArr.length ? Math.round((devArr.reduce((a, b) => a + b, 0) / devArr.length) * 100) : null;
