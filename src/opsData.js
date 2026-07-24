@@ -128,6 +128,7 @@ const sourceRecordToRow = (r) => ({
 
 // ---------- estado completo ----------
 export async function loadState(token) {
+  saveCache = null; // cargar = nueva referencia: el próximo autosave parte de cero (evita diffs contra un caché viejo)
   const [companyRows, projectRows, taskRows, peopleRows, sourceRows, appRows] = await Promise.all([
     rest(token, "companies", { query: "?select=*&order=name.asc" }),
     rest(token, "projects", { query: "?select=*&order=created_at.asc" }),
@@ -200,6 +201,12 @@ async function upsertResilient(token, path, rows, optionalCols = []) {
   }
 }
 
+// Snapshot por entidad de lo ÚLTIMO guardado (id/clave → JSON de la fila). Permite que el autosave
+// escriba SOLO lo que cambió (diff), en vez de re-subir todas las empresas/tareas/personas en cada
+// corrida — clave con una base de datos gratuita. Se resetea al cargar (loadState) y en cada recarga.
+let saveCache = null;
+export function resetSaveCache() { saveCache = null; }
+
 export async function saveState(token, state) {
   const updatedAt = new Date().toISOString();
   const companies = asArray(state.companies);
@@ -208,16 +215,23 @@ export async function saveState(token, state) {
   const sourceRecords = asArray(state.sourceRecords);
   const warnings = [];
 
-  const companyRows = companies.map((c) => ({
+  const prev = saveCache;
+  const firstRun = !prev; // sin caché (primera vez / tras cargar) → se guarda todo una vez
+  const next = { companies: {}, projects: {}, people: {}, tasks: {}, sources: {}, activeCompany: state.activeCompany };
+  // Registra el objeto en el snapshot NUEVO y dice si cambió respecto al anterior. `updated_at` NO
+  // entra en el hash (cambiaría siempre): se agrega solo al guardar las filas que sí cambiaron.
+  const isChanged = (bucket, key, obj) => { const j = JSON.stringify(obj); next[bucket][key] = j; return firstRun || prev[bucket][key] !== j; };
+
+  const companyBase = companies.map((c) => ({
     id: c.id, name: c.name, status: c.status || "activa", owner: c.owner || "MediaLab",
     workspaces: asArray(c.workspaces), archived_clients: asObject(c.archivedClients),
     project_links: asObject(c.projectLinks), project_descriptions: asObject(c.projectDescriptions),
     context_documents: asObject(c.contextDocuments), logo: c.logo || null, connectors: asArray(c.connectors),
     project_images: asObject(c.projectImages), scope: asArray(c.scope),
-    updated_at: updatedAt,
   }));
-  if (companyRows.length) {
-    const w = await upsertResilient(token, "companies?on_conflict=id", companyRows, ["project_images", "scope"]);
+  const changedCompanies = companyBase.filter((r) => isChanged("companies", r.id, r)).map((r) => ({ ...r, updated_at: updatedAt }));
+  if (changedCompanies.length) {
+    const w = await upsertResilient(token, "companies?on_conflict=id", changedCompanies, ["project_images", "scope"]);
     if (w) warnings.push(w);
   }
 
@@ -227,18 +241,21 @@ export async function saveState(token, state) {
     board_url: normalizeBoardConfig(c.projectLinks?.[client]).url,
     description: c.projectDescriptions?.[client] || "",
   })));
-  if (projectRows.length) {
-    await rest(token, "projects?on_conflict=company_id,name", { method: "POST", body: projectRows, prefer: "resolution=merge-duplicates,return=minimal" });
+  const changedProjects = projectRows.filter((r) => isChanged("projects", `${r.company_id}|${r.name}`, r));
+  if (changedProjects.length) {
+    await rest(token, "projects?on_conflict=company_id,name", { method: "POST", body: changedProjects, prefer: "resolution=merge-duplicates,return=minimal" });
   }
 
   const peopleRows = people.filter((p) => p.id).map(personToRow);
-  if (peopleRows.length) {
-    await rest(token, "people?on_conflict=id", { method: "POST", body: peopleRows, prefer: "resolution=merge-duplicates,return=minimal" });
+  const changedPeople = peopleRows.filter((r) => isChanged("people", r.id, r));
+  if (changedPeople.length) {
+    await rest(token, "people?on_conflict=id", { method: "POST", body: changedPeople, prefer: "resolution=merge-duplicates,return=minimal" });
   }
 
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
-  if (taskRows.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", taskRows, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by"]);
+  const changedTasks = taskRows.filter((r) => isChanged("tasks", r.id, r));
+  if (changedTasks.length) {
+    const w = await upsertResilient(token, "tasks?on_conflict=id", changedTasks, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba
@@ -249,20 +266,26 @@ export async function saveState(token, state) {
   const sourceRows = sourceRecords.map(sourceRecordToRow);
   const withId = sourceRows.filter((r) => r.id);
   const withoutId = sourceRows.map(({ id, ...rest }) => rest).filter((_, i) => !sourceRows[i].id);
-  if (withId.length) {
-    await rest(token, "source_documents?on_conflict=id", { method: "POST", body: withId, prefer: "resolution=merge-duplicates,return=minimal" });
+  const changedSources = withId.filter((r) => isChanged("sources", r.id, r));
+  if (changedSources.length) {
+    await rest(token, "source_documents?on_conflict=id", { method: "POST", body: changedSources, prefer: "resolution=merge-duplicates,return=minimal" });
   }
   if (withoutId.length) {
     await rest(token, "source_documents", { method: "POST", body: withoutId, prefer: "return=minimal" });
   }
-  await rest(token, "source_documents?task_count=eq.0", { method: "DELETE", prefer: "return=minimal" });
+  if (changedSources.length || withoutId.length) {
+    await rest(token, "source_documents?task_count=eq.0", { method: "DELETE", prefer: "return=minimal" });
+  }
 
-  await rest(token, "app_state?on_conflict=id", {
-    method: "POST",
-    body: [{ id: "operations", active_company: state.activeCompany, updated_at: updatedAt }],
-    prefer: "resolution=merge-duplicates,return=minimal",
-  });
+  if (firstRun || prev.activeCompany !== state.activeCompany) {
+    await rest(token, "app_state?on_conflict=id", {
+      method: "POST",
+      body: [{ id: "operations", active_company: state.activeCompany, updated_at: updatedAt }],
+      prefer: "resolution=merge-duplicates,return=minimal",
+    });
+  }
 
+  saveCache = next; // el snapshot nuevo pasa a ser la referencia para el próximo diff
   return { updatedAt, warning: warnings.length ? [...new Set(warnings)].join(" ") : "" };
 }
 

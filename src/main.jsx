@@ -3,9 +3,25 @@ import ReactDOM from "react-dom/client";
 import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw, ChevronUp } from "lucide-react";
 // Vistas grandes divididas en chunks (React.lazy): cada usuario descarga SOLO la que usa
 // (admin → OperationsHub/Radar; empleado → EmployeePortal), no las tres. Baja el JS inicial.
-const OperationsHub = React.lazy(() => import("./OperationsHub.jsx"));
-const RadarUXIA = React.lazy(() => import("./RadarUXIA.jsx"));
-const EmployeePortal = React.lazy(() => import("./EmployeePortal.jsx"));
+// Si el chunk falla al cargar (típico tras un DEPLOY NUEVO: la página vieja referencia un hash que
+// ya no existe → 404), se recarga la página UNA vez para traer el HTML/chunks nuevos. El flag en
+// sessionStorage evita bucles si el fallo fuese real (sin red, etc.).
+function lazyWithReload(factory, key) {
+  const flag = `chunk-reload-${key}`;
+  return React.lazy(() => factory()
+    .then((mod) => { try { sessionStorage.removeItem(flag); } catch { /* ignore */ } return mod; })
+    .catch((err) => {
+      if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(flag)) {
+        sessionStorage.setItem(flag, "1");
+        window.location.reload();
+        return new Promise(() => {}); // no resuelve: la página se está recargando
+      }
+      throw err; // ya recargamos una vez y volvió a fallar; que el ErrorBoundary muestre el aviso
+    }));
+}
+const OperationsHub = lazyWithReload(() => import("./OperationsHub.jsx"), "ops");
+const RadarUXIA = lazyWithReload(() => import("./RadarUXIA.jsx"), "radar");
+const EmployeePortal = lazyWithReload(() => import("./EmployeePortal.jsx"), "employee");
 import * as opsData from "./opsData.js";
 import { companyFromUrl, encodeCompanyToken } from "./companyLink.js";
 import { registerServiceWorker, requestNotificationPermission, subscribeToPush, notificationState, pushSupported } from "./pwa.js";
