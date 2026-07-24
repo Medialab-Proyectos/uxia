@@ -600,7 +600,6 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [finalizeTask, setFinalizeTask] = useState(null); // tarea a finalizar desde la vista de prioridad
   const [growthPractices, setGrowthPractices] = useState([]); // buenas prácticas de crecimiento (MD)
   const [leads, setLeads] = useState([]); // líderes de subproyecto (company_id + client + email)
-  const [alertDismissed, setAlertDismissed] = useState(false);
   // Foco desde una notificación del shell: abre "Todas las tareas" en el filtro indicado.
   useEffect(() => {
     if (!focus) return;
@@ -643,7 +642,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
             ? payload.activeCompany
             : normalized.companies[0]?.id || "metrics-lab"
         );
-        setSaveStatus(`Supabase: ${payload.updatedAt ? new Date(payload.updatedAt).toLocaleString() : "listo"}`);
+        setSaveStatus(payload.updatedAt ? `Base de datos actualizada: ${new Date(payload.updatedAt).toLocaleString()}` : "Base de datos actualizada");
       } catch {
         const local = localStorage.getItem(STORE_KEY);
         if (local) {
@@ -1527,8 +1526,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
             <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
+            {saveStatus && <p className="mt-0.5 text-xs text-[#98A2B3]">{saveStatus}</p>}
           </div>
-          <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
+            <button
+              type="button"
+              onClick={() => { setActiveView("companies"); setAsideOpen(true); }}
+              className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold text-[#344054] sm:w-auto"
+              title="Gestionar empresas, subproyectos y personas"
+            >
+              <Building2 size={16} /> Empresas y personas
+            </button>
             <button
               type="button"
               onClick={() => setGlobalOpen((v) => !v)}
@@ -1537,7 +1545,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             >
               <Plus size={16} /> Subir insumo global
             </button>
-            {saveStatus && <p className="text-xs" style={{ color: "#B54708" }}>{saveStatus}</p>}
           </div>
         </div>
 
@@ -1593,46 +1600,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             </div>
           )}
         </div>
-
-        {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0 || metrics.reviewPending > 0) && !alertDismissed && (
-          <div className="relative mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-[#E8751A] bg-[#FFE9D3] px-4 py-3 pr-10 text-sm shadow-[0_4px_16px_rgba(232,117,26,0.22)]">
-            {/* Franja de acento a la izquierda, más marcada que el resto de la interfaz crema. */}
-            <span className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-[#E8751A]" />
-            <span className="inline-flex items-center gap-2 font-bold uppercase tracking-[0.08em] text-[#9A4B08]">
-              {/* Ícono de alerta en círculo naranja + anillo pulsante para captar la mirada. */}
-              <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E8751A] text-white">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E8751A] opacity-40" />
-                <AlertTriangle size={13} className="relative" />
-              </span>
-              Requiere tu atención hoy
-            </span>
-            {metrics.reviewPending > 0 && (
-              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("review"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
-                className="inline-flex items-center gap-1 font-semibold text-[#17727A] underline-offset-2 hover:underline" title="Ver las tareas en revisión (por aprobar)">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#17727A" }} />
-                {metrics.reviewPending} por aprobar (revisión)
-              </button>
-            )}
-            {metrics.updatedPending > 0 && (
-              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("updated"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
-                className="inline-flex items-center gap-1 font-semibold text-[#6D28D9] underline-offset-2 hover:underline" title="Ver las tareas actualizadas por revisar">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: "#6D28D9" }} />
-                {metrics.updatedPending} actualizada(s) por revisar
-              </button>
-            )}
-            {metrics.dueToday > 0 && (
-              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("today"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
-                className="font-semibold text-[#8A5700] underline-offset-2 hover:underline" title="Ver las tareas que vencen hoy">{metrics.dueToday} vence(n) hoy</button>
-            )}
-            {metrics.blocked > 0 && (
-              <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("blocked"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
-                className="font-semibold text-[#B42318] underline-offset-2 hover:underline" title="Ver las tareas bloqueadas">{metrics.blocked} con bloqueo</button>
-            )}
-            <button type="button" onClick={() => setAlertDismissed(true)} title="Cerrar (ya lo vi)" aria-label="Cerrar aviso" className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md text-[#B76E00] hover:bg-[#F2C879]/40">
-              <X size={14} />
-            </button>
-          </div>
-        )}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <Metric label="Tareas abiertas" value={metrics.open} tone="#17727A" icon={ListChecks} />
@@ -1726,15 +1693,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   );
                 })}
               </div>
-              {!asideOpen && (
-                <button
-                  type="button"
-                  onClick={() => setAsideOpen(true)}
-                  className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold text-[#344054] sm:w-auto"
-                >
-                  Empresas y personas <ChevronRight size={16} />
-                </button>
-              )}
             </div>
 
             <CompanyPanel
