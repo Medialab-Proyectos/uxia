@@ -759,7 +759,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       open: open.length,
       dueToday: open.filter((task) => task.dueDate <= todayIso() && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado").length,
       blocked: open.filter((task) => task.status === "blocked").length,
-      companies: companies.length,
+      companies: companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar").length,
       // Actualizadas por un empleado y aún sin revisar (employeeTouchedAt presente).
       updatedPending: tasks.filter((task) => task.employeeTouchedAt).length,
       // El empleado la envió a revisión: el admin debe aprobar / pedir cambios / devolver.
@@ -1667,20 +1667,25 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             {/* Carrusel de empresas (tarjetas cuadradas). Naranja = seleccionada. */}
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start">
               <div className="flex flex-1 gap-2 overflow-x-auto pb-1">
-                {companies.filter((c) => c.status !== "inactiva").map((c) => {
+                {[...companies]
+                  .sort((a, b) => (a.status === "inactiva" ? 1 : 0) - (b.status === "inactiva" ? 1 : 0))
+                  .map((c) => {
                   const on = c.id === activeCompany;
+                  const off = c.status === "inactiva"; // apagada: se muestra atenuada, clic para reactivarla
                   return (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => setActiveCompany(c.id)}
+                      title={off ? "Empresa apagada · clic para verla y reactivarla" : c.name}
                       className="flex w-20 shrink-0 flex-col items-center gap-1 rounded-md p-2 text-center"
-                      style={{ border: `${on ? 2 : 1}px solid ${on ? "#E8751A" : "#E4DED6"}`, background: "#fff" }}
+                      style={{ border: `${on ? 2 : 1}px ${off ? "dashed" : "solid"} ${on ? "#E8751A" : off ? "#C8BFB3" : "#E4DED6"}`, background: "#fff", opacity: off ? 0.6 : 1 }}
                     >
                       {c.logo?.url
-                        ? <img src={c.logo.url} alt="" className="h-9 w-9 rounded object-contain" style={{ background: c.logo?.bg === "white" ? "#fff" : "#000" }} />
-                        : <span className="flex h-9 w-9 items-center justify-center rounded text-xs font-bold" style={{ background: on ? "#E8751A" : "#000", color: "#fff" }}>{projectInitials(c.name)}</span>}
+                        ? <img src={c.logo.url} alt="" className="h-9 w-9 rounded object-contain" style={{ background: c.logo?.bg === "white" ? "#fff" : "#000", filter: off ? "grayscale(1)" : "none" }} />
+                        : <span className="flex h-9 w-9 items-center justify-center rounded text-xs font-bold" style={{ background: on ? "#E8751A" : off ? "#98A2B3" : "#000", color: "#fff" }}>{projectInitials(c.name)}</span>}
                       <span className="w-full truncate text-[10px] font-semibold" style={{ color: on ? "#E8751A" : "#667085" }}>{c.name}</span>
+                      {off && <span className="text-[8px] font-bold uppercase tracking-wide text-[#B42318]">apagada</span>}
                     </button>
                   );
                 })}
