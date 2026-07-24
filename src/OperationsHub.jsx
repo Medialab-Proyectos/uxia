@@ -604,6 +604,9 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [taskQuery, setTaskQuery] = useState("");
   const [highlightTaskId, setHighlightTaskId] = useState(null);
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
+  const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
+  const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
+  const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
   const [sortRecent, setSortRecent] = useState(false);    // ordenar por últimas incluidas
   const [activeView, setActiveView] = useState("companies");
   const [finalizeTask, setFinalizeTask] = useState(null); // tarea a finalizar desde la vista de prioridad
@@ -744,6 +747,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     // Responsable: "unowned" = sin persona; un id de persona = solo sus tareas.
     if (ownerFilter === "unowned" && (task.assigneeId || task.owner)) return false;
     if (ownerFilter !== "all" && ownerFilter !== "unowned" && task.assigneeId !== ownerFilter) return false;
+    // Filtro por fecha (Reportada = createdAt · Vence = dueDate), rango desde/hasta. Aplica siempre.
+    if (dateFrom || dateTo) {
+      const d = String((dateField === "vence" ? task.dueDate : task.createdAt) || "").slice(0, 10);
+      if (!d) return false; // sin esa fecha (p. ej. sin vencimiento) no entra en el rango
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+    }
     if (taskQ) {
       // Al buscar por palabras se ignora el filtro de estado, para encontrar también
       // las tareas FINALIZADAS (archivadas) en cualquier consulta.
@@ -1850,6 +1860,12 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onAssignFilter={setAssignFilter}
             ownerFilter={ownerFilter}
             onOwnerFilter={setOwnerFilter}
+            dateField={dateField}
+            onDateField={setDateField}
+            dateFrom={dateFrom}
+            onDateFrom={setDateFrom}
+            dateTo={dateTo}
+            onDateTo={setDateTo}
             sortRecent={sortRecent}
             onSortRecent={setSortRecent}
             companyFilter={companyFilter}
@@ -2208,6 +2224,12 @@ function TasksTable({
   onAssignFilter,
   ownerFilter,
   onOwnerFilter,
+  dateField,
+  onDateField,
+  dateFrom,
+  onDateFrom,
+  dateTo,
+  onDateTo,
   sortRecent,
   onSortRecent,
   companyFilter,
@@ -2338,6 +2360,33 @@ function TasksTable({
                 {(people || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </label>
+          </div>
+          {/* Filtro por FECHA: elige el campo (Reportada / Vence) y un rango desde–hasta. */}
+          <div>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Fecha</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={dateField} onChange={(e) => onDateField?.(e.target.value)}
+                className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#17727A]">
+                <option value="reportada">Reportada</option>
+                <option value="vence">Vence</option>
+              </select>
+              <label className="inline-flex items-center gap-1 text-xs text-[#667085]">
+                Desde
+                <input type="date" value={dateFrom || ""} onChange={(e) => onDateFrom?.(e.target.value)}
+                  className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]" />
+              </label>
+              <label className="inline-flex items-center gap-1 text-xs text-[#667085]">
+                Hasta
+                <input type="date" value={dateTo || ""} onChange={(e) => onDateTo?.(e.target.value)}
+                  className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]" />
+              </label>
+              {(dateFrom || dateTo) && (
+                <button type="button" onClick={() => { onDateFrom?.(""); onDateTo?.(""); }}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#D0D5DD] bg-white px-2.5 py-1 text-xs font-semibold text-[#667085]">
+                  <X size={12} /> Limpiar
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Proyecto</span>
