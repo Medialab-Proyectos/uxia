@@ -1595,8 +1595,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
         </div>
 
         {(metrics.dueToday > 0 || metrics.blocked > 0 || metrics.updatedPending > 0 || metrics.reviewPending > 0) && !alertDismissed && (
-          <div className="relative mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border-l-4 border-[#E8751A] bg-[#FFF7E6] px-4 py-3 pr-10 text-sm">
-            <span className="font-semibold uppercase tracking-[0.08em] text-[#B76E00]">Requiere tu atención hoy</span>
+          <div className="relative mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-[#E8751A] bg-[#FFE9D3] px-4 py-3 pr-10 text-sm shadow-[0_4px_16px_rgba(232,117,26,0.22)]">
+            {/* Franja de acento a la izquierda, más marcada que el resto de la interfaz crema. */}
+            <span className="pointer-events-none absolute inset-y-0 left-0 w-1.5 rounded-l-lg bg-[#E8751A]" />
+            <span className="inline-flex items-center gap-2 font-bold uppercase tracking-[0.08em] text-[#9A4B08]">
+              {/* Ícono de alerta en círculo naranja + anillo pulsante para captar la mirada. */}
+              <span className="relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E8751A] text-white">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#E8751A] opacity-40" />
+                <AlertTriangle size={13} className="relative" />
+              </span>
+              Requiere tu atención hoy
+            </span>
             {metrics.reviewPending > 0 && (
               <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("review"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }}
                 className="inline-flex items-center gap-1 font-semibold text-[#17727A] underline-offset-2 hover:underline" title="Ver las tareas en revisión (por aprobar)">
