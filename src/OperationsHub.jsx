@@ -5,6 +5,7 @@ import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
 import { openActiveTasksReport } from "./activeTasksReport.js";
+import { effortPoints } from "./effort.js";
 import { notifyEvent } from "./notify.js";
 import { encodeCompanyToken } from "./companyLink.js";
 
@@ -4234,7 +4235,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   const throughputWk = +(doneInPeriod.length / weeksP).toFixed(1);
   const wip = enProgreso;
   const withPts = companyTasks.filter((t) => t.designPoints != null);
-  const velocity = withPts.length ? +(doneInPeriod.reduce((a, t) => a + (Number(t.designPoints) || 0), 0) / weeksP).toFixed(1) : null;
+  const velocity = withPts.length ? +(doneInPeriod.reduce((a, t) => a + effortPoints(t.designPoints, t.category), 0) / weeksP).toFixed(1) : null;
   // Utilización = carga de diseño PENDIENTE ÷ capacidad de CORTO PLAZO (un sprint ~2 semanas al ritmo
   // senior de 10 pts/sem = 20 pts). Mide "qué tan llena está tu agenda cercana AHORA", NO una fracción
   // de un trimestre: medir contra todo el periodo diluía la carga (16 pts pendientes salían 14% cuando
@@ -4246,7 +4247,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   const capNear = REF_WEEKLY_PTS * PLAN_WEEKS; // capacidad de corto plazo por diseñador (pts)
   const isPendingLoad = (t) => t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado";
   const byDes = {};
-  for (const t of activas) if (t.assigneeId && t.designPoints != null && isPendingLoad(t)) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + Number(t.designPoints);
+  for (const t of activas) if (t.assigneeId && t.designPoints != null && isPendingLoad(t)) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + effortPoints(t.designPoints, t.category);
   const utilVals = Object.values(byDes).map((p) => Math.round((p / capNear) * 100));
   const avgUtil = utilVals.length ? Math.round(utilVals.reduce((a, b) => a + b, 0) / utilVals.length) : null;
   const devArr = doneInPeriod.filter((t) => t.dueDate && t.createdAt && t.completedAt).map((t) => { const est = (new Date(t.dueDate) - new Date(t.createdAt)) / DAY_MS; const real = (new Date(t.completedAt) - new Date(t.createdAt)) / DAY_MS; return est > 0 ? (real - est) / est : null; }).filter((v) => v != null);
@@ -4385,7 +4386,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
           {[["Cycle time", cycleTime == null ? "—" : `${cycleTime} d`, "días creada→cerrada", "Tiempo de ciclo: días promedio desde que se crea una tarea hasta que se cierra. Mide qué tan rápido fluye el trabajo."],
             ["Throughput", throughputWk, "cerradas/sem", "Rendimiento: cuántas tareas se cierran por semana en promedio. Mide la capacidad de entrega."],
             ["WIP", wip, "en progreso", "Work In Progress: cuántas tareas están en progreso a la vez. Mucho WIP fragmenta el foco y alarga el cycle time."],
-            ["Velocidad", velocity == null ? "—" : `${velocity}`, "pts diseño/sem", "Puntos de diseño cerrados por semana (ref. 8–12 senior). Requiere que las tareas tengan puntos estimados."]].map(([k, v, s, help]) => (
+            ["Velocidad", velocity == null ? "—" : `${velocity}`, "pts UX-eq/sem", "Puntos cerrados por semana, PONDERADOS por tipo de tarea (un punto de UX Research pesa más horas que uno de Apoyo). Ref. 8–12 pts UX-equivalentes/sem senior."]].map(([k, v, s, help]) => (
             <div key={k} className="rounded-md bg-[#F7FAFA] p-2">
               <p className="flex items-center gap-1 text-[10px] uppercase tracking-[0.06em] text-[#667085]">{k} <InfoTip text={help} /></p>
               <p className="font-metrics text-lg font-semibold text-[#17727A]">{v}</p>
@@ -4400,7 +4401,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
             <tbody className="text-[#475467]">
               {[["Predictibilidad de fecha", onTimePct == null ? "—" : `${onTimePct}%`, "≥ 85%"],
                 ["Desviación de fechas", deviationPct == null ? "—" : `${deviationPct > 0 ? "+" : ""}${deviationPct}%`, "≤ 10%"],
-                ["Utilización por diseñador", avgUtil == null ? "—" : `${avgUtil}%`, "70–90%"],
+                ["Utilización por diseñador", avgUtil == null ? "—" : `${avgUtil}%`, "70–90%", "Carga pendiente ÷ capacidad de un sprint (~2 sem · 20 pts UX-equivalentes). Los puntos se ponderan por tipo (Research 1.5× · Desarrollo 1.25× · Diseño 1.0× · Gráfico 0.8× · Gestión 0.6× · Apoyo 0.5×). >100% = más de un sprint de cola."],
                 ["Defectos UX/UI (por 10)", defectsPer10 == null ? "—" : `${defectsPer10}`, "≤ 2"],
                 ["Satisfacción del PO", avg == null ? "—" : `${avg.toFixed(1)} / 5`, "≥ 4,5", "Promedio de calificación del cliente al cerrar la tarea (1–5)."],
                 ["Change Requests", `${crCount}`, "documentar", "Cambios que pidió el cliente DESPUÉS de aprobar el diseño (no son alcance original). 'Documentar' = registrarlos siempre para no absorberlos gratis; se marcan en cada tarjeta de tarea."],

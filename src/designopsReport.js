@@ -2,6 +2,7 @@
 // (tareas, estados, fechas, satisfacción) y se DESCARGA como PDF vectorial con jsPDF (texto
 // seleccionable, nunca en blanco). Estructura: 4 categorías de indicadores + puntos de diseño.
 import { newDoc, header, tiles, sectionTitle, table, paragraph, callout, footer, save, ensure, loadImage, safeName, PAGE, C } from "./pdfKit.js";
+import { effortPoints } from "./effort.js";
 import logoUrl from "./logos/logo-medialab.png";
 
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -54,7 +55,7 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const throughputWk = +(done.length / weeks).toFixed(1);
   const wip = doing.length;
   const withPts = ct.filter((tk) => tk.designPoints != null);
-  const ptsDoneP = done.reduce((a, tk) => a + (Number(tk.designPoints) || 0), 0);
+  const ptsDoneP = done.reduce((a, tk) => a + effortPoints(tk.designPoints, tk.category), 0);
   const velocity = withPts.length ? +(ptsDoneP / weeks).toFixed(1) : null;
   // Utilización = carga de diseño PENDIENTE ÷ capacidad de CORTO PLAZO (un sprint ~2 semanas al ritmo
   // senior de 10 pts/sem = 20 pts). Mide la carga cercana AHORA, no una fracción del periodo (medir
@@ -65,7 +66,7 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const cap = REF_WEEKLY * PLAN_WEEKS;   // capacidad de corto plazo por diseñador (pts)
   const isPendingLoad = (tk) => tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
   const byDesigner = {};
-  for (const tk of active) if (tk.assigneeId && tk.designPoints != null && isPendingLoad(tk)) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + Number(tk.designPoints);
+  for (const tk of active) if (tk.assigneeId && tk.designPoints != null && isPendingLoad(tk)) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + effortPoints(tk.designPoints, tk.category);
   const utils = Object.entries(byDesigner).map(([id, p]) => ({ name: nameOf(id) || "—", pct: Math.round((p / cap) * 100), pts: p }));
   const avgUtil = utils.length ? Math.round(utils.reduce((a, u) => a + u.pct, 0) / utils.length) : null;
   const devs = done.filter((tk) => tk.dueDate && tk.createdAt && tk.completedAt).map((tk) => {
