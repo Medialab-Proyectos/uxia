@@ -3221,9 +3221,10 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
                 if (nueva === task.dueDate) return;
                 // Se pone directo (sin pedir motivo) cuando: es la PRIMERA fecha; la tarea todavía
                 // NO se ha guardado (recién creada: su fecha por defecto no es un compromiso aún);
-                // o ya se justificó el cambio en este ciclo y no se ha vuelto a guardar (corregir un
-                // error no debe re-preguntar).
-                if (!task.dueDate || task._unsaved || dueJustified) { onChangeTask(task.id, { dueDate: nueva }); return; }
+                // ya se justificó el cambio en este ciclo y no se ha vuelto a guardar (corregir un
+                // error no debe re-preguntar); o la tarea la CREÓ la IA y el admin AÚN NO la revisó
+                // (la fecha de la IA es una sugerencia, no un compromiso, hasta que el admin la guarde).
+                if (!task.dueDate || task._unsaved || dueJustified || (aiCreated && !task.adminTouchedAt)) { onChangeTask(task.id, { dueDate: nueva }); return; }
                 // Cambiar una fecha YA GUARDADA exige motivo: se abre el popup y no se aplica aún.
                 if (nueva) { setDueDraft(nueva); setDueReason(""); }
               }}
