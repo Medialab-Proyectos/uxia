@@ -832,9 +832,12 @@ de `supabase/schema-insumos-pendientes.sql`).
    - **Obligaciones propias de MediaLab** (DIAN, planillas, nómina/primas/cesantías, peticiones
      de empleados, contador, renovaciones) → `category: "Administrativo"`, nunca `priority: baja`,
      y `alta` si faltan ≤5 días hábiles, ya venció, o hay un empleado esperando respuesta.
-   - **Tipo de tarea por CONTEXTO** (`category`): a partir de lo que pide el insumo, clasifica
-     la tarea en una categoría del alcance (ej. Diseño UX/UI, Desarrollo, Gestión de proyecto,
-     QA, Infraestructura, Comercial…). Ponla en `category` y coherente con `role`.
+   - **Tipo de tarea por CONTEXTO** (`category`): a partir de lo que pide el insumo, clasifica la
+     tarea en UNA de estas categorías del alcance (usar EXACTAMENTE estos nombres): `Diseño UX/UI`,
+     `Diseño gráfico`, `UX Research`, `Producto`, `Documentación`, `Gestión de proyecto`,
+     `Desarrollo de software`, `Apoyo`. Ponla en `category` y coherente con `role`. Cada tipo pesa
+     distinto por punto (ver src/effort.js): un punto de UX Research vale más horas que uno de Apoyo,
+     así que la categoría bien puesta también afina la carga/velocidad.
    - **NO asignar responsable** (`assigneeId`): las tareas se dejan SIEMPRE sin responsable.
      Que estén sin asignar es la forma en que el CEO sabe qué le falta revisar/asignar (lo
      hace en la plataforma con el filtro "Sin responsable"). Se puede mencionar en la
