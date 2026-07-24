@@ -2677,6 +2677,9 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   // GUARDA (adminTouchedAt). No se muestra si ya lleva "IA actualizó" (mdTouchedAt).
   const aiCreated = Boolean(task.source && !/^\s*manual\s*$/i.test(task.source));
   const showIA = aiCreated && !task.mdTouchedAt && !task.adminTouchedAt;
+  // Última actualización = el más reciente de los sellos de cambio (admin/empleado/IA/cierre). No hay
+  // updated_at en la tabla, así que se deriva. Vacío = nunca se tocó desde que se reportó.
+  const lastUpdated = [task.adminTouchedAt, task.employeeTouchedAt, task.mdTouchedAt, task.completedAt].filter(Boolean).sort().pop() || "";
   const [taskSave, setTaskSave] = useState("idle"); // idle | saving | saved | error
   const doSaveTask = async () => {
     if (!onSaveTask) return;
@@ -3207,6 +3210,13 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             />
           </label>
         </div>
+        {/* Última actualización de la tarea (se muestra al abrir la tarjeta). */}
+        {lastUpdated && (
+          <p className="-mt-0.5 text-[11px] text-[#98A2B3]">
+            <CalendarDays size={11} className="mr-1 inline align-[-1px]" />
+            Actualizada · {displayDateTime(lastUpdated)}
+          </p>
+        )}
         {/* Soporte del corrimiento: fecha ANTERIOR + MOTIVO del último cambio de vencimiento. */}
         {task.prevDueDate && task.prevDueDate !== task.dueDate && (
           <p className="-mt-1 text-[11px] text-[#B76E00]">
