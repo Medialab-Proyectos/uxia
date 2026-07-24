@@ -2259,10 +2259,12 @@ function TasksTable({
     const key = bandeja ? `__bandeja__|${task.client || ""}` : `${task.companyId}|${task.client}`;
     if (!byKey.has(key)) {
       const c = companies.find((item) => item.id === task.companyId);
-      const label = bandeja
-        ? `Bandeja · ${task.client || "sin subproyecto"}`
-        : `${c?.name || task.companyId} · ${task.client}`;
-      const g = { key, label, bandeja, tasks: [] };
+      // Empresa y subproyecto por separado, para que el nombre de la empresa SIEMPRE se vea en el
+      // encabezado del grupo (antes iban juntos en un solo texto y la empresa se perdía visualmente).
+      const companyName = bandeja ? "Bandeja" : (c?.name || task.companyId);
+      const client = bandeja ? (task.client || "sin subproyecto") : task.client;
+      const label = `${companyName} · ${client}`;
+      const g = { key, label, companyName, client, bandeja, tasks: [] };
       byKey.set(key, g);
       groups.push(g);
     }
@@ -2388,7 +2390,11 @@ function TasksTable({
         {groups.length ? groups.map((group) => (
           <div key={group.key} className="space-y-2">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: group.bandeja ? "#B76E00" : "#17727A" }}>{group.label}</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.1em]">
+                <span style={{ color: group.bandeja ? "#B76E00" : "#1D2939" }}>{group.companyName}</span>
+                <span style={{ color: "#98A2B3" }}> · </span>
+                <span style={{ color: group.bandeja ? "#B76E00" : "#17727A" }}>{group.client}</span>
+              </h3>
               <span className="rounded-full bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-semibold text-[#475467]">{group.tasks.length}</span>
               <div className="h-px flex-1 bg-[#E4DED6]" />
             </div>
