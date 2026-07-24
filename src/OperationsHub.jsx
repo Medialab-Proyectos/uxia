@@ -243,6 +243,14 @@ function displayDate(value) {
   return String(value).slice(0, 10);
 }
 
+// Fecha + hora de cuando se reportó/creó la tarea (createdAt). Para el sello de la tarjeta.
+function displayDateTime(value) {
+  if (!value) return "Sin fecha";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+  return d.toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes)) return "0 KB";
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -3173,8 +3181,8 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#E4DED6] bg-white px-2 py-1 text-xs text-[#475467]">
             <CalendarDays size={13} className="shrink-0 text-[#667085]" />
-            <span className="shrink-0 font-semibold text-[#344054]">Pub.</span>
-            <span className="min-w-0 truncate">{displayDate(task.createdAt)}</span>
+            <span className="shrink-0 font-semibold text-[#344054]">Reportada</span>
+            <span className="min-w-0 truncate" title={`Reportada el ${displayDateTime(task.createdAt)}`}>{displayDateTime(task.createdAt)}</span>
           </div>
           <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#475467]">
             <CalendarDays size={13} className="shrink-0 text-[#667085]" />
