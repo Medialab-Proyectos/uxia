@@ -2965,7 +2965,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   <CalendarDays size={11} className="shrink-0" /><span className="font-semibold text-[#667085]">Vence:</span> {displayDate(task.dueDate)}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 truncate" title="Fecha y hora en que se reportó la tarea">
+              <span className="col-span-2 inline-flex items-center gap-1 whitespace-nowrap" title="Fecha y hora en que se reportó la tarea">
                 <CalendarDays size={11} className="shrink-0" /><span className="font-semibold text-[#667085]">Reportada:</span> {displayDateTime(task.createdAt)}
               </span>
               {task.status === "done" && task.workedHours != null && (

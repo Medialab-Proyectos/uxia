@@ -88,7 +88,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
       setMe(person);
       setCompanies(compRes.ok ? await compRes.json() : []);
       if (person) {
-        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by,assignee_id,prev_due_date,attachments";
+        const base = "id,title,description,client,company_id,status,priority,due_date,role,comments,task_ref,design_points,created_by,assignee_id,prev_due_date,attachments,created_at";
         // Acota la vista SOLO si la persona pertenece a una empresa fija (externo). Los de MediaLab
         // (sin empresa) ven TODAS sus tareas asignadas, aunque estén repartidas entre clientes.
         const myCompany = person.company_id || "";
@@ -177,7 +177,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     await patchLeadTask(t.id, patch);
     // Relee la tarea de la BD para reflejar lo realmente guardado (por si el guard/RLS revierte algo).
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${t.id}&select=id,title,description,client,company_id,status,priority,due_date,prev_due_date,assignee_id,created_by,comments,change_requests,assignee_seen_at,admin_touched_at`, { headers });
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/tasks?id=eq.${t.id}&select=id,title,description,client,company_id,status,priority,due_date,prev_due_date,assignee_id,created_by,comments,change_requests,assignee_seen_at,admin_touched_at,created_at`, { headers });
       if (r.ok) {
         const rows = await r.json();
         if (rows[0]) {
@@ -221,9 +221,16 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     } catch { /* no crítico: si falla, se reintenta al volver a abrir */ }
   }
 
-  const active = tasks.filter((t) => t.status !== "done");
-  const done = tasks.filter((t) => t.status === "done");
-  const overdue = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado").length;
+  // Estados "enviados"/en proceso: el admin ya movió la tarea fuera de las manos del responsable
+  // (por notificar, notificada o bloqueada). El usuario las VE (solo lectura) pero no puede
+  // accionarlas ni abrir la tarjeta. "done" (finalizada) no se le muestra: queda solo en el historial
+  // del admin. "Activas" = accionables (ni enviadas ni finalizadas).
+  const isSent = (t) => t.status === "verificacion" || t.status === "notificado" || t.status === "blocked";
+  const overdueCond = (t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.status !== "blocked";
+
+  const active = tasks.filter((t) => t.status !== "done" && !isSent(t)); // accionables
+  const done = tasks.filter((t) => t.status === "done");                  // solo historial admin
+  const overdue = active.filter(overdueCond).length;
 
   // Conjunto ACOTADO por los filtros de arriba (empresa + subproyecto + creadas por mí), SIN el
   // filtro de estado, para que indicadores y tabs muestren las cantidades reales del filtro.
@@ -231,16 +238,16 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
     (companyFilter === "all" || t.company_id === companyFilter)
     && !(myLeads.length && leadClient && t.client !== leadClient)
     && !(mineOnly && String(t.created_by || "").toLowerCase() !== email));
-  const sActive = scoped.filter((t) => t.status !== "done");
-  const sDone = scoped.filter((t) => t.status === "done");
-  const sOverdue = sActive.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado").length;
-  const sNovelty = scoped.filter((t) => t.status !== "done" && hasNovelty(t)).length;
-  // Conteos del sub-filtro de novedad, TAMBIÉN acotados por los filtros de arriba (no globales),
-  // para que coincidan con la lista y con el indicador "Activas" del filtro de empresa.
-  const sNew = scoped.filter((t) => t.status !== "done" && isNew(t)).length;
-  const sCR = scoped.filter((t) => t.status !== "done" && hasChangeRequest(t)).length;
-  const sUpd = scoped.filter((t) => t.status !== "done" && isUpdatedByAdmin(t)).length;
-  const tabCount = (k) => (k === "active" ? sActive.length : k === "all" ? scoped.length : k === "done" ? sDone.length : scoped.filter((t) => t.status === k).length);
+  const sActionable = scoped.filter((t) => t.status !== "done" && !isSent(t));
+  const sSent = scoped.filter(isSent);
+  const sActive = sActionable; // "Activas" = accionables
+  const sOverdue = sActionable.filter(overdueCond).length;
+  const sNovelty = sActionable.filter(hasNovelty).length;
+  // Conteos del sub-filtro de novedad, acotados y solo sobre accionables (coinciden con la lista).
+  const sNew = sActionable.filter(isNew).length;
+  const sCR = sActionable.filter(hasChangeRequest).length;
+  const sUpd = sActionable.filter(isUpdatedByAdmin).length;
+  const tabCount = (k) => (k === "active" ? sActionable.length : k === "sent" ? sSent.length : k === "vencidas" ? sOverdue : scoped.filter((t) => t.status === k).length);
 
   // Reporta las alertas al shell (la campana vive en el header del shell, junto al tema).
   // Cada alerta lleva una FIRMA (ids de las tareas que la componen): así reaparece si cambia el
@@ -249,7 +256,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const crTasks = tasks.filter((t) => t.status !== "done" && hasChangeRequest(t));
   const newTasks = tasks.filter((t) => t.status !== "done" && isNew(t));
   const updTasks = tasks.filter((t) => t.status !== "done" && isUpdatedByAdmin(t));
-  const overdueTasks = active.filter((t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado");
+  const overdueTasks = active.filter(overdueCond);
   const nNew = newTasks.length;
   const nCR = crTasks.length;
   const nUpd = updTasks.length;
@@ -279,26 +286,22 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   // Filtros por empresa y estado → lista ordenada por prioridad.
   const qLow = q.trim().toLowerCase();
   const filtered = tasks.filter((t) => {
+    if (t.status === "done") return false; // finalizadas: no se muestran al usuario (solo historial admin)
     if (companyFilter !== "all" && t.company_id !== companyFilter) return false;
     // Para el líder, el desplegable de subproyecto también acota la lista.
     if (myLeads.length && leadClient && t.client !== leadClient) return false;
     if (mineOnly && String(t.created_by || "").toLowerCase() !== email) return false; // filtro "creadas por mí"
-    // Buscador por palabras (ignora el filtro de estado para encontrar también finalizadas).
+    // Buscador por palabras (busca en activas y en proceso; nunca en finalizadas).
     if (qLow) return `${t.title || ""} ${t.client || ""} ${nameOf(t.company_id)} ${t.task_ref || ""} ${t.role || ""}`.toLowerCase().includes(qLow);
-    // La tarea ABIERTA no desaparece del filtro aunque al abrirla deje de ser novedad.
-    if (statusFilter === "new") return (hasNovelty(t) || t.id === openId) && t.status !== "done";
-    if (statusFilter === "vencidas") return t.status !== "done" && t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado";
-    if (statusFilter === "active") {
-      if (t.status === "done") return false;
-      // Sub-filtro de novedades (solo dentro de Activas). La tarea abierta se mantiene visible.
-      if (novFilter === "any") return hasNovelty(t) || t.id === openId;
-      if (novFilter === "new") return isNew(t) || t.id === openId;
-      if (novFilter === "cr") return hasChangeRequest(t) || t.id === openId;
-      if (novFilter === "updated") return isUpdatedByAdmin(t) || t.id === openId;
-      return true;
-    }
-    if (statusFilter === "all") return true;
-    return t.status === statusFilter;
+    if (statusFilter === "vencidas") return overdueCond(t);
+    if (statusFilter === "sent") return isSent(t); // En proceso / enviadas (solo lectura)
+    // "active" (accionables) + sub-filtro de novedades. Las enviadas NO entran aquí.
+    if (isSent(t)) return false;
+    if (novFilter === "any") return hasNovelty(t) || t.id === openId;
+    if (novFilter === "new") return isNew(t) || t.id === openId;
+    if (novFilter === "cr") return hasChangeRequest(t) || t.id === openId;
+    if (novFilter === "updated") return isUpdatedByAdmin(t) || t.id === openId;
+    return true;
   });
   const ranked = [...filtered].map((t) => ({ ...t, dueDate: t.due_date, score: scoreTask({ ...t, dueDate: t.due_date }) }))
     .sort((a, b) => b.score - a.score);
@@ -532,9 +535,9 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { l: "Novedades", v: sNovelty, col: "#6D28D9", Icon: Bell, on: statusFilter === "active" && novFilter === "any", go: () => { setStatusFilter("active"); setNovFilter("any"); } },
-            { l: "Activas", v: sActive.length, col: "#17727A", Icon: ListChecks, on: statusFilter === "active" && novFilter === "all", go: () => { setStatusFilter("active"); setNovFilter("all"); } },
+            { l: "Activas", v: sActionable.length, col: "#17727A", Icon: ListChecks, on: statusFilter === "active" && novFilter === "all", go: () => { setStatusFilter("active"); setNovFilter("all"); } },
+            { l: "En proceso", v: sSent.length, col: "#175CD3", Icon: Send, on: statusFilter === "sent", go: () => setStatusFilter("sent") },
             { l: "Vencidas", v: sOverdue, col: "#B42318", Icon: AlertTriangle, on: statusFilter === "vencidas", go: () => setStatusFilter("vencidas") },
-            { l: "Finalizadas", v: sDone.length, col: "#0D7A4F", Icon: CheckCircle2, on: statusFilter === "done", go: () => setStatusFilter("done") },
           ].map(({ l, v, col, Icon, on, go }) => (
             <button key={l} type="button" onClick={go} title={`Filtrar: ${l}`}
               className="rounded-md border p-3 text-left transition-colors"
@@ -644,7 +647,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar tu tarea por palabras…"
           className="mb-2 w-full rounded-md border px-3 py-2 text-sm outline-none" style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
         <div className={`mb-2 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 ${qLow ? "opacity-40 pointer-events-none" : ""}`} style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-          {[["active", "Activas"], ["doing", "En progreso"], ["review", "En revisión"], ["done", "Finalizadas"], ["all", "Todas"]].map(([k, l]) => {
+          {[["active", "Activas"], ["sent", "En proceso"], ["vencidas", "Vencidas"]].map(([k, l]) => {
             const on = statusFilter === k;
             return (
             <button key={k} type="button" onClick={() => { setStatusFilter(k); if (k === "active") setNovFilter("all"); }}
@@ -689,34 +692,49 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
         <div className="space-y-2">
           {ranked.length ? ranked.map((t) => {
             const isOpen = openId === t.id;
+            // "Enviada" por el admin (por notificar / notificada / bloqueada) y no es tuya como líder:
+            // SOLO LECTURA — no se abre ni se acciona; solo se ve el estado.
+            const locked = isSent(t) && !iCreated(t);
+            const headerInner = (
+              <>
+                <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: t.score >= 70 ? "#B42318" : t.score >= 45 ? "#B76E00" : "#1570EF" }}>{t.score}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">
+                    {t.task_ref && <span className="mr-2 rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold" style={{ borderColor: border, color: dim }}>{t.task_ref}</span>}
+                    {!locked && isNew(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#0D7A4F" }}>NUEVA</span>}
+                    {!locked && !isNew(t) && hasChangeRequest(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#B54708" }}>CAMBIO SOLICITADO</span>}
+                    {!locked && !isNew(t) && !hasChangeRequest(t) && isUpdatedByAdmin(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#6D28D9" }}>ACTUALIZADA</span>}
+                    {t.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
+                    {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}{locked ? " · solo lectura" : ""}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px]" style={{ color: dim }}>Reportada: {String(t.created_at || "").slice(0, 10)}</span>
+                  <span className="mt-0.5 flex items-center gap-1 truncate text-xs" style={{ color: t.assignee_id ? "#17727A" : "#B76E00" }}>
+                    <UserRound size={11} /> {t.assignee_id ? (whoName(t.assignee_id) || "Responsable") : "Sin responsable"}
+                  </span>
+                </span>
+              </>
+            );
             return (
-              <div key={t.id} className="relative rounded-md border" style={{ borderColor: border, background: card }}>
+              <div key={t.id} className="relative rounded-md border" style={{ borderColor: border, background: card, opacity: locked ? 0.75 : 1 }}>
                 {iCreated(t) && (
                   <button type="button" onClick={(e) => { e.stopPropagation(); deleteLeadTask(t.id); }} title="Eliminar actividad"
                     className="absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md border" style={{ borderColor: "#F3B0A8", color: "#B42318", background: card }}>
                     <Trash2 size={14} />
                   </button>
                 )}
-                <button type="button" onClick={() => { const opening = !isOpen; setOpenId(isOpen ? null : t.id); setDraft(""); if (opening) markSeen(t); }} className="flex w-full items-start gap-3 p-3 pr-10 text-left">
-                  <span className="mt-0.5 inline-flex h-7 w-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white" style={{ background: t.score >= 70 ? "#B42318" : t.score >= 45 ? "#B76E00" : "#1570EF" }}>{t.score}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">
-                      {t.task_ref && <span className="mr-2 rounded border px-1.5 py-0.5 font-mono text-[11px] font-bold" style={{ borderColor: border, color: dim }}>{t.task_ref}</span>}
-                      {isNew(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#0D7A4F" }}>NUEVA</span>}
-                      {!isNew(t) && hasChangeRequest(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#B54708" }}>CAMBIO SOLICITADO</span>}
-                      {!isNew(t) && !hasChangeRequest(t) && isUpdatedByAdmin(t) && <span className="mr-2 rounded px-1.5 py-0.5 text-[10px] font-bold text-white align-middle" style={{ background: "#6D28D9" }}>ACTUALIZADA</span>}
-                      {t.title}
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs" style={{ color: dim }}>
-                      {nameOf(t.company_id)}{t.client ? ` · ${t.client}` : ""} · {STATUS_LABEL[t.status] || t.status}{t.due_date ? ` · vence ${t.due_date}` : ""}
-                    </span>
-                    <span className="mt-0.5 flex items-center gap-1 truncate text-xs" style={{ color: t.assignee_id ? "#17727A" : "#B76E00" }}>
-                      <UserRound size={11} /> {t.assignee_id ? (whoName(t.assignee_id) || "Responsable") : "Sin responsable"}
-                    </span>
-                  </span>
-                </button>
+                {locked ? (
+                  <div className="flex w-full items-start gap-3 p-3 pr-10 text-left" title="Solo lectura: la tarea ya salió de tus manos (la gestiona el administrador)">
+                    {headerInner}
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => { const opening = !isOpen; setOpenId(isOpen ? null : t.id); setDraft(""); if (opening) markSeen(t); }} className="flex w-full items-start gap-3 p-3 pr-10 text-left">
+                    {headerInner}
+                  </button>
+                )}
 
-                {isOpen && (
+                {isOpen && !locked && (
                   <div className="border-t px-3 py-3" style={{ borderColor: border }}>
                     {t.description && <p className="mb-3 whitespace-pre-line text-sm" style={{ color: dim }}>{t.description}</p>}
 
