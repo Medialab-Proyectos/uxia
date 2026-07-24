@@ -2251,20 +2251,6 @@ function TasksTable({
   const [openTaskId, setOpenTaskId] = useState(null);
   // Al crear una tarea nueva, se abre automáticamente para completarla.
   useEffect(() => { if (highlightId) setOpenTaskId(highlightId); }, [highlightId]);
-  // Modo "Recientes": una sola lista con las últimas tareas incluidas (por fecha de creación).
-  const recentGroups = sortRecent
-    ? [{
-        key: "__recent__",
-        label: "Últimas tareas incluidas",
-        bandeja: false,
-        hasHighlight: tasks.some((t) => t.id === highlightId),
-        tasks: [...tasks].sort((a, b) => {
-          if (a.id === highlightId) return -1;
-          if (b.id === highlightId) return 1;
-          return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
-        }),
-      }]
-    : null;
   // Agrupa por proyecto (empresa · subproyecto); lo que no tiene proyecto real va a "Bandeja".
   const groups = [];
   const byKey = new Map();
@@ -2290,10 +2276,18 @@ function TasksTable({
       if (b.id === highlightId) return 1;
       return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
     });
+    // Fecha de la tarea MÁS nueva del grupo (para ordenar proyectos en modo "Recientes").
+    g.mostRecent = g.tasks.reduce((max, t) => (String(t.createdAt || "") > max ? String(t.createdAt || "") : max), "");
   }
-  // El grupo con la tarea recién creada va de primero; luego proyectos; bandejas al final.
+  // Orden de los grupos: en "Recientes", el proyecto con la tarea más nueva va primero (se mantiene
+  // la agrupación por proyecto). Si no, proyectos alfabéticos y bandejas al final. La tarea recién
+  // creada siempre lleva su proyecto al tope.
   groups.sort((a, b) => {
     if (a.hasHighlight !== b.hasHighlight) return a.hasHighlight ? -1 : 1;
+    if (sortRecent) {
+      if (a.bandeja !== b.bandeja) return a.bandeja ? 1 : -1;
+      return b.mostRecent.localeCompare(a.mostRecent);
+    }
     if (a.bandeja !== b.bandeja) return a.bandeja ? 1 : -1;
     return a.label.localeCompare(b.label);
   });
@@ -2391,7 +2385,7 @@ function TasksTable({
       </div>
 
       <div className="space-y-5">
-        {(recentGroups || groups).length ? (recentGroups || groups).map((group) => (
+        {groups.length ? groups.map((group) => (
           <div key={group.key} className="space-y-2">
             <div className="flex items-center gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: group.bandeja ? "#B76E00" : "#17727A" }}>{group.label}</h3>
