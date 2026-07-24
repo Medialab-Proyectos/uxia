@@ -48,6 +48,18 @@ El radar corre **una vez al día, en la mañana**.
 4. El CEO abre **Radar → Oportunidades / Empleos**, recarga, prioriza por score y marca
    "me gusta"; dentro de "me gusta" marca **"Postulado"** cuando ya aplicó.
 
+### Fuentes de VACANTES (buscar en VARIAS, no solo una)
+
+La búsqueda de empleos debe barrer **múltiples portales** cada corrida — nunca depender de uno solo.
+Verificar SIEMPRE que la URL siga **abierta** (muchas expiran/dan 403/410 en días; descartar las
+cerradas). Fuentes a rotar:
+- **LATAM/remoto:** Get on Board (getonbrd.com), We Remoto (weremoto.com), Remote Rocketship,
+  startup.jobs, NoDesk, Built In, Arc.dev, uiuxjobsboard.com, Vacantes Digitales, LinkedIn.
+- **Colombia:** elempleo.com, Magneto (magneto365.com), Torre (torre.co), computrabajo.
+- **Freelance/producto:** Contra, Toptal, Domestika, YC "Work at a Startup".
+Priorizar Colombia y LATAM remoto; puntuar más alto lo que tenga **señal de IA / design system /
+producto** y sea senior/lead. No curar "listados" (páginas de búsqueda), solo ofertas concretas.
+
 ## Frescura / probabilidad de recordación (tag por oferta)
 
 Cada oferta lleva un tag según hace cuánto se capturó (`created_at`), porque las empresas

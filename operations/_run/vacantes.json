@@ -54,5 +54,47 @@
     "resumen": "Investigación UX senior en Coderslab (academia/consultora tech): entrevistas, síntesis y hallazgos para orientar decisiones de producto. Remoto.",
     "señalesIA": "UX Research senior · descubrimiento · remoto LATAM",
     "score": 76
+  },
+  {
+    "titulo": "Product Designer (Web & Brand) — Remoto LATAM",
+    "empresa": "SOUTH",
+    "url": "https://recruiterflow.com/south/jobs/1026",
+    "fuente": "We Remoto",
+    "ubicacion": "Remoto (Latinoamérica)",
+    "remoto": "remoto",
+    "idioma": "inglés",
+    "esColombia": false,
+    "categoria": "empleo",
+    "resumen": "Diseñador de producto (web y marca) en SOUTH, remoto para LATAM con clientes internacionales. Diseño de sitios y sistema de marca.",
+    "señalesIA": "Product Designer · web + brand · remoto LATAM",
+    "score": 78
+  },
+  {
+    "titulo": "Digital Experience Designer — Remoto LATAM",
+    "empresa": "Remote Latam Talent",
+    "url": "https://apply.workable.com/remote-talent-latam/j/9BDAA95A7F/",
+    "fuente": "We Remoto",
+    "ubicacion": "Remoto (LATAM)",
+    "remoto": "remoto",
+    "idioma": "inglés",
+    "esColombia": false,
+    "categoria": "empleo",
+    "resumen": "Diseñador de experiencia digital para clientes internacionales, contratación remota desde LATAM vía staffing. Enfoque UX/producto.",
+    "señalesIA": "Digital Experience · UX/producto · remoto LATAM",
+    "score": 75
+  },
+  {
+    "titulo": "UI/UX Designer — Remoto (mundial)",
+    "empresa": "iLogos Game Studios",
+    "url": "https://careers.ilogos.biz/jobs/7635377-ui-ux-designer",
+    "fuente": "We Remoto",
+    "ubicacion": "Remoto (mundial)",
+    "remoto": "remoto",
+    "idioma": "inglés",
+    "esColombia": false,
+    "categoria": "empleo",
+    "resumen": "Diseñador UI/UX para iLogos (estudio de videojuegos), 100% remoto mundial. Diseño de interfaces y experiencia para productos de gaming.",
+    "señalesIA": "UI/UX · gaming · remoto mundial",
+    "score": 70
   }
 ]
