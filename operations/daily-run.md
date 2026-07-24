@@ -332,6 +332,9 @@ categoría**, contando **días hábiles** (sin sábados, domingos ni festivos co
 
 Ajustes sobre la base:
 
+- **La fecha FINAL debe caer en día hábil.** Nunca proponer un `dueDate` en sábado, domingo o
+  festivo colombiano: si el cálculo cae en uno, correrlo al **siguiente día hábil**. (El `daily-push`
+  lo fuerza como backstop con `scripts/businessDays.mjs`, pero el MD debe proponerla ya hábil.)
 - `priority: alta` o **cuello de botella** → **la mitad** del plazo (mínimo: siguiente día hábil).
 - `priority: baja` → se puede extender hasta el doble, nunca más allá del trimestre en curso.
 - `category: "Administrativo"` con **fecha legal** (DIAN, planilla, nómina) → **manda la fecha

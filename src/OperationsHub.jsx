@@ -715,13 +715,17 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // con debounce.
   useEffect(() => {
     if (!loadedState) return undefined;
+    // El caché local es INMEDIATO (nada se pierde aunque el guardado a la base tarde).
     localStorage.setItem(STORE_KEY, JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany }));
     if (!opsData.opsDataReady()) return undefined;
+    // Debounce largo (8 s) para AGRUPAR ediciones y no escribir la base en cada campo. En una base
+    // gratuita eso importa. El guardado inmediato/visible es el botón "Guardar tarea" (por tarea);
+    // este autosave es solo la red de seguridad para cambios estructurales (empresas/personas/mover).
     const timer = setTimeout(() => {
       opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany })
         .then((saved) => { if (saved?.warning) setSaveStatus(`⚠ ${saved.warning}`); })
         .catch((e) => { if (opsData.isAuthError(e)) onAuthError?.(); });
-    }, 800);
+    }, 8000);
     return () => clearTimeout(timer);
   }, [companies, tasks, sourceRecords, people, activeCompany, loadedState, token]);
 
@@ -927,12 +931,10 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       // OJO: `prevDueDate` NO se sella aquí. Lo fija SOLO el popup de motivo (la primera vez que
       // se cambia una fecha ya guardada), para que los reajustes posteriores —mientras la tarjeta
       // sigue SIN guardar— no pisen la fecha original con un valor intermedio.
-      // Sello de "el admin tocó esta tarea" → el empleado la verá "Actualizada" y le
-      // sonará la campanita. Excepción: cambios de METADATA (puntos/tipo) NO son novedad para el
-      // empleado (no los ve), así que no sellan adminTouchedAt.
-      const keys = Object.keys(patch);
-      const metaOnly = keys.length > 0 && keys.every((k) => k === "designPoints" || k === "category");
-      if (!metaOnly) next.adminTouchedAt = new Date().toISOString();
+      // NOTA: el sello "el admin revisó/actualizó" (adminTouchedAt) NO se pone aquí. Cambiar un
+      // campo en la tarjeta es trabajo EN CURSO: el sello se hace SOLO al pulsar "Guardar tarea"
+      // (doSaveTask). Así la píldora "IA" no se quita al editar un campo, y la fecha de una historia
+      // de IA no pide motivo hasta que se guarde (queda revisada). También evita guardados sueltos.
       // "Actualizada por el empleado" (employeeTouchedAt) se limpia sola en cuanto el admin
       // ACCIONA sobre la tarea (cambia estado, categoría/tipo o pide un cambio); ya no hay
       // botón manual "marcar revisada": el estado de la tarea refleja lo que pasó.
@@ -2733,10 +2735,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const doSaveTask = async () => {
     if (!onSaveTask) return;
     setTaskSave("saving");
-    // Guardar la tarea = el admin la REVISÓ: sella adminTouchedAt (quita la píldora "IA") y
-    // limpia mdTouchedAt (quita el tag "IA actualizó"): ya se revisó lo que complementó la IA.
+    // Guardar la tarea = el admin la REVISÓ/ACTUALIZÓ: sella adminTouchedAt (quita la píldora "IA" y
+    // avisa al empleado "Actualizada") y limpia mdTouchedAt (quita el tag "IA actualizó"). Es el
+    // ÚNICO punto donde se sella: editar campos no lo hace.
     const patch = {};
-    if (aiCreated && !task.adminTouchedAt) patch.adminTouchedAt = new Date().toISOString();
+    patch.adminTouchedAt = new Date().toISOString();
     if (task.mdTouchedAt) patch.mdTouchedAt = "";
     // Al GUARDAR, la tarea deja de ser "recién creada": su fecha ya es un compromiso guardado.
     if (task._unsaved) patch._unsaved = false;

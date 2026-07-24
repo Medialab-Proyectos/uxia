@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { insertTasks, insertProductSignals, deleteInsumoPendiente } from "../server/operations.js";
+import { nextBusinessDayCO } from "./businessDays.mjs";
 
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error("Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en .env.local.");
@@ -35,6 +36,12 @@ for (const task of tasks) {
   if (!task.priority) task.priority = "media";
   if (!task.createdAt) task.createdAt = now;
   if (!task.source) task.source = "Run diario";
+  // La fecha propuesta NUNCA debe caer en sábado, domingo o festivo colombiano: se corre al
+  // siguiente día hábil. Backstop del análisis del MD.
+  if (task.dueDate) {
+    const snapped = nextBusinessDayCO(task.dueDate);
+    if (snapped !== task.dueDate) { console.log(`Fecha ${task.dueDate} → ${snapped} (día hábil) · ${task.title}`); task.dueDate = snapped; }
+  }
 }
 
 const { inserted } = await insertTasks(tasks);
