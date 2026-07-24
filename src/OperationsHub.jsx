@@ -767,14 +767,6 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     };
   }, [companies.length, tasks]);
 
-  // Si aparece algo nuevo por atender (sube el total pendiente), reabre el aviso.
-  const alertTotal = metrics.dueToday + metrics.blocked + metrics.updatedPending + metrics.reviewPending;
-  const prevAlertTotal = useRef(alertTotal);
-  useEffect(() => {
-    if (alertTotal > prevAlertTotal.current) setAlertDismissed(false);
-    prevAlertTotal.current = alertTotal;
-  }, [alertTotal]);
-
   const processedAlerts = useMemo(() => {
     return [...sourceRecords]
       .sort((a, b) => new Date(b.processedAt || 0) - new Date(a.processedAt || 0))
