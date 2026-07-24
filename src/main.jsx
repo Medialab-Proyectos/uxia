@@ -220,18 +220,9 @@ function AppShell() {
       try { localStorage.setItem("uxia.activeModule", "radar"); } catch { /* ignore */ }
     }
   }, [esCEO, module]);
-  // Auto-refresco del ADMIN cada 10 min (el portal del empleado tiene el suyo, más suave). No
-  // recarga si la pestaña está oculta o si estás escribiendo/editando, para no perder cambios.
-  React.useEffect(() => {
-    if (!esCEO) return undefined;
-    const timer = setInterval(() => {
-      if (typeof document === "undefined" || document.hidden) return;
-      const el = document.activeElement;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
-      window.location.reload();
-    }, 10 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, [esCEO]);
+  // El auto-refresco del admin ya NO se hace aquí con window.location.reload() (recargaba toda la
+  // página: parpadeo en blanco y volvía a otra vista). Ahora OperationsHub hace un re-fetch SUAVE de
+  // datos cada 10 min, conservando la vista/scroll/filtros. El portal del empleado tiene el suyo.
   // Campana del empleado en el shell: alertas reportadas por el portal + vistas persistentes.
   const [empAlerts, setEmpAlerts] = React.useState([]);
   const [empBellOpen, setEmpBellOpen] = React.useState(false);

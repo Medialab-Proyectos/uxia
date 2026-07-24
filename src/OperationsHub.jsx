@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
@@ -687,6 +687,39 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
 
     loadState();
   }, []);
+
+  // Refresco SUAVE de datos (sin recargar la página): re-lee de la base y actualiza el estado EN
+  // SITIO, conservando la vista, el scroll, los filtros y la empresa activa. Solo pisa en ÉXITO
+  // (si falla, se queda con lo actual). Reemplaza el window.location.reload() que parpadeaba en
+  // blanco y devolvía a otra vista.
+  const refreshData = useCallback(async () => {
+    if (!opsData.opsDataReady()) return;
+    try {
+      const payload = await opsData.loadState(token);
+      const normalized = normalizeApiData(payload);
+      setCompanies(normalized.companies);
+      setTasks(normalized.tasks);
+      setSourceRecords(normalized.sourceRecords);
+      setPeople(normalized.people);
+      // Conserva la empresa activa actual si sigue existiendo (no salta de vista).
+      setActiveCompany((cur) => (normalized.companies.some((c) => c.id === cur) ? cur : (payload.activeCompany || normalized.companies[0]?.id || cur)));
+      setSaveStatus(payload.updatedAt ? `Base de datos actualizada: ${new Date(payload.updatedAt).toLocaleString()}` : "Base de datos actualizada");
+    } catch { /* refresco silencioso: si falla, se conserva lo que ya está en pantalla */ }
+  }, [token]);
+
+  // Auto-refresco cada 10 min: re-fetch suave (NO recarga la página). Se salta si la pestaña está
+  // oculta o si el admin está ESCRIBIENDO en un campo (para no pisar una edición en curso; el
+  // autosave de 8 s ya persiste lo demás).
+  useEffect(() => {
+    if (!loadedState) return undefined;
+    const timer = setInterval(() => {
+      if (typeof document === "undefined" || document.hidden) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      refreshData();
+    }, 10 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [loadedState, refreshData]);
 
   // Buenas prácticas de crecimiento (las genera el MD). Se cargan aparte del estado central.
   useEffect(() => {
