@@ -1,9 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw, ChevronUp } from "lucide-react";
-import OperationsHub from "./OperationsHub.jsx";
-import RadarUXIA from "./RadarUXIA.jsx";
-import EmployeePortal from "./EmployeePortal.jsx";
+// Vistas grandes divididas en chunks (React.lazy): cada usuario descarga SOLO la que usa
+// (admin → OperationsHub/Radar; empleado → EmployeePortal), no las tres. Baja el JS inicial.
+const OperationsHub = React.lazy(() => import("./OperationsHub.jsx"));
+const RadarUXIA = React.lazy(() => import("./RadarUXIA.jsx"));
+const EmployeePortal = React.lazy(() => import("./EmployeePortal.jsx"));
 import * as opsData from "./opsData.js";
 import { companyFromUrl, encodeCompanyToken } from "./companyLink.js";
 import { registerServiceWorker, requestNotificationPermission, subscribeToPush, notificationState, pushSupported } from "./pwa.js";
@@ -77,6 +79,15 @@ const CEO_EMAILS = String(import.meta.env.VITE_CEO_EMAIL || "")
 
 // Botón flotante "volver al inicio": aparece al bajar bastante en listas largas (scroll de ventana)
 // y sube suave al tope. Sirve igual en el Centro de Operaciones (admin) y en el portal del empleado.
+// Fallback mientras carga el chunk de una vista (React.lazy). Discreto, centrado, tema-aware.
+function ViewLoading({ dark }) {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center text-sm font-semibold" style={{ color: dark ? "#8B97A6" : "#667085" }}>
+      Cargando…
+    </div>
+  );
+}
+
 function BackToTop({ dark }) {
   const [show, setShow] = React.useState(false);
   React.useEffect(() => {
@@ -437,7 +448,9 @@ function AppShell() {
             </button>
           </div>
         </nav>
-        <EmployeePortal token={session.access_token} user={session.user} theme={theme} onAlerts={setEmpAlerts} focus={empFocus} onFocusHandled={() => setEmpFocus(null)} companyId={linkCompanyId} companyName={brand?.name || ""} />
+        <React.Suspense fallback={<ViewLoading dark={dk} />}>
+          <EmployeePortal token={session.access_token} user={session.user} theme={theme} onAlerts={setEmpAlerts} focus={empFocus} onFocusHandled={() => setEmpFocus(null)} companyId={linkCompanyId} companyName={brand?.name || ""} />
+        </React.Suspense>
         <BackToTop dark={dk} />
       </div>
     );
@@ -578,7 +591,9 @@ function AppShell() {
           )}
         </div>
       )}
-      {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} focus={opsFocus} onFocusHandled={() => setOpsFocus(null)} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
+      <React.Suspense fallback={<ViewLoading dark={dark} />}>
+        {module === "operations" && esCEO ? <OperationsHub currentUser={session.user} token={session.access_token} theme={theme} onAuthError={recoverSession} focus={opsFocus} onFocusHandled={() => setOpsFocus(null)} /> : <RadarUXIA token={session.access_token} theme={theme} onAuthError={recoverSession} />}
+      </React.Suspense>
       <BackToTop dark={dark} />
     </div>
   );
