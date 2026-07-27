@@ -841,6 +841,10 @@ de `supabase/schema-insumos-pendientes.sql`).
      `Desarrollo de software`, `Apoyo`. Ponla en `category` y coherente con `role`. Cada tipo pesa
      distinto por punto (ver src/effort.js): un punto de UX Research vale más horas que uno de Apoyo,
      así que la categoría bien puesta también afina la carga/velocidad.
+   - **ACENTOS y ñ correctos (UTF-8)**: los títulos y descripciones se redactan en español bien
+     escrito, con **todas las tildes y la ñ** (diseño, gestión, módulo, sesión, botón, propósito,
+     también, acción…). NUNCA despojar los acentos ni escribir "GESTION"/"diseno"/"boton". El
+     archivo `tasks.json` se guarda en UTF-8.
    - **NO asignar responsable** (`assigneeId`): las tareas se dejan SIEMPRE sin responsable.
      Que estén sin asignar es la forma en que el CEO sabe qué le falta revisar/asignar (lo
      hace en la plataforma con el filtro "Sin responsable"). Se puede mencionar en la
