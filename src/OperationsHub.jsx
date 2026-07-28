@@ -3112,12 +3112,14 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
                 </li>
               ))}
             </ul>
-            <div className="mt-2 flex items-center gap-2">
-              <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Responder al empleado…"
-                onKeyDown={(e) => { if (e.key === "Enter" && reply.trim()) { onChangeTask(task.id, { comments: [...task.comments, { author: "Administrador", role: "admin", text: reply.trim(), at: new Date().toISOString() }] }); setReply(""); } }}
-                className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054]" />
+            <div className="mt-2 flex items-start gap-2">
+              {/* Textarea (no input de 1 línea): Enter = salto de línea para seguir escribiendo.
+                  Se envía con el botón o con Ctrl/Cmd+Enter, así el comentario no se publica solo. */}
+              <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={2} placeholder="Responder al empleado… (Ctrl+Enter para enviar)"
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && reply.trim()) { e.preventDefault(); onChangeTask(task.id, { comments: [...task.comments, { author: "Administrador", role: "admin", text: reply.trim(), at: new Date().toISOString() }] }); setReply(""); } }}
+                className="min-w-0 flex-1 resize-y rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs text-[#344054] outline-none focus:border-[#17727A]" />
               <button type="button" disabled={!reply.trim()} onClick={() => { onChangeTask(task.id, { comments: [...task.comments, { author: "Administrador", role: "admin", text: reply.trim(), at: new Date().toISOString() }] }); setReply(""); }}
-                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#6D28D9" }}>
+                className="inline-flex shrink-0 items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-40" style={{ background: "#6D28D9" }}>
                 <Send size={12} /> Responder
               </button>
             </div>

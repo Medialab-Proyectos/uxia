@@ -956,8 +956,8 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
                         ))}
                       </ul>
                     )}
-                    <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Dejar un comentario (opcional)…"
-                      className="w-full rounded-md border px-3 py-1.5 text-sm outline-none"
+                    <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Dejar un comentario (opcional)…"
+                      className="w-full resize-y rounded-md border px-3 py-1.5 text-sm outline-none"
                       style={{ borderColor: border, background: dark ? "#1B232E" : "#fff", color: text }} />
 
                     {/* Guardar EXPLÍCITO a ancho completo + confirmación */}
