@@ -2873,7 +2873,15 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     <details open={open} onToggle={handleToggle}
       className={`rounded-md border p-2 transition-colors ${open ? "border-[#17727A] bg-[#EAF4F2]" : "border-[#E4DED6] bg-[#FFFCF7]"}`}
       style={open ? { boxShadow: "0 0 0 1px #17727A55" } : undefined}>
-      <summary className="flex cursor-pointer list-none flex-col gap-1.5 rounded text-xs font-semibold text-[#1D2939]">
+      <summary
+        className="flex cursor-pointer list-none flex-col gap-1.5 rounded text-xs font-semibold text-[#1D2939]"
+        onClick={(e) => {
+          // Si el clic viene de un botón/enlace/campo dentro del summary (borrar, enviar, adjuntar,
+          // fecha…), se CANCELA el toggle nativo para que la tarjeta no se abra/cierre por esa acción.
+          // El clic en la cabecera (no interactiva) sí alterna normalmente.
+          if (e.target.closest && e.target.closest("button, a, input, textarea, select, label")) e.preventDefault();
+        }}
+      >
         {/* Fila superior: chevron + título (2 columnas) + acciones (tacho a la derecha) */}
         <span className="flex w-full items-center gap-2">
         <span
