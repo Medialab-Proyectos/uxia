@@ -3804,7 +3804,9 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <label className="inline-flex cursor-pointer items-center gap-1.5 font-semibold text-[#344054]">
               <input type="checkbox" checked={!!task.recurrence}
-                onChange={(e) => onChangeTask(task.id, { recurrence: e.target.checked ? { cadence: "diario", until: null } : null })} />
+                onChange={(e) => onChangeTask(task.id, e.target.checked
+                  ? { recurrence: { cadence: "diario", until: null, at: null }, ...(task.dueDate ? {} : { dueDate: todayIso() }) }
+                  : { recurrence: null })} />
               🔁 Recurrente
             </label>
             {task.recurrence && (
@@ -3941,12 +3943,13 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             <span className="shrink-0 font-semibold text-[#344054]">Reportada</span>
             <span className="min-w-0 truncate" title={`Reportada el ${displayDateTime(task.createdAt)}`}>{displayDateTime(task.createdAt)}</span>
           </div>
-          <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#475467]">
+          <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#475467]" style={task.recurrence ? { opacity: 0.7 } : undefined}>
             <CalendarDays size={13} className="shrink-0 text-[#667085]" />
             <span className="shrink-0 font-semibold text-[#344054]">Vence</span>
             <input
               type="date"
               value={task.dueDate || ""}
+              disabled={!!task.recurrence}
               onChange={(event) => {
                 const nueva = event.target.value;
                 if (nueva === task.dueDate) return;
@@ -3959,9 +3962,10 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
                 // Cambiar una fecha YA GUARDADA exige motivo: se abre el popup y no se aplica aún.
                 if (nueva) { setDueDraft(nueva); setDueReason(""); }
               }}
-              className="min-w-0 flex-1 bg-transparent text-xs text-[#344054] outline-none"
-              title="Vencimiento"
+              className="min-w-0 flex-1 bg-transparent text-xs text-[#344054] outline-none disabled:cursor-not-allowed"
+              title={task.recurrence ? "Bloqueado: la fecha la maneja la recurrencia (se avanza al completar)" : "Vencimiento"}
             />
+            {task.recurrence && <span className="shrink-0 text-[10px] font-semibold text-[#6941C6]" title="La recurrencia maneja las fechas">🔁 auto</span>}
           </label>
         </div>
         {/* Última actualización de la tarea (se muestra al abrir la tarjeta). */}
