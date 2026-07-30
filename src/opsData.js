@@ -176,8 +176,16 @@ export async function loadState(token) {
     sourceRecords: (sourceRows || []).map(rowToSourceRecord),
     people: (peopleRows || []).map(rowToPerson),
     activeCompany: appRows?.[0]?.active_company || companies[0]?.id || "metrics-lab",
+    focus: asObject(appRows?.[0]?.focus), // sistema de foco persistido (jornada, foco/agenda/plan por día, paralelo)
     updatedAt: appRows?.[0]?.updated_at || new Date().toISOString(),
   };
+}
+
+// Persiste el estado del SISTEMA DE FOCO en app_state.focus (cross-device). Se hace un merge por id
+// para NO pisar active_company. Degrada si la columna focus aún no está migrada (corre setup.sql).
+export async function saveFocus(token, focus) {
+  return upsertResilient(token, "app_state?on_conflict=id",
+    [{ id: "operations", focus: focus || {}, updated_at: new Date().toISOString() }], ["focus"]);
 }
 
 // Upsert que, si la base aún NO tiene una columna nueva, reintenta guardando lo esencial

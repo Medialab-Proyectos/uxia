@@ -673,6 +673,9 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const agendaInputRef = useRef(null);
   // Plan del día en texto que escribe el MD al procesar la agenda (se conserva por día).
   const [planTexto, setPlanTexto] = useState(() => { try { return localStorage.getItem(`uxia.plandia.${todayIso()}`) || ""; } catch { return ""; } });
+  // Persistencia del sistema de foco en DB (cross-device): otros días + bandera de hidratación.
+  const focusDaysRef = useRef({});     // { 'YYYY-MM-DD': {empresa, agenda, plan} } de días previos
+  const focusHydrated = useRef(false); // true tras hidratar desde DB (no persistir antes de cargar)
   useEffect(() => {
     if (!token || !opsData.opsDataReady()) return;
     (async () => {
@@ -723,6 +726,20 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     }));
     if (ms.length) persistAgenda(ms);
   };
+  // Persiste el sistema de foco en la DB (debounced) cuando cambia algo. Guarda los últimos ~10 días.
+  useEffect(() => {
+    if (!focusHydrated.current || !token || !opsData.opsDataReady()) return;
+    const t = setTimeout(() => {
+      const today = todayIso();
+      const merged = { ...focusDaysRef.current, [today]: { empresa: focoEmpresa || "", agenda, plan: planTexto } };
+      const keys = Object.keys(merged).sort().slice(-10);
+      const pruned = {};
+      for (const k of keys) pruned[k] = merged[k];
+      focusDaysRef.current = pruned;
+      opsData.saveFocus(token, { jornada, parallel: [...parallelIds], days: pruned }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [jornada, parallelIds, focoEmpresa, agenda, planTexto, token]);
   const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
   const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
   const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
@@ -774,6 +791,19 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
             : normalized.companies[0]?.id || "metrics-lab"
         );
         setSaveStatus(payload.updatedAt ? `Base de datos actualizada: ${new Date(payload.updatedAt).toLocaleString()}` : "Base de datos actualizada");
+        // Hidrata el SISTEMA DE FOCO desde la DB (cross-device). Si la DB está vacía, se conservan los
+        // valores locales/por defecto y el efecto de persistencia los subirá (migración localStorage→DB).
+        const f = payload.focus || {};
+        focusDaysRef.current = (f.days && typeof f.days === "object") ? f.days : {};
+        if (f.jornada?.inicio && f.jornada?.fin) setJornada(f.jornada);
+        if (Array.isArray(f.parallel)) setParallelIds(new Set(f.parallel));
+        const dToday = focusDaysRef.current[todayIso()];
+        if (dToday) {
+          if (dToday.empresa) setFocoEmpresa(dToday.empresa);
+          if (Array.isArray(dToday.agenda) && dToday.agenda.length) setAgenda(dToday.agenda);
+          if (dToday.plan) setPlanTexto(dToday.plan);
+        }
+        focusHydrated.current = true;
       } catch {
         const local = localStorage.getItem(STORE_KEY);
         if (local) {
