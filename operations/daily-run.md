@@ -518,9 +518,17 @@ respetarlas al crear/actualizar tareas y NO romper el ciclo.
   un request review y la tarea vuelve a revisión). Al pulsar una alerta, navega a su filtro y se marca
   vista. El portal del empleado además **recarga al volver a la pestaña** para no quedar con datos viejos.
 
-**Ciclo de estados (6 estados):** `ready` (Pendiente) · `doing` (En proceso) · `review`
-(En revisión — del EMPLEADO) · `verificacion` (Verificación — del CLIENTE, solo admin) ·
-`blocked` (Bloqueada) · `done` (Finalizada).
+**Ciclo de estados:** `ready` (Pendiente) · `doing` (En proceso) · `review`
+(En revisión — del EMPLEADO) · `verificacion` (Lista · por notificar — solo admin) · `notificado`
+(Notificado) · `blocked` (Bloqueada) · `espera` (En espera) · `done` (Finalizada).
+- **`blocked` (Bloqueada) vs `espera` (En espera) — distinción IMPORTANTE:**
+  - **`blocked`** = obstáculo que ALGUIEN del equipo puede accionar (falta un acceso, una decisión,
+    destrabar una dependencia interna). Sube de prioridad porque es un cuello de botella accionable.
+  - **`espera`** = depende de un TERCERO EXTERNO fuera de control del equipo (el cliente no responde,
+    un recurso está de vacaciones, un proveedor no entrega). **NO cuenta como vencida, NO exige
+    prioridad y NO suma a la carga/utilización del diseñador** — no es atraso del que gestiona. Si el
+    insumo dice que algo quedó esperando a un externo, usar `espera`, no `blocked`, para no ensuciar
+    la vista con trabajo que no depende del equipo.
 - El empleado solo mueve la tarea a **`doing`** o **`review`** (él cree que está lista). NO finaliza
   ni pasa a verificación. En el selector de estado del admin, **`review` NO es clickeable** (es un
   estado que pone el empleado); el admin la mueve con Aprobar/Devolver.

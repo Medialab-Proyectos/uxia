@@ -37,7 +37,7 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const active = ct.filter((tk) => tk.status !== "done");
   const doneAll = ct.filter((tk) => tk.status === "done");
   const done = doneAll.filter((tk) => tk.completedAt && new Date(tk.completedAt) >= cutoff);
-  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
+  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado" && tk.status !== "espera";
   const overdue = active.filter(isOverdue);
   const blocked = active.filter((tk) => tk.status === "blocked");
   const review = active.filter((tk) => tk.status === "review");
@@ -64,7 +64,7 @@ export async function openDesignOpsReport({ company, tasks = [], people = [], cl
   const REF_WEEKLY = 10;                 // pts/semana de referencia (senior; banda 8–12)
   const PLAN_WEEKS = 2;                  // horizonte de carga cercana (~1 sprint)
   const cap = REF_WEEKLY * PLAN_WEEKS;   // capacidad de corto plazo por diseñador (pts)
-  const isPendingLoad = (tk) => tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
+  const isPendingLoad = (tk) => tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado" && tk.status !== "espera";
   const byDesigner = {};
   for (const tk of active) if (tk.assigneeId && tk.designPoints != null && isPendingLoad(tk)) byDesigner[tk.assigneeId] = (byDesigner[tk.assigneeId] || 0) + effortPoints(tk.designPoints, tk.category);
   const utils = Object.entries(byDesigner).map(([id, p]) => ({ name: nameOf(id) || "—", pct: Math.round((p / cap) * 100), pts: p }));

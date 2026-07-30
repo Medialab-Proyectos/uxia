@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, PauseCircle, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -17,6 +17,7 @@ const STATUS = {
   verificacion: "Lista · por notificar",
   notificado: "Notificado",
   blocked: "Bloqueada",
+  espera: "En espera",
   actualizada: "Actualizada",
   done: "Finalizada",
 };
@@ -30,6 +31,7 @@ const STATUS_TONE = {
   verificacion: { border: "#9CC7E4", bg: "#EAF2FB", text: "#175CD3" },
   notificado: { border: "#A6D9C4", bg: "#EAF4F2", text: "#0D7A4F" },
   blocked: { border: "#F3B0A8", bg: "#FEF3F2", text: "#B42318" },
+  espera:  { border: "#C4C9D4", bg: "#F0F1F4", text: "#566072" },
   actualizada: { border: "#C4B5FD", bg: "#F5F3FF", text: "#6D28D9" },
   done:    { border: "#A6D9C4", bg: "#E5F5EE", text: "#0D7A4F" },
 };
@@ -460,9 +462,10 @@ function attachmentUrl(attachment) {
 }
 
 function taskIsOverdue(task) {
-  // "En revisión", "Lista · por notificar" y "Notificado" no cuentan como vencidas: ya salieron de
-  // manos del equipo (esperan feedback / entrega / ya se notificó al cliente), no están atrasadas.
-  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado");
+  // "En revisión", "Lista · por notificar", "Notificado" y "En espera" no cuentan como vencidas: ya
+  // salieron de manos del equipo (feedback / entrega / notificado) o dependen de un tercero externo
+  // (En espera: cliente no responde, recurso de vacaciones). No es atraso del que gestiona.
+  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.status !== "espera");
 }
 
 function isValidPhone(value) {
@@ -801,7 +804,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     if (activeStatus === "open") return task.status !== "done";
     // "Por vencer" excluye lo ya entregado/fuera de manos (review/verificacion/notificado): esas
     // ya se cumplieron, no vencen. Mismo criterio que "vencidas".
-    if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado";
+    if (activeStatus === "today") return task.dueDate <= todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.status !== "espera";
     // "updated" = tocadas por un empleado y aún sin revisar por el admin.
     if (activeStatus === "updated") return Boolean(task.employeeTouchedAt);
     // "mdtouched" = la IA (MD) complementó la tarea (mdTouchedAt) y falta que el admin la revise.
@@ -813,7 +816,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const open = tasks.filter((task) => task.status !== "done");
     return {
       open: open.length,
-      dueToday: open.filter((task) => task.dueDate <= todayIso() && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado").length,
+      dueToday: open.filter((task) => task.dueDate <= todayIso() && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.status !== "espera").length,
       blocked: open.filter((task) => task.status === "blocked").length,
       companies: companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar").length,
       // Actualizadas por un empleado y aún sin revisar (employeeTouchedAt presente).
@@ -1965,7 +1968,7 @@ function scoreTask(task) {
   // Urgencia (fecha): vencida > hoy/pronto > esta semana.
   const today = todayIso();
   if (task.dueDate) {
-    if (task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
+    if (task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.status !== "espera" && task.dueDate < today) { score += 35; reasons.push("Vencida"); }
     else {
       const days = Math.round((new Date(task.dueDate) - new Date(today)) / 86400000);
       if (days <= 2) { score += 25; reasons.push("Vence pronto"); }
@@ -2067,7 +2070,7 @@ function buildTaskRefs(tasks, companies) {
 }
 
 // Estados que el admin puede fijar rápido desde la vista de prioridad.
-const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Lista · por notificar", Send], ["notificado", "Notificado", Bell], ["blocked", "Bloqueada", AlertTriangle], ["done", "Finalizada", CheckCircle2]];
+const QUICK_STATUSES = [["ready", "Pendiente", Circle], ["doing", "En proceso", LoaderCircle], ["review", "En revisión", Clock], ["verificacion", "Lista · por notificar", Send], ["notificado", "Notificado", Bell], ["blocked", "Bloqueada", AlertTriangle], ["espera", "En espera", PauseCircle], ["done", "Finalizada", CheckCircle2]];
 
 function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatus }) {
   const [openId, setOpenId] = useState(null);
@@ -2086,7 +2089,7 @@ function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatu
 
   // Foco para HOY (vence hoy o vencidas) y ESTA SEMANA (proximos 7 dias), por prioridad.
   const today = todayIso();
-  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado");
+  const hoy = ranked.filter((t) => t.dueDate && t.dueDate <= today && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.status !== "espera");
   const semana = ranked.filter((t) => {
     if (!t.dueDate || t.dueDate <= today) return false;
     const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);
@@ -2359,6 +2362,7 @@ function TasksTable({
             ["review", "En revisión"],
             ["verificacion", "Lista · por notificar"],
             ["notificado", "Notificado"],
+            ["espera", "En espera"],
             ["done", "Finalizadas (archivo)"],
           ].map(([key, label]) => (
             <button
@@ -2867,6 +2871,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
     ["verificacion", "Lista · por notificar", Send],
     ["notificado", "Notificado", Bell],
     ["blocked", "Bloqueada", AlertTriangle],
+    ["espera", "En espera", PauseCircle],
     ["done", "Finalizada", CheckCircle2],
   ];
   return (
@@ -4292,6 +4297,9 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   // está lista, a la espera de avisar. Antes quedaban invisibles en el desglose.
   const notificadas = companyTasks.filter((t) => t.status === "notificado").length;
   const porNotificar = companyTasks.filter((t) => t.status === "verificacion").length;
+  // "En espera" = bloqueo EXTERNO (cliente no responde, recurso de vacaciones): no depende del equipo,
+  // no es carga activa ni vencida. Se muestra aparte de "Bloqueadas" (que sí es accionable).
+  const enEspera = companyTasks.filter((t) => t.status === "espera").length;
   const vencidas = companyTasks.filter(taskIsOverdue).length;
   // Índice de cumplimiento (periodo) = cumplidas a tiempo ÷ (cumplidas + vencidas sin hacer).
   // "A tiempo" = cumplida sin fecha (no hay plazo que incumplir) o cerrada <= su fecha.
@@ -4309,6 +4317,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
     ["En revisión", enRevision, "#17727A"],
     ["En progreso", enProgreso, "#1570EF"],
     ["Bloqueadas", bloqueadas, "#B42318"],
+    ["En espera", enEspera, "#566072"],
     ["Pendientes", pendientes, "#B76E00"],
   ].filter(([, v]) => v > 0);
   const aiTasks = companyTasks.filter((t) => t.aiUsage != null);
@@ -4332,7 +4341,7 @@ function CompanyKpiPanel({ company, tasks = [], clients = [], people = [], growt
   const REF_WEEKLY_PTS = 10;   // pts/semana de referencia (senior; banda 8–12)
   const PLAN_WEEKS = 2;        // horizonte de carga cercana (~1 sprint)
   const capNear = REF_WEEKLY_PTS * PLAN_WEEKS; // capacidad de corto plazo por diseñador (pts)
-  const isPendingLoad = (t) => t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado";
+  const isPendingLoad = (t) => t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.status !== "espera";
   const byDes = {};
   for (const t of activas) if (t.assigneeId && t.designPoints != null && isPendingLoad(t)) byDes[t.assigneeId] = (byDes[t.assigneeId] || 0) + effortPoints(t.designPoints, t.category);
   const utilVals = Object.values(byDes).map((p) => Math.round((p / capNear) * 100));

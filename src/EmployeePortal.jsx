@@ -12,7 +12,7 @@ const LEAD_STATUSES = [["ready", "Sin iniciar"], ["doing", "En progreso"], ["blo
 
 const STATUS_LABEL = {
   backlog: "Pendiente", ready: "Pendiente", doing: "En progreso",
-  review: "En revisión", verificacion: "Lista · por notificar", notificado: "Notificado", blocked: "Bloqueada", actualizada: "Actualizada", done: "Finalizada",
+  review: "En revisión", verificacion: "Lista · por notificar", notificado: "Notificado", blocked: "Bloqueada", espera: "En espera", actualizada: "Actualizada", done: "Finalizada",
 };
 const PRIORITY_COLOR = { alta: "#B42318", media: "#B76E00", baja: "#1570EF" };
 
@@ -23,7 +23,7 @@ function scoreTask(t) {
   let s = t.priority === "alta" ? 40 : t.priority === "baja" ? 8 : 20;
   const today = todayIso();
   if (t.dueDate) {
-    if (t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.dueDate < today) s += 35;
+    if (t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.status !== "espera" && t.dueDate < today) s += 35;
     else {
       const d = Math.round((new Date(t.dueDate) - new Date(today)) / 86400000);
       s += d <= 2 ? 25 : d <= 7 ? 15 : 5;
@@ -226,7 +226,7 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   // accionarlas ni abrir la tarjeta. "done" (finalizada) no se le muestra: queda solo en el historial
   // del admin. "Activas" = accionables (ni enviadas ni finalizadas).
   const isSent = (t) => t.status === "verificacion" || t.status === "notificado" || t.status === "blocked";
-  const overdueCond = (t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.status !== "blocked";
+  const overdueCond = (t) => t.due_date && t.due_date < todayIso() && t.status !== "review" && t.status !== "verificacion" && t.status !== "notificado" && t.status !== "espera" && t.status !== "blocked";
 
   const active = tasks.filter((t) => t.status !== "done" && !isSent(t)); // accionables
   const done = tasks.filter((t) => t.status === "done");                  // solo historial admin

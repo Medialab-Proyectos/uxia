@@ -14,9 +14,9 @@ function fmtDate(iso) {
 
 const STATUS_LABEL = {
   backlog: "En cola", ready: "Sin iniciar", doing: "En progreso", blocked: "Bloqueada",
-  review: "En revisión", verificacion: "Lista · por notificar", notificado: "Notificado",
+  espera: "En espera", review: "En revisión", verificacion: "Lista · por notificar", notificado: "Notificado",
 };
-const STATUS_ORDER = ["blocked", "doing", "review", "verificacion", "notificado", "ready", "backlog"];
+const STATUS_ORDER = ["blocked", "doing", "review", "verificacion", "notificado", "espera", "ready", "backlog"];
 const PRIO_LABEL = { alta: "Alta", media: "Media", baja: "Baja" };
 
 // Descarga el listado de tareas vigentes como archivo PDF (sin diálogo de impresión).
@@ -24,7 +24,7 @@ export async function openActiveTasksReport({ company, tasks = [], people = [], 
   const today = todayIso();
   const now = new Date();
   const nameOf = (id) => people.find((p) => p.id === id)?.name || "";
-  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado";
+  const isOverdue = (tk) => tk.dueDate && tk.dueDate < today && tk.status !== "done" && tk.status !== "review" && tk.status !== "verificacion" && tk.status !== "notificado" && tk.status !== "espera";
 
   const ct = tasks.filter((tk) => tk.companyId === company.id && tk.status !== "done" && (!client || (tk.client || "") === client));
   const subs = [...new Set(ct.map((tk) => tk.client || "Sin subproyecto"))].sort((a, b) => a.localeCompare(b));
