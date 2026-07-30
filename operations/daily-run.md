@@ -254,9 +254,14 @@ Si existe la agenda de hoy:
 2. **Validar y AJUSTAR las prioridades del día** contra la agenda:
    - Si el CEO tiene **poco tiempo libre** (muchas reuniones de atención alta/media), reducir el Top-3
      del foco a lo esencial y **empujar a `espera`/otro día** lo que no sea crítico.
-   - En los **huecos libres** y en las reuniones de **atención `ninguna`**, sugerir avanzar las tareas
-     marcadas **"En paralelo"** (colas de la IA, desarrollo que corre solo) y las de tipo `Administrativa`
-     rápidas (trámites) — nunca trabajo que exija foco profundo.
+   - **TUYAS vs del EQUIPO (regla clave):** las tareas **asignadas al CEO** (Christian, el admin) o **sin
+     responsable** son **suyas** → las **hace él** y ocupan sus **huecos de foco** (un hueco grande cabe
+     VARIAS, ~1 por cada 75 min). Las tareas **asignadas a OTRA persona** del equipo **NO las hace el
+     CEO**: solo les hace **PUSH** = un **mensaje corto** para preguntar cómo van (cerca de vencer ≤2
+     días o por entregar en revisión/por notificar). Un push **no ocupa un bloque de foco**, es solo un
+     mensaje. En el Plan del día, separar: qué avanza el CEO (foco) vs a quién hacerle push (mensaje).
+   - En las reuniones de **atención `ninguna`**, además, sugerir avanzar lo marcado **"En paralelo"**
+     (colas de la IA, desarrollo que corre solo) y trámites `Administrativa` rápidos — nunca foco profundo.
    - **Conflictos de reuniones (pueden ser VARIOS en un día):** dos o más reuniones que se cruzan en
      horario. El CEO no puede estar en dos a la vez → hay que **delegar** una. PERO **SOLO EL CEO
      decide qué delega y a quién**: el MD **NO lo decide ni lo asigna**. El MD únicamente **MARCA el
