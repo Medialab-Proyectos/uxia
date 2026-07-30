@@ -492,18 +492,6 @@ export async function updateGrowthPractice(token, id, patch) {
   });
 }
 
-// ---- Cuentas de cobro mensuales (empleado entrega; admin ve contabilidad del mes) ----
-const rowToCuenta = (r) => ({
-  id: r.id, email: String(r.email || "").toLowerCase(), period: r.period,
-  status: r.status || "pendiente", amount: r.amount ?? null, note: r.note || "",
-  submittedAt: r.submitted_at || null,
-});
-export async function listCuentasCobro(token, period) {
-  const q = period ? `?period=eq.${encodeURIComponent(period)}&select=*&order=submitted_at.desc` : "?select=*&order=period.desc,submitted_at.desc";
-  const rows = await rest(token, "cuentas_cobro", { query: q }).catch(() => []);
-  return asArray(rows).map(rowToCuenta);
-}
-
 // ---- Líderes de subproyecto (admin) ----
 const rowToLead = (r) => ({ id: r.id, companyId: r.company_id, client: r.client || "", email: String(r.email || "").toLowerCase() });
 export async function listLeads(token) {

@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Layers, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, PauseCircle, Pencil, Plus, Power, Receipt, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Layers, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, PauseCircle, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -624,8 +624,6 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [finalizeTask, setFinalizeTask] = useState(null); // tarea a finalizar desde la vista de prioridad
   const [growthPractices, setGrowthPractices] = useState([]); // buenas prácticas de crecimiento (MD)
   const [leads, setLeads] = useState([]); // líderes de subproyecto (company_id + client + email)
-  const [cuentas, setCuentas] = useState([]); // cuentas de cobro del mes en curso (contabilidad)
-  const accountingPeriod = useMemo(() => new Date().toISOString().slice(0, 7), []); // 'YYYY-MM'
   // Foco desde una notificación del shell: abre "Todas las tareas" en el filtro indicado.
   useEffect(() => {
     if (!focus) return;
@@ -740,8 +738,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     if (!token || !opsData.opsDataReady()) return;
     opsData.listGrowthPractices(token).then(setGrowthPractices).catch(() => {});
     opsData.listLeads(token).then(setLeads).catch(() => {});
-    opsData.listCuentasCobro(token, accountingPeriod).then(setCuentas).catch(() => {});
-  }, [token, accountingPeriod]);
+  }, [token]);
 
   // Líderes de subproyecto (empleados MediaLab que pueden crear tareas/insumos en su subproyecto).
   async function assignLead(companyId, client, email) {
@@ -1712,7 +1709,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             ["companies", "Empresas"],
             ["tasks", "Todas las tareas"],
             ["priority", "Prioridad"],
-            ["contabilidad", "Contabilidad"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -1800,81 +1796,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             </div>
           </section>
         )}
-
-        {/* VISTA CONTABILIDAD — cuentas de cobro del mes: quién entregó y quién falta. */}
-        {activeView === "contabilidad" && (() => {
-          const empleados = people
-            .filter((p) => (p.type || "Empleado MediaLab") === "Empleado MediaLab" && (p.email || "").trim())
-            .map((p) => ({ ...p, _email: String(p.email).toLowerCase() }));
-          const cuentaBy = new Map(cuentas.map((c) => [c.email, c]));
-          const rows = empleados.map((p) => ({ person: p, cuenta: cuentaBy.get(p._email) || null }));
-          const entregadas = rows.filter((r) => r.cuenta?.status === "entregada");
-          const pct = rows.length ? Math.round((entregadas.length / rows.length) * 100) : 0;
-          const totalMonto = entregadas.reduce((s, r) => s + (Number(r.cuenta?.amount) || 0), 0);
-          const cop = (n) => Number(n).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-          let monthLabel = accountingPeriod;
-          try { monthLabel = new Date(accountingPeriod + "-01T12:00:00").toLocaleDateString("es-CO", { month: "long", year: "numeric" }); } catch { /* noop */ }
-          const finMes = (() => { const d = new Date(); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return last - d.getDate(); })();
-          return (
-            <section className="mt-6 space-y-4">
-              <div className="rounded-lg border border-[#E4DED6] bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Receipt size={18} className="text-[#17727A]" />
-                    <h2 className="text-base font-semibold capitalize text-[#1D2939]">Contabilidad · {monthLabel}</h2>
-                  </div>
-                  <button type="button" onClick={() => opsData.listCuentasCobro(token, accountingPeriod).then(setCuentas).catch(() => {})}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-[#D0D5DD] px-2.5 py-1.5 text-xs font-semibold text-[#344054]">
-                    <LoaderCircle size={13} /> Actualizar
-                  </button>
-                </div>
-                <p className="mt-1 text-xs text-[#667085]">Cuenta de cobro que cada integrante entrega a fin de mes desde su portal. {finMes >= 0 && finMes <= 6 && <span className="font-semibold text-[#8A5700]">Faltan {finMes} día(s) para el cierre.</span>}</p>
-                <div className="mt-3 grid grid-cols-3 gap-3">
-                  <div className="rounded-md border border-[#E4DED6] bg-[#F8FAF9] p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#667085]">Entregadas</p>
-                    <p className="mt-0.5 text-xl font-bold text-[#0D7A4F]">{entregadas.length}<span className="text-sm font-semibold text-[#98A2B3]"> / {rows.length}</span></p>
-                  </div>
-                  <div className="rounded-md border border-[#E4DED6] bg-[#F8FAF9] p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#667085]">Cumplimiento</p>
-                    <p className="mt-0.5 text-xl font-bold text-[#1D2939]">{pct}%</p>
-                  </div>
-                  <div className="rounded-md border border-[#E4DED6] bg-[#F8FAF9] p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#667085]">Total del mes</p>
-                    <p className="mt-0.5 text-xl font-bold text-[#1D2939]">{totalMonto > 0 ? cop(totalMonto) : "—"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {rows.length === 0 ? (
-                <p className="rounded-md border border-dashed border-[#D0D5DD] bg-white p-4 text-sm text-[#667085]">Aún no hay integrantes tipo «Empleado MediaLab» con correo. Agrégalos en «Empresas y personas» para que puedan entregar su cuenta de cobro.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {rows.map(({ person, cuenta }) => {
-                    const ok = cuenta?.status === "entregada";
-                    return (
-                      <li key={person.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-white p-3 shadow-sm"
-                        style={{ borderColor: ok ? "#A6D9C4" : "#E4DED6" }}>
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                          style={ok ? { background: "#E5F5EE", color: "#0D7A4F" } : { background: "#F2F4F7", color: "#667085" }}>
-                          {ok ? <Check size={16} /> : <Clock size={15} />}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-[#1D2939]">{person.name || person.email}</p>
-                          <p className="truncate text-xs text-[#98A2B3]">{person.email}{cuenta?.note ? ` · ${cuenta.note}` : ""}</p>
-                        </div>
-                        {ok && cuenta.amount != null && <span className="shrink-0 text-sm font-semibold text-[#1D2939]">{cop(cuenta.amount)}</span>}
-                        <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold"
-                          style={ok ? { background: "#E5F5EE", color: "#0D7A4F" } : { background: "#FFF4DE", color: "#8A5700" }}>
-                          {ok ? "Entregada" : "Pendiente"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          );
-        })()}
 
         {activeView === "companies" && insumos.length > 0 && (
           <section className="mt-6 rounded-md border border-[#F2C879] bg-[#FFF7E6] p-4 shadow-sm">
