@@ -684,6 +684,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // Persistencia del sistema de foco en DB (cross-device): otros días + bandera de hidratación.
   const focusDaysRef = useRef({});     // { 'YYYY-MM-DD': {empresa, agenda, plan} } de días previos
   const focusHydrated = useRef(false); // true tras hidratar desde DB (no persistir antes de cargar)
+  const [loadedState, setLoadedState] = useState(false); // true tras la primera carga desde la DB
   useEffect(() => {
     if (!loadedState || !token || !opsData.opsDataReady()) return; // corre DESPUÉS de hidratar (así la
     // agenda del MD, con acentos, gana sobre lo que pudiera haber quedado en app_state.focus).
@@ -791,7 +792,6 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [newClientBoardUrl, setNewClientBoardUrl] = useState("");
   const [newPerson, setNewPerson] = useState({ name: "", email: "", phone: "", type: "Empleado MediaLab", chatUrl: "", contactMethod: "auto", password: "", companyId: "" });
   const [contextPreview, setContextPreview] = useState({});
-  const [loadedState, setLoadedState] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
 
   useEffect(() => {
