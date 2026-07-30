@@ -2056,6 +2056,25 @@ function scoreTask(task) {
   return { score: Math.min(100, score), reasons };
 }
 
+// "Despachar a la IA": arma un prompt LISTO PARA PEGAR en Claude/ChatGPT, adaptado al tipo de tarea.
+// La IA hace el primer 80% (borrador/research/diseño) mientras el CEO hace otras cosas; luego revisa.
+function buildAiPrompt(task, companyName) {
+  const proyecto = [companyName, task.client].filter(Boolean).join(" · ") || "el proyecto";
+  const titulo = task.title || "esta tarea";
+  const ctx = (task.description || "").trim();
+  const ctxBlock = ctx ? `\n\nContexto de la tarea:\n${ctx}` : "";
+  const cat = task.category || "";
+  const base = `Trabajo en MediaLab Ingeniería (estudio de diseño de producto/UX). Para el proyecto "${proyecto}", ayúdame con esta tarea: "${titulo}".`;
+  let ask;
+  if (cat === "Producto") ask = "Conviértelo en un PRD/borrador accionable: historia de usuario, criterios de aceptación, pain points, alcance y supuestos. Señala qué necesitas confirmar conmigo.";
+  else if (cat === "UX Research") ask = "Propón un plan de research o un benchmark de competidores (LATAM cuando aplique): preguntas, método y la síntesis de hallazgos esperada.";
+  else if (cat === "Documentación") ask = "Redacta un primer borrador del documento, claro y estructurado en español, listo para pulir. Usa encabezados y viñetas.";
+  else if (cat === "Diseño UX/UI" || cat === "Diseño gráfico") ask = "Propón la estructura de la(s) pantalla(s): objetivo, secciones, jerarquía visual, estados (vacío/carga/error) y criterios, para que un líder lo lleve a Figma. No inventes datos reales del cliente.";
+  else if (cat === "Desarrollo de software") ask = "Propón el enfoque técnico: pasos, estructura/endpoints, riesgos y un esqueleto. Marca las decisiones que dependan de mí.";
+  else ask = "Prepárame un borrador práctico (correo, agenda, checklist o resumen, según aplique) listo para usar/enviar.";
+  return `${base}\n\n${ask}${ctxBlock}\n\nResponde en español y entrega el 80% listo, para que yo solo revise y decida.`;
+}
+
 // Candidatos de prefijo para una empresa, en orden de preferencia (2-3 letras).
 function prefixCandidates(name) {
   const clean = String(name || "XX").toUpperCase().replace(/[^A-Z0-9 ]/g, "");
@@ -2867,6 +2886,23 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [crText, setCrText] = useState("");
   const [crBy, setCrBy] = useState("ceo");
   const [crModal, setCrModal] = useState(false);
+  // Despachar a la IA: modal con prompt listo para pegar + marca "despachada" (cola personal por navegador).
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiCopied, setAiCopied] = useState(false);
+  const [dispatched, setDispatched] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("uxia.ai.dispatched") || "[]").includes(task.id); } catch { return false; }
+  });
+  const openAi = () => { setAiPrompt(buildAiPrompt(task, company?.name)); setAiCopied(false); setAiOpen(true); };
+  const copyAiPrompt = async () => { try { await navigator.clipboard.writeText(aiPrompt); setAiCopied(true); setTimeout(() => setAiCopied(false), 2000); } catch { /* ignore */ } };
+  const toggleDispatched = () => {
+    try {
+      const set = new Set(JSON.parse(localStorage.getItem("uxia.ai.dispatched") || "[]"));
+      if (set.has(task.id)) set.delete(task.id); else set.add(task.id);
+      localStorage.setItem("uxia.ai.dispatched", JSON.stringify([...set]));
+      setDispatched(set.has(task.id));
+    } catch { /* ignore */ }
+  };
   const changeRequests = Array.isArray(task.changeRequests) ? task.changeRequests : [];
   const openCRs = changeRequests.filter((c) => !c.resolved);
   function addChangeRequest() {
@@ -3092,8 +3128,13 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 <span className="inline-flex items-center gap-1 font-semibold text-[#0D7A4F]"><Clock size={11} />{task.workedHours} h</span>
               )}
             </span>
-            {(showIA || task.employeeTouchedAt || task.mdTouchedAt || (Array.isArray(task.comments) && task.comments.length > 0)) && (
+            {(showIA || task.employeeTouchedAt || task.mdTouchedAt || dispatched || (Array.isArray(task.comments) && task.comments.length > 0)) && (
               <span className="flex flex-wrap items-center gap-1.5">
+                {dispatched && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6941C6" }} title="Despachada a la IA (tu cola del día)">
+                    <Sparkles size={11} /> IA
+                  </span>
+                )}
                 {showIA && (
                   <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#67C6C0", background: "#E6F6F4", color: "#0E7C74" }} title={`Historia generada por la IA (MD), pendiente de revisar · ${task.source}`}>
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#0E7C74" }} /> IA
@@ -3521,6 +3562,13 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             {Array.isArray(task.tools) && task.tools.length > 0 && <p className="mt-0.5 text-xs text-[#6941C6]">Herramientas: {task.tools.join(", ")}</p>}
           </div>
         )}
+        {/* Despachar a la IA: genera un prompt listo para pegar en Claude/ChatGPT (segunda jornada). */}
+        <div className="border-t border-[#E4DED6] pt-2">
+          <button type="button" onClick={openAi}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[#6941C6] bg-[#F5F3FF] px-3 py-2 text-sm font-semibold text-[#6941C6]">
+            <Sparkles size={15} /> {dispatched ? "Despachada a IA · ver prompt" : "Despachar a la IA"}
+          </button>
+        </div>
         {/* Guardar TAREA (guardado por tarjeta, a ancho completo, con confirmación). */}
         {onSaveTask && (
           <div className="border-t border-[#E4DED6] pt-2">
@@ -3534,6 +3582,35 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
           </div>
         )}
       </div>
+      {aiOpen && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setAiOpen(false); }}>
+          <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-[#E4DED6] p-4">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#1D2939]"><Sparkles size={15} className="text-[#6941C6]" /> Despachar a la IA</h3>
+                <p className="mt-0.5 text-xs text-[#667085]">Copia este prompt y pégalo en Claude o ChatGPT mientras haces otras cosas. La IA hace el primer borrador; tú revisas y decides.</p>
+              </div>
+              <button type="button" onClick={() => setAiOpen(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={10}
+                className="w-full resize-y rounded-md border border-[#D0D5DD] bg-[#FBFAF7] px-3 py-2 text-xs leading-relaxed text-[#344054] outline-none focus:border-[#6941C6]" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-[#E4DED6] p-4">
+              <button type="button" onClick={copyAiPrompt} className="inline-flex items-center gap-1.5 rounded-md bg-[#6941C6] px-3 py-2 text-sm font-semibold text-white">
+                <Save size={14} /> {aiCopied ? "Copiado ✓" : "Copiar prompt"}
+              </button>
+              <button type="button" onClick={toggleDispatched}
+                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold"
+                style={dispatched ? { borderColor: "#6941C6", background: "#F5F3FF", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#475467" }}>
+                {dispatched ? <><CheckCircle2 size={14} /> Despachada</> : <>Marcar como despachada</>}
+              </button>
+              <span className="text-[11px] text-[#98A2B3]">La marca es tuya (este navegador) para tu cola del día.</span>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       {doneModal && (
         <DoneFeedbackModal
           task={task}
