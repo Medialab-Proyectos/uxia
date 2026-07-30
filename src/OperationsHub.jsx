@@ -647,7 +647,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // devolver las reuniones extraídas (raw_text JSON) para cargarlas aquí.
   const [agendaDoc, setAgendaDoc] = useState(null);
   const [agendaBusy, setAgendaBusy] = useState(false);
-  const agendaInputRef = React.useRef(null);
+  const agendaInputRef = useRef(null);
   useEffect(() => {
     if (!token || !opsData.opsDataReady()) return;
     opsData.getAgendaDia(token, todayIso()).then(setAgendaDoc).catch(() => {});
