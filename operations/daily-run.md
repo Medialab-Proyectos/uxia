@@ -231,8 +231,9 @@ Si existe la agenda de hoy:
    - `media` = atención parcial (seguimiento, comité de rutina).
    - `ninguna` = poca/ninguna atención (informativa, oyente) → **hueco para avanzar en paralelo**.
 2. **Escribir** las reuniones extraídas en `raw_text` de ESA fila (PATCH), como JSON:
-   `[{"hora":"09:00","dur":60,"titulo":"…","atencion":"alta"}, …]`. Así la app las carga en la
-   Agenda de Foco (botón "Cargar en la agenda").
+   `[{"hora":"09:00","dur":60,"titulo":"…","atencion":"alta"}, …]`. **NO borrar la fila ni el archivo:**
+   la app detecta las reuniones, las carga en la Agenda de Foco y **ella misma borra el archivo**
+   (queda el espacio libre para una nueva agenda). El MD solo deja el `raw_text` listo.
 3. **Validar y AJUSTAR las prioridades del día** contra la agenda:
    - Si el CEO tiene **poco tiempo libre** (muchas reuniones de atención alta/media), reducir el Top-3
      del foco a lo esencial y **empujar a `espera`/otro día** lo que no sea crítico.

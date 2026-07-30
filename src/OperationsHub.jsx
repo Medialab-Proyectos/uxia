@@ -650,7 +650,28 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const agendaInputRef = useRef(null);
   useEffect(() => {
     if (!token || !opsData.opsDataReady()) return;
-    opsData.getAgendaDia(token, todayIso()).then(setAgendaDoc).catch(() => {});
+    (async () => {
+      try {
+        const doc = await opsData.getAgendaDia(token, todayIso());
+        if (!doc) { setAgendaDoc(null); return; }
+        const importedKey = `uxia.agenda.imported.${todayIso()}`;
+        // Ya analizada por el MD (trae reuniones): se CARGAN al día, se BORRA el archivo y el slot
+        // queda libre para subir una nueva. Solo una vez por día (bandera en localStorage).
+        if (doc.meetings?.length && !localStorage.getItem(importedKey)) {
+          const ms = doc.meetings.map((m, i) => ({
+            id: `md-${i}-${Date.now()}`, hora: m.hora || "", dur: Number(m.dur) || 60,
+            titulo: m.titulo || m.title || "Reunión",
+            atencion: ["alta", "media", "ninguna"].includes(m.atencion) ? m.atencion : "media",
+          }));
+          persistAgenda(ms);
+          try { localStorage.setItem(importedKey, "1"); } catch { /* ignore */ }
+          await opsData.deleteAgendaDia(token, doc.id).catch(() => {});
+          setAgendaDoc(null); // consumida: espera una nueva
+        } else {
+          setAgendaDoc(doc); // subida pero aún sin procesar por el MD
+        }
+      } catch { /* ignore */ }
+    })();
   }, [token]);
   const uploadAgenda = async (file) => {
     if (!file) return;
