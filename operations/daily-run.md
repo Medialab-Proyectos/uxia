@@ -269,6 +269,10 @@ Si existe la agenda de hoy:
      mover la fecha (con motivo) o delegar la tarea.
 3. **Redactar el "Plan del día"** en texto: 3–6 líneas en español claro — carga de reuniones por
    atención, dónde caben las tareas de fondo/paralelo, foco recomendado y qué se reprioriza hoy.
+   Recordar que el **rol del CEO (Christian, el admin) en las reuniones es hacer GESTIÓN**: preguntar
+   al equipo por el estado de las tareas que están **cerca de vencer o de entrega**. Por eso el plan
+   debe resaltar el **seguimiento** (qué tareas por vencer ≤2 días o en revisión/por notificar tocan
+   ese día) además del foco propio del CEO. La app muestra ese seguimiento en la vista Foco.
 4. **Escribir en `raw_text` de ESA fila** (PATCH) un JSON **objeto** con las reuniones **y** el plan:
    `{"meetings":[{"hora":"09:00","dur":60,"titulo":"…","atencion":"alta"}, …], "plan":"Plan del día en texto…"}`.
    **NO borrar la fila ni el archivo:** la app detecta reuniones+plan, los carga en Foco (franja

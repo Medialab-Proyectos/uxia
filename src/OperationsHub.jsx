@@ -1006,6 +1006,20 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const parallelTasks = useMemo(() => tasks.filter((t) => t.status !== "done" && parallelIds.has(t.id)), [tasks, parallelIds]);
   const setFoco = (id) => { setFocoEmpresa(id); try { if (id) localStorage.setItem(focoKey, id); else localStorage.removeItem(focoKey); } catch { /* ignore */ } };
 
+  // SEGUIMIENTO del CEO: su rol en las reuniones es hacer gestión y preguntar al EQUIPO por las tareas
+  // que están **cerca de vencer o de entregar**. Aquí se listan esas tareas (por vencer ≤2 días, o en
+  // revisión/por notificar = cerca de entrega), agrupadas por responsable, como puntos de seguimiento.
+  const seguimiento = useMemo(() => {
+    if (activeView !== "foco") return [];
+    const limite = addDays(2); // hoy + 2 días
+    return tasks
+      .filter((t) => t.status !== "done" && t.status !== "notificado" && t.status !== "espera")
+      .filter((t) => t.status === "review" || t.status === "verificacion" || (t.dueDate && t.dueDate <= limite))
+      .map((t) => ({ ...t, _resp: (personById(people, t.assigneeId)?.name) || "Sin responsable" }))
+      .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
+      .slice(0, 20);
+  }, [tasks, people, activeView]);
+
   // Línea de tiempo del día: reuniones con hora + HUECOS libres dentro de la JORNADA (inicio–fin),
   // incluyendo antes de la primera reunión y después de la última hasta el fin de la jornada.
   const agendaTimeline = useMemo(() => {
@@ -2297,6 +2311,43 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 </>
               ) : (
                 <p className="mt-3 text-xs text-[#98A2B3]">Sin reuniones cargadas. Sube el PDF de tu agenda o agrégalas a mano para proteger tu foco y saber dónde puedes avanzar en paralelo.</p>
+              )}
+            </div>
+
+            {/* SEGUIMIENTO CON EL EQUIPO — tu gestión: pregunta por lo que está por vencer o por entregar. */}
+            <div className="rounded-xl border border-[#D9D2C7] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ListChecks size={15} className="text-[#B54708]" />
+                  <h3 className="text-sm font-semibold text-[#1D2939]">Seguimiento con el equipo</h3>
+                  <span className="rounded-full bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-semibold text-[#475467]">{seguimiento.length}</span>
+                </div>
+                <span className="text-[11px] text-[#8b8272]">por vencer (≤2 días) o por entregar</span>
+              </div>
+              <p className="mt-0.5 text-xs text-[#8b8272]">Lo que debes preguntar al equipo en tus reuniones: estado de lo que está cerca de vencer o de entrega.</p>
+              {seguimiento.length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {seguimiento.map((t) => {
+                    const near = t.status === "review" || t.status === "verificacion";
+                    return (
+                      <li key={t.id}>
+                        <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }}
+                          className="flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-transparent px-2 py-1.5 text-left hover:border-[#E4DED6] hover:bg-[#FBFAF7]">
+                          <span className="shrink-0 rounded bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-bold text-[#475467]">{t._resp.split(" ")[0]}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{t.title}</span>
+                          <span className="shrink-0 text-[11px] text-[#98A2B3]">{nameOf(t.companyId)}</span>
+                          <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold" style={near
+                            ? { borderColor: "#A6D9C4", background: "#E5F5EE", color: "#0D7A4F" }
+                            : { borderColor: taskIsOverdue(t) ? "#FDA29B" : "#F2C879", background: taskIsOverdue(t) ? "#FEF3F2" : "#FFF7E6", color: taskIsOverdue(t) ? "#B42318" : "#B76E00" }}>
+                            {near ? (t.status === "review" ? "En revisión" : "Por notificar") : (taskIsOverdue(t) ? "Vencida" : (t.dueDate === todayIso() ? "Vence hoy" : `Vence ${displayDate(t.dueDate)}`))}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-[#98A2B3]">Nada por vencer en 2 días ni por entregar. 👌</p>
               )}
             </div>
 
