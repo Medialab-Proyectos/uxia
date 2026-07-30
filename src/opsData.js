@@ -423,6 +423,24 @@ export async function deleteInsumo(token, id, { keepFile = false } = {}) {
   await rest(token, "insumos_pendientes", { method: "DELETE", query: `?id=eq.${encodeURIComponent(id)}`, prefer: "return=minimal" });
 }
 
+// ---- Agenda del día (PDF que sube el CEO en Foco; el MD diario la lee y ajusta prioridades) ----
+// Se guarda como insumo con company_id "agenda" y client = fecha ISO (YYYY-MM-DD). Al correr, el MD
+// lee el PDF y escribe en raw_text el JSON de reuniones extraídas: [{hora,dur,titulo,atencion}].
+export async function saveAgendaDia(token, { file, dateIso }) {
+  return saveInsumo(token, { companyId: "agenda", client: dateIso, file, kind: "agenda" });
+}
+export async function getAgendaDia(token, dateIso) {
+  const rows = await rest(token, "insumos_pendientes", {
+    query: `?company_id=eq.agenda&kind=eq.agenda&client=eq.${encodeURIComponent(dateIso)}&select=*&order=created_at.desc&limit=1`,
+  }).catch(() => []);
+  const row = asArray(rows)[0];
+  if (!row) return null;
+  let meetings = [];
+  try { const p = JSON.parse(row.raw_text || "[]"); if (Array.isArray(p)) meetings = p; } catch { /* aún sin procesar por el MD */ }
+  return { ...mapInsumo(row), meetings };
+}
+export async function deleteAgendaDia(token, id) { return deleteInsumo(token, id); }
+
 // ---------- oportunidades (Radar) — la app SOLO lee y da seguimiento ----------
 const mapOportunidad = (row) => ({ ...(row.data || {}), id: row.id, score: row.score, estado: row.estado, postulado: !!row.postulado, createdAt: row.created_at });
 

@@ -217,6 +217,35 @@ una práctica accionable. El `marco` de cada práctica cita el libro/autor concr
 - **Mindset · propósito · resiliencia**:
   *Meditaciones* (Marco Aurelio) · *Las siete leyes espirituales del éxito* (Deepak Chopra) · *El peregrino* (Paulo Coelho).
 
+## Agenda del día (PDF que sube el CEO en Foco) — SIEMPRE revisar si existe
+
+Antes de priorizar, el MD **revisa si el CEO subió su agenda/calendario del día**. La agenda se
+guarda como un insumo especial en `insumos_pendientes` con `company_id = 'agenda'` y `kind = 'agenda'`;
+`client` es la **fecha ISO** (`YYYY-MM-DD`) y el PDF está en `storage_path`.
+
+Si existe la agenda de hoy:
+
+1. **Leer el PDF** y extraer las reuniones: `hora` (HH:MM), `dur` (minutos, por defecto 60), `titulo`
+   (con quién / sobre qué), y el **nivel de atención** que exige cada una:
+   - `alta` = requiere toda su atención (negociación, cliente clave, decisión).
+   - `media` = atención parcial (seguimiento, comité de rutina).
+   - `ninguna` = poca/ninguna atención (informativa, oyente) → **hueco para avanzar en paralelo**.
+2. **Escribir** las reuniones extraídas en `raw_text` de ESA fila (PATCH), como JSON:
+   `[{"hora":"09:00","dur":60,"titulo":"…","atencion":"alta"}, …]`. Así la app las carga en la
+   Agenda de Foco (botón "Cargar en la agenda").
+3. **Validar y AJUSTAR las prioridades del día** contra la agenda:
+   - Si el CEO tiene **poco tiempo libre** (muchas reuniones de atención alta/media), reducir el Top-3
+     del foco a lo esencial y **empujar a `espera`/otro día** lo que no sea crítico.
+   - En los **huecos libres** y en las reuniones de **atención `ninguna`**, sugerir avanzar las tareas
+     marcadas **"En paralelo"** (colas de la IA, desarrollo que corre solo) y las de tipo `Administrativa`
+     rápidas (trámites) — nunca trabajo que exija foco profundo.
+   - Señalar **conflictos**: una entrega con vencimiento hoy que choca con un día lleno de reuniones →
+     proponer mover la fecha (con motivo) o delegar.
+4. Resumir todo en un breve **"Plan del día"** dentro del reporte del run (reuniones por atención +
+   dónde caben las tareas de fondo + qué se reprioriza).
+
+Si NO hay agenda para hoy, se prioriza normal (la agenda es opcional).
+
 ## Priorizacion de tareas (SIEMPRE, despues de analizar)
 
 Cada vez que se analizan tareas o documentos nuevos y ya estan depuradas/asignadas, el MD

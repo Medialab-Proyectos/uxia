@@ -83,6 +83,10 @@ const ATENCION = {
   media:   { short: "Media", desc: "Atención parcial",          tone: { bg: "#FFFAEB", border: "#FEDF89", text: "#B54708" } },
   ninguna: { short: "Poca",  desc: "Poca/ninguna — puedes avanzar en paralelo", tone: { bg: "#ECFDF3", border: "#A6F4C5", text: "#067647" } },
 };
+const MEET_DURATIONS = [[30, "30 min"], [60, "1 h"], [90, "1 h 30"], [120, "2 h"]];
+const hhmmToMin = (h) => (/^\d{1,2}:\d{2}$/.test(h || "") ? (+h.split(":")[0]) * 60 + (+h.split(":")[1]) : null);
+const minToHhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const fmtDur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60}` : ""}` : `${m} min`);
 
 // --- Horas laborales Colombia -------------------------------------------------
 // Jornada 8:00–12:00 y 13:00–17:00 (8h, 1h de almuerzo), lunes a viernes,
@@ -631,14 +635,47 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setAgenda(next);
     try { localStorage.setItem(`uxia.agenda.${todayIso()}`, JSON.stringify(next)); } catch { /* ignore */ }
   }, []);
-  const [newMeet, setNewMeet] = useState({ hora: "", titulo: "", atencion: "media" });
+  const [newMeet, setNewMeet] = useState({ hora: "", dur: 60, titulo: "", atencion: "media" });
   const addMeeting = () => {
     const titulo = newMeet.titulo.trim();
     if (!titulo) return;
-    persistAgenda([...agenda, { id: `m-${Date.now()}`, hora: newMeet.hora || "", titulo, atencion: newMeet.atencion }]);
-    setNewMeet({ hora: "", titulo: "", atencion: newMeet.atencion });
+    persistAgenda([...agenda, { id: `m-${Date.now()}`, hora: newMeet.hora || "", dur: Number(newMeet.dur) || 60, titulo, atencion: newMeet.atencion }]);
+    setNewMeet({ hora: "", dur: newMeet.dur, titulo: "", atencion: newMeet.atencion });
   };
   const removeMeeting = (id) => persistAgenda(agenda.filter((m) => m.id !== id));
+  // Agenda como PDF: el CEO sube su calendario; el MD diario lo lee y ajusta prioridades, y puede
+  // devolver las reuniones extraídas (raw_text JSON) para cargarlas aquí.
+  const [agendaDoc, setAgendaDoc] = useState(null);
+  const [agendaBusy, setAgendaBusy] = useState(false);
+  const agendaInputRef = React.useRef(null);
+  useEffect(() => {
+    if (!token || !opsData.opsDataReady()) return;
+    opsData.getAgendaDia(token, todayIso()).then(setAgendaDoc).catch(() => {});
+  }, [token]);
+  const uploadAgenda = async (file) => {
+    if (!file) return;
+    setAgendaBusy(true);
+    try {
+      await opsData.saveAgendaDia(token, { file, dateIso: todayIso() });
+      const fresh = await opsData.getAgendaDia(token, todayIso());
+      setAgendaDoc(fresh);
+      setNotice("Agenda subida. El MD la procesará en la próxima corrida diaria y ajustará tus prioridades.");
+    } catch (e) {
+      setNotice(`No se pudo subir la agenda: ${e?.message || "error"}.`);
+    } finally { setAgendaBusy(false); if (agendaInputRef.current) agendaInputRef.current.value = ""; }
+  };
+  const removeAgendaDoc = async () => {
+    if (!agendaDoc?.id) return;
+    setAgendaBusy(true);
+    try { await opsData.deleteAgendaDia(token, agendaDoc.id); setAgendaDoc(null); } catch { /* ignore */ } finally { setAgendaBusy(false); }
+  };
+  const importAgendaFromDoc = () => {
+    const ms = (agendaDoc?.meetings || []).map((m, i) => ({
+      id: `md-${i}-${Date.now()}`, hora: m.hora || "", dur: Number(m.dur) || 60,
+      titulo: m.titulo || m.title || "Reunión", atencion: ["alta", "media", "ninguna"].includes(m.atencion) ? m.atencion : "media",
+    }));
+    if (ms.length) persistAgenda(ms);
+  };
   const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
   const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
   const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
@@ -836,6 +873,28 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const parallelTasks = useMemo(() => tasks.filter((t) => t.status !== "done" && parallelIds.has(t.id)), [tasks, parallelIds]);
   const setFoco = (id) => { setFocoEmpresa(id); try { if (id) localStorage.setItem(focoKey, id); else localStorage.removeItem(focoKey); } catch { /* ignore */ } };
 
+  // Línea de tiempo del día: reuniones con hora ordenadas + HUECOS libres entre ellas (para foco).
+  const agendaTimeline = useMemo(() => {
+    const timed = agenda.filter((m) => hhmmToMin(m.hora) != null)
+      .map((m) => ({ ...m, start: hhmmToMin(m.hora), end: hhmmToMin(m.hora) + (Number(m.dur) || 60) }))
+      .sort((a, b) => a.start - b.start);
+    const untimed = agenda.filter((m) => hhmmToMin(m.hora) == null);
+    const items = [];
+    for (let i = 0; i < timed.length; i++) {
+      items.push({ type: "meet", ...timed[i] });
+      const next = timed[i + 1];
+      if (next) { const gap = next.start - timed[i].end; if (gap >= 20) items.push({ type: "gap", start: timed[i].end, end: next.start, mins: gap }); }
+    }
+    return { items, untimed, freeMins: items.filter((x) => x.type === "gap").reduce((s, x) => s + x.mins, 0) };
+  }, [agenda]);
+  // A cada reunión de POCA atención se le asigna (en orden) una tarea en paralelo concreta.
+  const parallelByMeeting = useMemo(() => {
+    const map = {};
+    const low = [...agenda].filter((m) => m.atencion === "ninguna").sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99"));
+    low.forEach((m, i) => { if (parallelTasks[i]) map[m.id] = parallelTasks[i]; });
+    return map;
+  }, [agenda, parallelTasks]);
+
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
   const activeCompanyClients = activeClients(company);
   const companyTasks = tasks.filter((task) => task.companyId === company?.id);
@@ -963,7 +1022,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         }
         await opsData.deleteInsumo(token, insumo.id);
       }
-      const pendingImages = pending.filter((item) => item.kind !== "texto").length;
+      const pendingImages = pending.filter((item) => item.kind !== "texto" && item.kind !== "agenda").length;
       if (created.length) {
         setActiveView("tasks");
         setActiveStatus("open");
@@ -1805,12 +1864,51 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   <span className="text-[11px] font-semibold text-[#067647]">Hay huecos de poca atención → adelanta lo que corre en paralelo.</span>
                 )}
               </div>
-              <p className="mt-0.5 text-xs text-[#8b8272]">Marca el nivel de atención de cada reunión. En las de poca/ninguna atención puedes adelantar tareas en paralelo (colas de la IA, dev que corre solo).</p>
+              <p className="mt-0.5 text-xs text-[#8b8272]">Sube tu agenda del día en PDF: el <strong>MD diario la lee y ajusta tus prioridades</strong>. También puedes cargar reuniones a mano. En las de poca/ninguna atención puedes adelantar tareas en paralelo.</p>
+
+              {/* Agenda como PDF → la procesa el MD diario (revisa si existe y ajusta prioridades). */}
+              <div className="mt-2 rounded-lg border border-dashed border-[#BBD8DA] bg-[#F5FAFA] p-2.5">
+                <input ref={agendaInputRef} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => uploadAgenda(e.target.files?.[0])} />
+                {!agendaDoc ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-[#5b6b6c]">Agenda del día en PDF (opcional). El MD la revisará en la próxima corrida y ajustará tus prioridades.</span>
+                    <button type="button" onClick={() => agendaInputRef.current?.click()} disabled={agendaBusy}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-[#17727A] disabled:opacity-40">
+                      <Paperclip size={13} /> {agendaBusy ? "Subiendo…" : "Subir agenda (PDF)"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5 text-xs text-[#344054]">
+                      <FileText size={14} className="shrink-0 text-[#17727A]" />
+                      <a href={agendaDoc.url} target="_blank" rel="noreferrer" className="truncate font-semibold underline decoration-dotted">{agendaDoc.fileName}</a>
+                      {agendaDoc.meetings?.length ? (
+                        <span className="shrink-0 rounded-full bg-[#E5F5EE] px-2 py-0.5 text-[10px] font-bold text-[#067647]">MD leyó {agendaDoc.meetings.length} reunión(es)</span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-[#FFF4DE] px-2 py-0.5 text-[10px] font-bold text-[#8A5700]">pendiente de procesar por el MD</span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      {agendaDoc.meetings?.length > 0 && (
+                        <button type="button" onClick={importAgendaFromDoc} className="inline-flex items-center gap-1 rounded-md bg-[#17727A] px-2.5 py-1.5 text-xs font-semibold text-white">Cargar en la agenda</button>
+                      )}
+                      <button type="button" onClick={() => agendaInputRef.current?.click()} disabled={agendaBusy} className="text-xs font-semibold text-[#667085]">Reemplazar</button>
+                      <button type="button" onClick={removeAgendaDoc} disabled={agendaBusy} title="Quitar" className="text-[#98A2B3] hover:text-[#B42318]"><Trash2 size={14} /></button>
+                    </span>
+                  </div>
+                )}
+              </div>
 
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <label className="text-[11px] font-semibold text-[#667085]">Hora
                   <input type="time" value={newMeet.hora} onChange={(e) => setNewMeet({ ...newMeet, hora: e.target.value })}
                     className="mt-0.5 block rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm font-normal text-[#344054]" />
+                </label>
+                <label className="text-[11px] font-semibold text-[#667085]">Dura
+                  <select value={newMeet.dur} onChange={(e) => setNewMeet({ ...newMeet, dur: Number(e.target.value) })}
+                    className="mt-0.5 block rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm font-normal text-[#344054]">
+                    {MEET_DURATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
                 </label>
                 <label className="min-w-0 flex-1 text-[11px] font-semibold text-[#667085]">Reunión
                   <input value={newMeet.titulo} onChange={(e) => setNewMeet({ ...newMeet, titulo: e.target.value })}
@@ -1832,24 +1930,59 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               </div>
 
               {agenda.length > 0 ? (
-                <ul className="mt-3 space-y-1.5">
-                  {[...agenda].sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99")).map((m) => {
-                    const a = ATENCION[m.atencion] || ATENCION.media;
-                    return (
-                      <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
-                        <span className="w-12 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{m.hora || "—"}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{m.titulo}</span>
-                        {m.atencion === "ninguna" && parallelTasks.length > 0 && (
-                          <span className="shrink-0 text-[11px] font-semibold text-[#067647]">↳ en paralelo</span>
-                        )}
-                        <span className="shrink-0 rounded-full border bg-white px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: a.tone.border, color: a.tone.text }}>{a.short}</span>
-                        <button type="button" onClick={() => removeMeeting(m.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <>
+                  {agendaTimeline.freeMins > 0 && (
+                    <p className="mt-3 text-[11px] font-semibold text-[#17727A]">{fmtDur(agendaTimeline.freeMins)} libres entre reuniones — protégelos para foco.</p>
+                  )}
+                  <ul className="mt-2 space-y-1.5">
+                    {agendaTimeline.items.map((it) => {
+                      if (it.type === "gap") {
+                        return (
+                          <li key={`gap-${it.start}`} className="flex items-center gap-2 rounded-md border border-dashed border-[#BBD8DA] bg-[#F5FAFA] px-2.5 py-1.5">
+                            <Target size={13} className="shrink-0 text-[#17727A]" />
+                            <span className="text-[11px] font-semibold text-[#17727A]">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)}) → foco</span>
+                          </li>
+                        );
+                      }
+                      const a = ATENCION[it.atencion] || ATENCION.media;
+                      const sug = parallelByMeeting[it.id];
+                      return (
+                        <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{it.hora || "—"}<span className="ml-1 text-[10px] font-semibold opacity-70">{fmtDur(Number(it.dur) || 60)}</span></span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{it.titulo}</span>
+                            <span className="shrink-0 rounded-full border bg-white px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: a.tone.border, color: a.tone.text }}>{a.short}</span>
+                            <button type="button" onClick={() => removeMeeting(it.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
+                          </div>
+                          {it.atencion === "ninguna" && (
+                            sug ? (
+                              <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(sug.companyId); setHighlightTaskId(sug.id); }}
+                                className="mt-1.5 flex w-full items-center gap-1.5 rounded border border-[#A6F4C5] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#067647]">
+                                <Layers size={12} className="shrink-0" /> Avanza en paralelo: <span className="min-w-0 flex-1 truncate">{sug.title}</span>
+                              </button>
+                            ) : (
+                              <p className="mt-1 text-[11px] font-semibold text-[#067647]">↳ hueco para avanzar en paralelo (marca tareas “En paralelo”).</p>
+                            )
+                          )}
+                        </li>
+                      );
+                    })}
+                    {/* Reuniones sin hora, al final */}
+                    {agendaTimeline.untimed.map((m) => {
+                      const a = ATENCION[m.atencion] || ATENCION.media;
+                      return (
+                        <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
+                          <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>—</span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{m.titulo}</span>
+                          <span className="shrink-0 rounded-full border bg-white px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: a.tone.border, color: a.tone.text }}>{a.short}</span>
+                          <button type="button" onClick={() => removeMeeting(m.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               ) : (
-                <p className="mt-3 text-xs text-[#98A2B3]">Sin reuniones cargadas. Agrega las de hoy para proteger tu foco y saber dónde puedes avanzar en paralelo.</p>
+                <p className="mt-3 text-xs text-[#98A2B3]">Sin reuniones cargadas. Sube el PDF de tu agenda o agrégalas a mano para proteger tu foco y saber dónde puedes avanzar en paralelo.</p>
               )}
             </div>
 
