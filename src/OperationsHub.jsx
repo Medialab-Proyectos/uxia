@@ -3287,8 +3287,8 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
         </label>
         <div>
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Tipo de tarea</span>
-          {/* Carrusel horizontal (scroll con el dedo) en responsive */}
-          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
+          {/* Envuelve (no scroll horizontal) para que NINGÚN tipo quede recortado contra el borde. */}
+          <div className="flex flex-wrap gap-1.5">
             {scopeOptions.map((cat) => {
               const on = task.category === cat;
               return (
