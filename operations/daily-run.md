@@ -258,11 +258,13 @@ Si existe la agenda de hoy:
      marcadas **"En paralelo"** (colas de la IA, desarrollo que corre solo) y las de tipo `Administrativa`
      rápidas (trámites) — nunca trabajo que exija foco profundo.
    - **Conflictos de reuniones (pueden ser VARIOS en un día):** dos o más reuniones que se cruzan en
-     horario. El CEO NO puede estar en dos a la vez, así que la ÚNICA salida es **DELEGAR** (no "elegir
-     a cuál va"): se mantiene la de **mayor valor/atención** y se **delega la(s) otra(s)** en quien
-     pueda cubrirla (equipo interno, líder del subproyecto, un asistente clave de esa reunión). En el
-     `titulo` de la reunión delegada agregar `"(delegar → <a quién, si se sabe>)"` y dejarlo explícito
-     en el Plan del día. **Revisar TODOS los cruces del día**, no solo el primero.
+     horario. El CEO no puede estar en dos a la vez → hay que **delegar** una. PERO **SOLO EL CEO
+     decide qué delega y a quién**: el MD **NO lo decide ni lo asigna**. El MD únicamente **MARCA el
+     choque** en las reuniones implicadas (en el `titulo`: `"(⚠ choque HH:MM)"`) y lo deja explícito en
+     el Plan del día para que el CEO resuelva. Puede, como apoyo, **mencionar** cuál es más delegable
+     (tiene dueño/equipo que la cubre) pero **sin decidir por él**. **Revisar TODOS los cruces del
+     día**, no solo el primero. En la app, el CEO marca la reunión como "Delegada" y esa deja de
+     ocupar su tiempo.
    - **Conflicto tarea vs. día lleno:** una entrega que vence hoy y no cabe en los huecos → proponer
      mover la fecha (con motivo) o delegar la tarea.
 3. **Redactar el "Plan del día"** en texto: 3–6 líneas en español claro — carga de reuniones por

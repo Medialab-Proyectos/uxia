@@ -704,6 +704,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   };
   const removeMeeting = (id) => persistAgenda(agenda.filter((m) => m.id !== id));
   const updateMeeting = (id, patch) => persistAgenda(agenda.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  // Delegar/undelegar una reunión (SOLO lo hace el CEO). Delegada = no ocupa su tiempo.
+  const toggleDelegar = (id) => persistAgenda(agenda.map((m) => (m.id === id ? { ...m, delegada: !m.delegada } : m)));
   // Agenda como PDF: el CEO sube su calendario; el MD diario lo lee y ajusta prioridades, y puede
   // devolver las reuniones extraídas (raw_text JSON) para cargarlas aquí.
   const [agendaDoc, setAgendaDoc] = useState(null);
@@ -1024,6 +1026,9 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     let cursor = dayStart;
     for (let i = 0; i < timed.length; i++) {
       const m = timed[i];
+      // Una reunión DELEGADA (solo el CEO la marca) no ocupa su tiempo: se muestra pero no bloquea el
+      // hueco ni mueve el cursor → ese espacio queda libre para foco.
+      if (m.delegada) { items.push(m); continue; }
       if (m.start - cursor >= GAP_MIN) items.push({ type: "gap", start: cursor, end: m.start, mins: m.start - cursor });
       items.push(m);
       cursor = Math.max(cursor, m.end);
@@ -2230,14 +2235,17 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         );
                       }
                       const isLunch = it.almuerzo || /almuerzo/i.test(it.titulo || "");
+                      const isDeleg = !!it.delegada;
                       const a = isLunch ? { tone: { bg: "#FFF7EF", border: "#F2C879", text: "#8A5700" } } : (ATENCION[it.atencion] || ATENCION.media);
-                      const sug = isLunch ? null : (parallelByMeeting[it.id] || slotRecs[it.id]);
+                      const sug = (isLunch || isDeleg) ? null : (parallelByMeeting[it.id] || slotRecs[it.id]);
                       return (
-                        <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
+                        <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg, opacity: isDeleg ? 0.6 : 1 }}>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{it.hora || "—"}<span className="ml-1 text-[10px] font-semibold opacity-70">{fmtDur(Number(it.dur) || 60)}</span></span>
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{isLunch ? "🍽 " : ""}{it.titulo}</span>
-                            {isLunch ? (
+                            <span className={`min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939] ${isDeleg ? "line-through" : ""}`}>{isLunch ? "🍽 " : ""}{it.titulo}</span>
+                            {isDeleg ? (
+                              <span className="shrink-0 rounded-full border border-[#B7A6E0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#6941C6]">Delegada</span>
+                            ) : isLunch ? (
                               <span className="shrink-0 rounded-full border border-[#F2C879] bg-white px-2 py-0.5 text-[10px] font-bold text-[#8A5700]">Descanso</span>
                             ) : (
                               <select value={it.atencion} onChange={(e) => updateMeeting(it.id, { atencion: e.target.value })} title="Nivel de atención"
@@ -2247,9 +2255,15 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                                 <option value="ninguna">Poca</option>
                               </select>
                             )}
+                            {!isLunch && (
+                              <button type="button" onClick={() => toggleDelegar(it.id)} title={isDeleg ? "Cancelar delegación" : "Delegar (libera tu tiempo)"}
+                                className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${isDeleg ? "border-[#6941C6] text-[#6941C6]" : "border-[#D0D5DD] text-[#667085] hover:border-[#6941C6] hover:text-[#6941C6]"}`}>
+                                <UserRound size={11} /> {isDeleg ? "Delegada" : "Delegar"}
+                              </button>
+                            )}
                             <button type="button" onClick={() => removeMeeting(it.id)} title={isLunch ? "Quitar almuerzo" : "Quitar"} className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
                           </div>
-                          {!isLunch && it.atencion === "ninguna" && (
+                          {!isLunch && !isDeleg && it.atencion === "ninguna" && (
                             sug ? (
                               <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(sug.companyId); setHighlightTaskId(sug.id); }}
                                 className="mt-1.5 flex w-full items-center gap-1.5 rounded border border-[#A6F4C5] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#067647]">
