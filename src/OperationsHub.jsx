@@ -978,6 +978,29 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     low.forEach((m, i) => { if (parallelTasks[i]) map[m.id] = parallelTasks[i]; });
     return map;
   }, [agenda, parallelTasks]);
+  // Recomendaciones de tareas por HORA (sin marcar nada a mano): huecos libres → foco profundo
+  // (tareas de mayor prioridad, la empresa del día primero); reuniones de POCA atención → algo
+  // ligero (en paralelo, administrativo o trámite) que se puede adelantar mientras se escucha.
+  const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
+  const deepPool = useMemo(() => {
+    const pool = tasks.filter((t) => RECO_ACTIVE(t) && t.status !== "blocked");
+    const foco = pool.filter((t) => t.companyId === focoId).sort((a, b) => scoreTask(b) - scoreTask(a));
+    const rest = pool.filter((t) => t.companyId !== focoId).sort((a, b) => scoreTask(b) - scoreTask(a));
+    return [...foco, ...rest];
+  }, [tasks, focoId]);
+  const lightPool = useMemo(() => tasks
+    .filter((t) => RECO_ACTIVE(t) && (parallelIds.has(t.id) || t.category === "Administrativa" || t.category === "Apoyo" || t.designPoints === 0.5))
+    .sort((a, b) => scoreTask(b) - scoreTask(a)), [tasks, parallelIds]);
+  // Asigna una tarea DISTINTA a cada hueco/reunión de poca atención, en orden del día.
+  const slotRecs = useMemo(() => {
+    const map = {}; let gi = 0, pi = 0;
+    for (const it of agendaTimeline.items) {
+      if (it.type === "gap") { if (deepPool[gi]) map[`gap-${it.start}`] = deepPool[gi]; gi++; }
+      else if (it.atencion === "ninguna") { if (lightPool[pi]) map[it.id] = lightPool[pi]; pi++; }
+    }
+    return map;
+  }, [agendaTimeline, deepPool, lightPool]);
+  const markLunch = (startMin) => persistAgenda([...agenda, { id: `lunch-${Date.now()}`, hora: minToHhmm(startMin), dur: 60, titulo: "Almuerzo", atencion: "ninguna" }]);
   // Plan del día: síntesis para la franja de Foco (reuniones por atención + tiempo libre + paralelo).
   const planDia = useMemo(() => {
     const cnt = { alta: 0, media: 0, ninguna: 0 };
@@ -2099,15 +2122,26 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   <ul className="mt-2 space-y-1.5">
                     {agendaTimeline.items.map((it) => {
                       if (it.type === "gap") {
+                        const rec = slotRecs[`gap-${it.start}`];
                         return (
-                          <li key={`gap-${it.start}`} className="flex items-center gap-2 rounded-md border border-dashed border-[#BBD8DA] bg-[#F5FAFA] px-2.5 py-1.5">
-                            <Target size={13} className="shrink-0 text-[#17727A]" />
-                            <span className="text-[11px] font-semibold text-[#17727A]">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)}) → foco</span>
+                          <li key={`gap-${it.start}`} className="rounded-md border border-dashed border-[#BBD8DA] bg-[#F5FAFA] px-2.5 py-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Target size={13} className="shrink-0 text-[#17727A]" />
+                              <span className="text-[11px] font-semibold text-[#17727A]">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)}) → foco</span>
+                              <button type="button" onClick={() => markLunch(it.start)} className="ml-auto rounded-full border border-[#D0D5DD] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#667085] hover:border-[#17727A] hover:text-[#17727A]">🍽 Marcar almuerzo</button>
+                            </div>
+                            {rec && (
+                              <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(rec.companyId); setHighlightTaskId(rec.id); }}
+                                className="mt-1 flex w-full items-center gap-1.5 rounded border border-[#BBD8DA] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#0F5C63]">
+                                <Target size={11} className="shrink-0" /> Aprovecha para: <span className="min-w-0 flex-1 truncate">{rec.title}</span>
+                                <span className="shrink-0 text-[10px] text-[#98A2B3]">{nameOf(rec.companyId)}</span>
+                              </button>
+                            )}
                           </li>
                         );
                       }
                       const a = ATENCION[it.atencion] || ATENCION.media;
-                      const sug = parallelByMeeting[it.id];
+                      const sug = parallelByMeeting[it.id] || slotRecs[it.id];
                       return (
                         <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
