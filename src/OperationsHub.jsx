@@ -996,13 +996,14 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // concentración SIN enterrar una tarea de otra empresa que valga claramente más (p. ej. un trámite
   // administrativo de MediaLab que vence hoy). Así lo de más valor siempre aparece.
   const FOCO_BONUS = 6;
+  const sVal = (t) => scoreTask(t).score; // scoreTask devuelve {score, reasons}: usar .score
   const deepPool = useMemo(() => tasks
     .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked")
-    .sort((a, b) => (scoreTask(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (scoreTask(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
+    .sort((a, b) => (sVal(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (sVal(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
     [tasks, focoId]);
   const lightPool = useMemo(() => tasks
     .filter((t) => RECO_ACTIVE(t) && (parallelIds.has(t.id) || t.category === "Administrativa" || t.category === "Apoyo" || t.designPoints === 0.5))
-    .sort((a, b) => scoreTask(b) - scoreTask(a)), [tasks, parallelIds]);
+    .sort((a, b) => sVal(b) - sVal(a)), [tasks, parallelIds]);
   // Asigna una tarea DISTINTA a cada hueco/reunión de poca atención, en orden del día.
   const slotRecs = useMemo(() => {
     const map = {}; let gi = 0, pi = 0;
@@ -1984,6 +1985,14 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   <p className="text-sm font-bold">{parallelTasks.length}<span className="ml-1 text-[11px] font-semibold text-[#DDF1F2]">{planDia.lowSlots > 0 ? `· ${planDia.lowSlots} hueco(s)` : ""}</span></p>
                 </div>
               </div>
+              {focoSugerida && (
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[#EAF7F8]">
+                  <span>⭐ Recomendada por prioridad hoy: <strong>{nameOf(focoSugerida)}</strong> <span className="text-[#BEE7EA]">(la de mayor valor pendiente)</span></span>
+                  {focoId === focoSugerida
+                    ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">ya es tu foco ✓</span>
+                    : <button type="button" onClick={() => setFoco(focoSugerida)} className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[#0F5C63]">Enfocar aquí</button>}
+                </p>
+              )}
               <p className="mt-2 text-[12px] leading-snug text-[#EAF7F8]">
                 {planDia.total === 0
                   ? `Sin reuniones cargadas: día despejado para foco. Cierra el incremento completo de ${focoCompany?.name || "tu empresa del día"}.`
