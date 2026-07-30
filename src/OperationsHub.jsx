@@ -687,6 +687,15 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setAgenda(next);
     try { localStorage.setItem(`uxia.agenda.${todayIso()}`, JSON.stringify(next)); } catch { /* ignore */ }
   }, []);
+  // Pushes CUMPLIDOS hoy (mensajes ya enviados): checklist por día. Se persiste local + en el foco (DB).
+  const [pushesDone, setPushesDone] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem(`uxia.pushdone.${todayIso()}`) || "[]")); } catch { return new Set(); } });
+  const togglePushDone = (id) => setPushesDone((prev) => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id);
+    try { localStorage.setItem(`uxia.pushdone.${todayIso()}`, JSON.stringify([...n])); } catch { /* ignore */ }
+    return n;
+  });
+  // Minuto actual (para desactivar en la agenda las franjas cuya hora ya pasó). Solo tictea en Foco.
+  const [nowMin, setNowMin] = useState(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
   // Jornada laboral diaria (inicio–fin): el tiempo libre para foco se calcula dentro de esta ventana,
   // no solo entre reuniones (antes de la primera y después de la última también cuentan).
   const [jornada, setJornada] = useState(() => {
@@ -783,7 +792,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     if (!focusHydrated.current || !token || !opsData.opsDataReady()) return;
     const t = setTimeout(() => {
       const today = todayIso();
-      const merged = { ...focusDaysRef.current, [today]: { empresa: focoEmpresa || "", agenda, plan: planTexto } };
+      const merged = { ...focusDaysRef.current, [today]: { empresa: focoEmpresa || "", agenda, plan: planTexto, pushesDone: [...pushesDone] } };
       const keys = Object.keys(merged).sort().slice(-10);
       const pruned = {};
       for (const k of keys) pruned[k] = merged[k];
@@ -791,7 +800,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       opsData.saveFocus(token, { jornada, parallel: [...parallelIds], days: pruned }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [jornada, parallelIds, focoEmpresa, agenda, planTexto, token]);
+  }, [jornada, parallelIds, focoEmpresa, agenda, planTexto, pushesDone, token]);
   const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
   const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
   const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
@@ -853,6 +862,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
           if (dToday.empresa) setFocoEmpresa(dToday.empresa);
           if (Array.isArray(dToday.agenda) && dToday.agenda.length) setAgenda(dToday.agenda);
           if (dToday.plan) setPlanTexto(dToday.plan);
+          if (Array.isArray(dToday.pushesDone)) setPushesDone(new Set(dToday.pushesDone));
         }
         focusHydrated.current = true;
       } catch {
@@ -927,6 +937,15 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     opsData.listGrowthPractices(token).then(setGrowthPractices).catch(() => {});
     opsData.listLeads(token).then(setLeads).catch(() => {});
   }, [token]);
+
+  // Reloj por minuto SOLO en la vista Foco: mantiene actualizado qué franjas de la agenda ya pasaron.
+  useEffect(() => {
+    if (activeView !== "foco") return undefined;
+    const tick = () => { const d = new Date(); setNowMin(d.getHours() * 60 + d.getMinutes()); };
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+  }, [activeView]);
 
   // Líderes de subproyecto (empleados MediaLab que pueden crear tareas/insumos en su subproyecto).
   async function assignLead(companyId, client, email) {
@@ -2217,20 +2236,32 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 </button>
               </div>
 
-              {pushList.length > 0 && (
-                <div className="mt-3 rounded-lg border border-[#F2C879] bg-[#FFF9EE] p-2.5">
-                  <p className="text-[11px] font-bold text-[#8A5700]">👋 Pushes rápidos (solo un mensaje — no ocupan tu foco): {pushList.length}</p>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {pushList.map((t) => (
-                      <button key={t.id} type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }}
-                        title={`${t.title} · ${nameOf(t.companyId)} · ${t.status === "review" || t.status === "verificacion" ? "por entregar" : (taskIsOverdue(t) ? "vencida" : t.dueDate === todayIso() ? "vence hoy" : "vence " + displayDate(t.dueDate))}`}
-                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#EBB65C] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#8A5700]">
-                        <UserRound size={11} className="shrink-0" /> {t._resp.split(" ")[0]}: <span className="min-w-0 truncate">{t.title}</span>
-                      </button>
-                    ))}
+              {pushList.length > 0 && (() => {
+                const pendientes = pushList.filter((t) => !pushesDone.has(t.id)).length;
+                return (
+                  <div className="mt-3 rounded-lg border border-[#F2C879] bg-[#FFF9EE] p-2.5">
+                    <p className="text-[11px] font-bold text-[#8A5700]">👋 Pushes rápidos (solo un mensaje — no ocupan tu foco): {pendientes} pendiente(s){pendientes < pushList.length ? ` · ${pushList.length - pendientes} hecho(s)` : ""}</p>
+                    <ul className="mt-1.5 space-y-1">
+                      {pushList.map((t) => {
+                        const done = pushesDone.has(t.id);
+                        return (
+                          <li key={t.id} className="flex items-center gap-2" style={{ opacity: done ? 0.5 : 1 }}>
+                            <button type="button" onClick={() => togglePushDone(t.id)} title={done ? "Marcar como pendiente" : "Ya le escribí (cumplido)"}
+                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border" style={{ borderColor: "#EBB65C", background: done ? "#8A5700" : "#fff" }}>
+                              {done && <Check size={11} className="text-white" />}
+                            </button>
+                            <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }}
+                              className={`flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 text-left text-[11px] font-semibold text-[#8A5700] ${done ? "line-through" : ""}`}>
+                              <UserRound size={11} className="shrink-0" /> {t._resp.split(" ")[0]}: <span className="min-w-0 truncate">{t.title}</span>
+                              <span className="shrink-0 text-[10px] font-normal text-[#B08A4A]">{t.status === "review" || t.status === "verificacion" ? "por entregar" : (taskIsOverdue(t) ? "vencida" : t.dueDate === todayIso() ? "vence hoy" : "vence " + displayDate(t.dueDate))}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               {agenda.length > 0 ? (
                 <>
                   {agendaTimeline.freeMins > 0 && (
@@ -2240,6 +2271,12 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                     {agendaTimeline.items.map((it) => {
                       if (it.type === "gap") {
                         const recs = slotRecs[`gap-${it.start}`] || [];
+                        const past = it.end <= nowMin;
+                        if (past) return (
+                          <li key={`gap-${it.start}`} className="rounded-md border border-dashed border-[#E4E7EC] bg-[#FAFAFA] px-2.5 py-1 opacity-50">
+                            <span className="text-[11px] text-[#98A2B3] line-through">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)})</span>
+                          </li>
+                        );
                         return (
                           <li key={`gap-${it.start}`} className="rounded-md border border-dashed border-[#BBD8DA] bg-[#F5FAFA] px-2.5 py-1.5">
                             <div className="flex flex-wrap items-center gap-2">
@@ -2262,8 +2299,9 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         );
                       }
                       if (it.type === "ritual") {
+                        const past = it.end <= nowMin;
                         return (
-                          <li key={it.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-[#D9CFF3] bg-[#F7F5FE] p-2">
+                          <li key={it.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-[#D9CFF3] bg-[#F7F5FE] p-2" style={{ opacity: past ? 0.5 : 1 }}>
                             <span className="w-24 shrink-0 text-sm font-bold tabular-nums text-[#6941C6]">{minToHhmm(it.start)}<span className="ml-1 text-[10px] font-semibold opacity-70">ritual</span></span>
                             <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(it.task.companyId); setHighlightTaskId(it.id); }}
                               className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm font-semibold text-[#1D2939]">
@@ -2277,13 +2315,14 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                       }
                       const isLunch = it.almuerzo || /almuerzo/i.test(it.titulo || "");
                       const isDeleg = !!it.delegada;
+                      const past = it.end <= nowMin;
                       const a = isLunch ? { tone: { bg: "#FFF7EF", border: "#F2C879", text: "#8A5700" } } : (ATENCION[it.atencion] || ATENCION.media);
-                      const sug = (isLunch || isDeleg) ? null : (parallelByMeeting[it.id] || slotRecs[it.id]);
+                      const sug = (isLunch || isDeleg || past) ? null : (parallelByMeeting[it.id] || slotRecs[it.id]);
                       return (
-                        <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg, opacity: isDeleg ? 0.6 : 1 }}>
+                        <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg, opacity: (isDeleg || past) ? 0.5 : 1 }}>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{it.hora || "—"}<span className="ml-1 text-[10px] font-semibold opacity-70">{fmtDur(Number(it.dur) || 60)}</span></span>
-                            <span className={`min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939] ${isDeleg ? "line-through" : ""}`}>{isLunch ? "🍽 " : ""}{it.titulo}</span>
+                            <span className={`min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939] ${(isDeleg || past) ? "line-through" : ""}`}>{isLunch ? "🍽 " : ""}{it.titulo}</span>
                             {isDeleg ? (
                               <span className="shrink-0 rounded-full border border-[#B7A6E0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#6941C6]">Delegada</span>
                             ) : isLunch ? (
