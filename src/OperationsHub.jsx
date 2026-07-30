@@ -9,6 +9,14 @@ import { effortPoints } from "./effort.js";
 import { notifyEvent } from "./notify.js";
 import { encodeCompanyToken } from "./companyLink.js";
 
+// Sello de compilación (lo inyecta Vite con `define`). Sirve para confirmar en la UI que el navegador
+// tiene la última versión y no un bundle viejo en caché.
+const BUILD_STAMP = (() => {
+  try { return new Date(typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : Date.now())
+    .toLocaleString("es-CO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+  catch { return "dev"; }
+})();
+
 const STATUS = {
   backlog: "Pendiente",
   ready: "Pendiente",
@@ -1848,6 +1856,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#667085]">Centro operativo</p>
             <h1 className="text-lg font-semibold leading-tight text-[#1D2939] sm:text-xl">Pipeline de proyectos MediaLab</h1>
             {saveStatus && <p className="mt-0.5 text-xs text-[#98A2B3]">{saveStatus}</p>}
+            <p className="mt-0.5 text-[10px] text-[#C4C9D4]" title="Sello de esta versión de la app. Si no coincide tras un cambio, recarga con Ctrl+Shift+R.">versión {BUILD_STAMP}</p>
           </div>
           <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
             <button
