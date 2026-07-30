@@ -648,6 +648,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [agendaDoc, setAgendaDoc] = useState(null);
   const [agendaBusy, setAgendaBusy] = useState(false);
   const agendaInputRef = useRef(null);
+  // Plan del día en texto que escribe el MD al procesar la agenda (se conserva por día).
+  const [planTexto, setPlanTexto] = useState(() => { try { return localStorage.getItem(`uxia.plandia.${todayIso()}`) || ""; } catch { return ""; } });
   useEffect(() => {
     if (!token || !opsData.opsDataReady()) return;
     (async () => {
@@ -655,15 +657,16 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         const doc = await opsData.getAgendaDia(token, todayIso());
         if (!doc) { setAgendaDoc(null); return; }
         const importedKey = `uxia.agenda.imported.${todayIso()}`;
-        // Ya analizada por el MD (trae reuniones): se CARGAN al día, se BORRA el archivo y el slot
-        // queda libre para subir una nueva. Solo una vez por día (bandera en localStorage).
-        if (doc.meetings?.length && !localStorage.getItem(importedKey)) {
-          const ms = doc.meetings.map((m, i) => ({
+        // Ya analizada por el MD (trae reuniones y/o plan): se CARGAN al día, se guarda el Plan del
+        // día, se BORRA el archivo y el slot queda libre. Solo una vez por día (bandera localStorage).
+        if ((doc.meetings?.length || doc.plan) && !localStorage.getItem(importedKey)) {
+          const ms = (doc.meetings || []).map((m, i) => ({
             id: `md-${i}-${Date.now()}`, hora: m.hora || "", dur: Number(m.dur) || 60,
             titulo: m.titulo || m.title || "Reunión",
             atencion: ["alta", "media", "ninguna"].includes(m.atencion) ? m.atencion : "media",
           }));
-          persistAgenda(ms);
+          if (ms.length) persistAgenda(ms);
+          if (doc.plan) { setPlanTexto(doc.plan); try { localStorage.setItem(`uxia.plandia.${todayIso()}`, doc.plan); } catch { /* ignore */ } }
           try { localStorage.setItem(importedKey, "1"); } catch { /* ignore */ }
           await opsData.deleteAgendaDia(token, doc.id).catch(() => {});
           setAgendaDoc(null); // consumida: espera una nueva
@@ -1874,6 +1877,12 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                     ? `Día cargado (${planDia.cnt.alta} de atención alta). Protege el Top-3 de ${focoCompany?.name || "tu foco"}${planDia.lowSlots > 0 ? ` y aprovecha ${planDia.lowSlots} hueco(s) para avanzar en paralelo` : "; delega lo que puedas"}.`
                     : `${planDia.total} reunión(es) y ${planDia.free > 0 ? `${fmtDur(planDia.free)} libres` : "poco tiempo libre"}. Enfócate en ${focoCompany?.name || "tu empresa del día"}; adelanta en paralelo en los huecos de poca atención.`}
               </p>
+              {planTexto && (
+                <details className="mt-2 rounded-lg bg-white/10 px-3 py-2" open>
+                  <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wide text-[#BEE7EA]">Plan del MD</summary>
+                  <p className="mt-1 whitespace-pre-wrap text-[12px] leading-snug text-[#EAF7F8]">{planTexto}</p>
+                </details>
+              )}
             </div>
 
             {focoCompany ? (

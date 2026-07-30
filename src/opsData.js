@@ -435,9 +435,13 @@ export async function getAgendaDia(token, dateIso) {
   }).catch(() => []);
   const row = asArray(rows)[0];
   if (!row) return null;
-  let meetings = [];
-  try { const p = JSON.parse(row.raw_text || "[]"); if (Array.isArray(p)) meetings = p; } catch { /* aún sin procesar por el MD */ }
-  return { ...mapInsumo(row), meetings };
+  let meetings = [], plan = "";
+  try {
+    const p = JSON.parse(row.raw_text || "[]");
+    if (Array.isArray(p)) meetings = p;
+    else if (p && typeof p === "object") { meetings = Array.isArray(p.meetings) ? p.meetings : []; plan = typeof p.plan === "string" ? p.plan : ""; }
+  } catch { /* aún sin procesar por el MD */ }
+  return { ...mapInsumo(row), meetings, plan };
 }
 export async function deleteAgendaDia(token, id) { return deleteInsumo(token, id); }
 

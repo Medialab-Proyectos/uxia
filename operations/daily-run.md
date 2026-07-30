@@ -230,11 +230,7 @@ Si existe la agenda de hoy:
    - `alta` = requiere toda su atención (negociación, cliente clave, decisión).
    - `media` = atención parcial (seguimiento, comité de rutina).
    - `ninguna` = poca/ninguna atención (informativa, oyente) → **hueco para avanzar en paralelo**.
-2. **Escribir** las reuniones extraídas en `raw_text` de ESA fila (PATCH), como JSON:
-   `[{"hora":"09:00","dur":60,"titulo":"…","atencion":"alta"}, …]`. **NO borrar la fila ni el archivo:**
-   la app detecta las reuniones, las carga en la Agenda de Foco y **ella misma borra el archivo**
-   (queda el espacio libre para una nueva agenda). El MD solo deja el `raw_text` listo.
-3. **Validar y AJUSTAR las prioridades del día** contra la agenda:
+2. **Validar y AJUSTAR las prioridades del día** contra la agenda:
    - Si el CEO tiene **poco tiempo libre** (muchas reuniones de atención alta/media), reducir el Top-3
      del foco a lo esencial y **empujar a `espera`/otro día** lo que no sea crítico.
    - En los **huecos libres** y en las reuniones de **atención `ninguna`**, sugerir avanzar las tareas
@@ -242,10 +238,20 @@ Si existe la agenda de hoy:
      rápidas (trámites) — nunca trabajo que exija foco profundo.
    - Señalar **conflictos**: una entrega con vencimiento hoy que choca con un día lleno de reuniones →
      proponer mover la fecha (con motivo) o delegar.
-4. Resumir todo en un breve **"Plan del día"** dentro del reporte del run (reuniones por atención +
-   dónde caben las tareas de fondo + qué se reprioriza).
+3. **Redactar el "Plan del día"** en texto: 3–6 líneas en español claro — carga de reuniones por
+   atención, dónde caben las tareas de fondo/paralelo, foco recomendado y qué se reprioriza hoy.
+4. **Escribir en `raw_text` de ESA fila** (PATCH) un JSON **objeto** con las reuniones **y** el plan:
+   `{"meetings":[{"hora":"09:00","dur":60,"titulo":"…","atencion":"alta"}, …], "plan":"Plan del día en texto…"}`.
+   **NO borrar la fila ni el archivo:** la app detecta reuniones+plan, los carga en Foco (franja
+   "Plan del día") y **ella misma borra el archivo** (queda libre para una nueva agenda). El MD solo
+   deja el `raw_text` listo. Incluir el mismo Plan del día también en el reporte del run.
 
-Si NO hay agenda para hoy, se prioriza normal (la agenda es opcional).
+Si NO hay agenda para hoy, se prioriza normal (la agenda es opcional), pero el run **igual** debe dejar
+un breve **Plan del día** en el reporte con el foco recomendado y qué avanzar.
+
+**El run actualiza TODO** (no solo la agenda): reuniones+plan del día, prioridades y foco, estados
+(`espera`/vencidas), señales MDSSP, `designPoints` de tareas activas, lista de crecimiento y fechas
+hábiles. La agenda es una entrada más que refina esa actualización; nada queda a medias.
 
 ## Priorizacion de tareas (SIEMPRE, despues de analizar)
 
