@@ -846,9 +846,13 @@ de `supabase/schema-insumos-pendientes.sql`).
    - **Tipo de tarea por CONTEXTO** (`category`): a partir de lo que pide el insumo, clasifica la
      tarea en UNA de estas categorías del alcance (usar EXACTAMENTE estos nombres): `Diseño UX/UI`,
      `Diseño gráfico`, `UX Research`, `Producto`, `Documentación`, `Gestión de proyecto`,
-     `Desarrollo de software`, `Apoyo`. Ponla en `category` y coherente con `role`. Cada tipo pesa
-     distinto por punto (ver src/effort.js): un punto de UX Research vale más horas que uno de Apoyo,
-     así que la categoría bien puesta también afina la carga/velocidad.
+     `Desarrollo de software`, `Administrativa`, `Apoyo`. Ponla en `category` y coherente con `role`.
+     Cada tipo pesa distinto por punto (ver src/effort.js): un punto de UX Research vale más horas que
+     uno de Apoyo, así que la categoría bien puesta también afina la carga/velocidad.
+     - `Administrativa` = trámites/gestiones internas de MediaLab importantes pero que NO son diseño ni
+       desarrollo del producto del cliente: p. ej. corregir certificados laborales, cargar/completar
+       costos en el sistema de contabilidad, pólizas, contratos, temas legales o de nómina. Va aquí,
+       nunca como `Gestión de proyecto` (esa es coordinación del proyecto del cliente).
    - **ACENTOS y ñ correctos (UTF-8)**: los títulos y descripciones se redactan en español bien
      escrito, con **todas las tildes y la ñ** (diseño, gestión, módulo, sesión, botón, propósito,
      también, acción…). NUNCA despojar los acentos ni escribir "GESTION"/"diseno"/"boton". El

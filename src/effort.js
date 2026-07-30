@@ -10,6 +10,7 @@ export const CATEGORY_WEIGHT = {
   "Producto": 1.0,
   "Documentación": 0.9,        // redacción de docs/specs: metódica, esfuerzo medio
   "Diseño gráfico": 0.8,
+  "Administrativa": 0.7,        // trámites/certificados/costos: importante pero de esfuerzo acotado
   "Gestión de proyecto": 0.6,
   "Apoyo": 0.5,                 // más liviano
 };

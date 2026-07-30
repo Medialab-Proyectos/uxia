@@ -61,7 +61,7 @@ function projectInitials(name) {
 
 // Categorías de trabajo: alcance del contrato por empresa + tipo de cada tarea.
 // En unas empresas MediaLab solo apoya diseño; en otras hace gestión total o desarrollo.
-const TASK_CATEGORIES = ["Diseño UX/UI", "Diseño gráfico", "UX Research", "Producto", "Documentación", "Gestión de proyecto", "Desarrollo de software", "Apoyo"];
+const TASK_CATEGORIES = ["Diseño UX/UI", "Diseño gráfico", "UX Research", "Producto", "Documentación", "Gestión de proyecto", "Desarrollo de software", "Administrativa", "Apoyo"];
 const CATEGORY_TONE = {
   "Diseño UX/UI": "#C11574",
   "Diseño gráfico": "#DD2590",
@@ -70,6 +70,7 @@ const CATEGORY_TONE = {
   "Documentación": "#4E5BA6",
   "Gestión de proyecto": "#17727A",
   "Desarrollo de software": "#1570EF",
+  "Administrativa": "#475467",
   "Apoyo": "#0D7A4F",
 };
 function categoryColor(category) {
