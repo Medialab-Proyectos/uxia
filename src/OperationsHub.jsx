@@ -915,6 +915,17 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     low.forEach((m, i) => { if (parallelTasks[i]) map[m.id] = parallelTasks[i]; });
     return map;
   }, [agenda, parallelTasks]);
+  // Plan del día: síntesis para la franja de Foco (reuniones por atención + tiempo libre + paralelo).
+  const planDia = useMemo(() => {
+    const cnt = { alta: 0, media: 0, ninguna: 0 };
+    let busy = 0;
+    agenda.forEach((m) => { cnt[m.atencion] = (cnt[m.atencion] || 0) + 1; busy += Number(m.dur) || 60; });
+    const gaps = agendaTimeline.items.filter((x) => x.type === "gap").length;
+    return { cnt, busy, total: agenda.length, free: agendaTimeline.freeMins, gaps, lowSlots: cnt.ninguna + gaps, cargado: (cnt.alta * 2 + cnt.media) >= 4 };
+  }, [agenda, agendaTimeline]);
+  const todayLabel = useMemo(() => {
+    try { return new Date().toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" }); } catch { return todayIso(); }
+  }, []);
 
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
   const activeCompanyClients = activeClients(company);
@@ -1832,6 +1843,39 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             la empresa del día + su top-3, y lo que corre en paralelo (no requiere tu foco). */}
         {activeView === "foco" && (
           <section className="mt-6 space-y-5">
+            {/* PLAN DEL DÍA — síntesis: foco + carga de reuniones + tiempo libre + paralelo. */}
+            <div className="rounded-xl border border-[#0F5C63] p-4 text-white" style={{ background: "linear-gradient(90deg,#0F5C63,#17727A)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#BEE7EA]"><ListChecks size={13} /> Plan del día</span>
+                <span className="text-[11px] font-semibold capitalize text-[#BEE7EA]">{todayLabel}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-lg bg-white/10 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#BEE7EA]">Foco</p>
+                  <p className="truncate text-sm font-bold">{focoCompany?.name || "Sin foco"}</p>
+                </div>
+                <div className="rounded-lg bg-white/10 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#BEE7EA]">Reuniones</p>
+                  <p className="text-sm font-bold">{planDia.total}{planDia.total > 0 && <span className="ml-1 text-[11px] font-semibold text-[#DDF1F2]">· {planDia.cnt.alta}A · {planDia.cnt.media}M · {planDia.cnt.ninguna}P</span>}</p>
+                </div>
+                <div className="rounded-lg bg-white/10 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#BEE7EA]">Libre p/ foco</p>
+                  <p className="text-sm font-bold">{planDia.free > 0 ? fmtDur(planDia.free) : "—"}</p>
+                </div>
+                <div className="rounded-lg bg-white/10 px-3 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#BEE7EA]">En paralelo</p>
+                  <p className="text-sm font-bold">{parallelTasks.length}<span className="ml-1 text-[11px] font-semibold text-[#DDF1F2]">{planDia.lowSlots > 0 ? `· ${planDia.lowSlots} hueco(s)` : ""}</span></p>
+                </div>
+              </div>
+              <p className="mt-2 text-[12px] leading-snug text-[#EAF7F8]">
+                {planDia.total === 0
+                  ? `Sin reuniones cargadas: día despejado para foco. Cierra el incremento completo de ${focoCompany?.name || "tu empresa del día"}.`
+                  : planDia.cargado
+                    ? `Día cargado (${planDia.cnt.alta} de atención alta). Protege el Top-3 de ${focoCompany?.name || "tu foco"}${planDia.lowSlots > 0 ? ` y aprovecha ${planDia.lowSlots} hueco(s) para avanzar en paralelo` : "; delega lo que puedas"}.`
+                    : `${planDia.total} reunión(es) y ${planDia.free > 0 ? `${fmtDur(planDia.free)} libres` : "poco tiempo libre"}. Enfócate en ${focoCompany?.name || "tu empresa del día"}; adelanta en paralelo en los huecos de poca atención.`}
+              </p>
+            </div>
+
             {focoCompany ? (
               <div className="rounded-xl border border-[#E8751A] bg-[#FFF7EF] p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
