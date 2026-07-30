@@ -248,7 +248,17 @@ Si existe la agenda de hoy:
 
 Para estimar los **huecos libres**, asumir la **jornada** del CEO (por defecto 08:00–18:00, ajustable
 en Foco): cuentan los espacios ANTES de la primera reunión, entre reuniones y DESPUÉS de la última
-hasta el fin de la jornada — no solo lo que queda entre reuniones.
+hasta el fin de la jornada — no solo lo que queda entre reuniones. Si el CEO cambia la jornada, en la
+siguiente corrida **reevaluar** huecos y foco.
+
+**Almuerzo:** reservar SIEMPRE un bloque `Almuerzo` de ~1 h en un hueco del mediodía (idealmente
+12:00–13:00, o el hueco libre más cercano), con `atencion: "ninguna"`. Va incluido en `meetings`.
+
+**Festivos y fines de semana (calendario colombiano):** si el día objetivo es **festivo** o fin de
+semana, **no se agenda trabajo** ese día. Pero si hay algo que **reportar o enviar** (un mensaje, una
+entrega, un aviso), **anticiparlo al día hábil ANTERIOR** — no dejarlo caer en el festivo. Usar el
+calendario de `scripts/businessDays.mjs` (ley Emiliani + festivos por Pascua) para saber el día hábil
+previo. Dejarlo dicho en el Plan del día.
 
 Si NO hay agenda para hoy, se prioriza normal (la agenda es opcional), pero el run **igual** debe dejar
 un breve **Plan del día** en el reporte con el foco recomendado y qué avanzar.

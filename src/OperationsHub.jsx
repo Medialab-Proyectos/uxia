@@ -641,6 +641,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     try { const j = JSON.parse(localStorage.getItem("uxia.jornada") || "null"); return (j && j.inicio && j.fin) ? j : { inicio: "08:00", fin: "18:00" }; }
     catch { return { inicio: "08:00", fin: "18:00" }; }
   });
+  const [jornadaChanged, setJornadaChanged] = useState(false);
   const setJornadaField = (k, v) => setJornada((prev) => { const n = { ...prev, [k]: v }; try { localStorage.setItem("uxia.jornada", JSON.stringify(n)); } catch { /* ignore */ } return n; });
   const [newMeet, setNewMeet] = useState({ hora: "", dur: 60, titulo: "", atencion: "media" });
   const addMeeting = () => {
@@ -650,6 +651,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setNewMeet({ hora: "", dur: newMeet.dur, titulo: "", atencion: newMeet.atencion });
   };
   const removeMeeting = (id) => persistAgenda(agenda.filter((m) => m.id !== id));
+  const updateMeeting = (id, patch) => persistAgenda(agenda.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   // Agenda como PDF: el CEO sube su calendario; el MD diario lo lee y ajusta prioridades, y puede
   // devolver las reuniones extraídas (raw_text JSON) para cargarlas aquí.
   const [agendaDoc, setAgendaDoc] = useState(null);
@@ -1956,13 +1958,16 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
 
               <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[#667085]">
                 <span className="inline-flex items-center gap-1"><Clock size={12} /> Jornada</span>
-                <input type="time" value={jornada.inicio} onChange={(e) => setJornadaField("inicio", e.target.value)}
+                <input type="time" value={jornada.inicio} onChange={(e) => { setJornadaField("inicio", e.target.value); setJornadaChanged(true); }}
                   className="rounded-md border border-[#D0D5DD] px-1.5 py-1 font-normal text-[#344054]" />
                 <span>–</span>
-                <input type="time" value={jornada.fin} onChange={(e) => setJornadaField("fin", e.target.value)}
+                <input type="time" value={jornada.fin} onChange={(e) => { setJornadaField("fin", e.target.value); setJornadaChanged(true); }}
                   className="rounded-md border border-[#D0D5DD] px-1.5 py-1 font-normal text-[#344054]" />
                 <span className="font-normal text-[#98A2B3]">El tiempo libre para foco se calcula dentro de esta franja.</span>
               </div>
+              {jornadaChanged && (
+                <p className="mt-1 rounded-md bg-[#FFF4DE] px-2 py-1 text-[11px] font-semibold text-[#8A5700]">Cambiaste la jornada — pídele al MD reevaluar el plan (vuelve a correr el daily run) para reajustar huecos y foco.</p>
+              )}
 
               {/* Agenda como PDF → la procesa el MD diario (revisa si existe y ajusta prioridades). */}
               <div className="mt-2 rounded-lg border border-dashed border-[#BBD8DA] bg-[#F5FAFA] p-2.5">
@@ -2030,7 +2035,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               {agenda.length > 0 ? (
                 <>
                   {agendaTimeline.freeMins > 0 && (
-                    <p className="mt-3 text-[11px] font-semibold text-[#17727A]">{fmtDur(agendaTimeline.freeMins)} libres entre reuniones — protégelos para foco.</p>
+                    <p className="mt-3 text-[11px] font-semibold text-[#17727A]">{fmtDur(agendaTimeline.freeMins)} libres en tu jornada — protégelos para foco.</p>
                   )}
                   <ul className="mt-2 space-y-1.5">
                     {agendaTimeline.items.map((it) => {
@@ -2049,7 +2054,12 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{it.hora || "—"}<span className="ml-1 text-[10px] font-semibold opacity-70">{fmtDur(Number(it.dur) || 60)}</span></span>
                             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{it.titulo}</span>
-                            <span className="shrink-0 rounded-full border bg-white px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: a.tone.border, color: a.tone.text }}>{a.short}</span>
+                            <select value={it.atencion} onChange={(e) => updateMeeting(it.id, { atencion: e.target.value })} title="Nivel de atención"
+                              className="shrink-0 cursor-pointer rounded-full border bg-white px-1.5 py-0.5 text-[10px] font-bold outline-none" style={{ borderColor: a.tone.border, color: a.tone.text }}>
+                              <option value="alta">Alta</option>
+                              <option value="media">Media</option>
+                              <option value="ninguna">Poca</option>
+                            </select>
                             <button type="button" onClick={() => removeMeeting(it.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
                           </div>
                           {it.atencion === "ninguna" && (
@@ -2072,7 +2082,12 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
                           <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>—</span>
                           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{m.titulo}</span>
-                          <span className="shrink-0 rounded-full border bg-white px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: a.tone.border, color: a.tone.text }}>{a.short}</span>
+                          <select value={m.atencion} onChange={(e) => updateMeeting(m.id, { atencion: e.target.value })} title="Nivel de atención"
+                            className="shrink-0 cursor-pointer rounded-full border bg-white px-1.5 py-0.5 text-[10px] font-bold outline-none" style={{ borderColor: a.tone.border, color: a.tone.text }}>
+                            <option value="alta">Alta</option>
+                            <option value="media">Media</option>
+                            <option value="ninguna">Poca</option>
+                          </select>
                           <button type="button" onClick={() => removeMeeting(m.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
                         </li>
                       );
