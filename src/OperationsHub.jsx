@@ -635,6 +635,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setAgenda(next);
     try { localStorage.setItem(`uxia.agenda.${todayIso()}`, JSON.stringify(next)); } catch { /* ignore */ }
   }, []);
+  // Jornada laboral diaria (inicio–fin): el tiempo libre para foco se calcula dentro de esta ventana,
+  // no solo entre reuniones (antes de la primera y después de la última también cuentan).
+  const [jornada, setJornada] = useState(() => {
+    try { const j = JSON.parse(localStorage.getItem("uxia.jornada") || "null"); return (j && j.inicio && j.fin) ? j : { inicio: "08:00", fin: "18:00" }; }
+    catch { return { inicio: "08:00", fin: "18:00" }; }
+  });
+  const setJornadaField = (k, v) => setJornada((prev) => { const n = { ...prev, [k]: v }; try { localStorage.setItem("uxia.jornada", JSON.stringify(n)); } catch { /* ignore */ } return n; });
   const [newMeet, setNewMeet] = useState({ hora: "", dur: 60, titulo: "", atencion: "media" });
   const addMeeting = () => {
     const titulo = newMeet.titulo.trim();
@@ -897,20 +904,27 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const parallelTasks = useMemo(() => tasks.filter((t) => t.status !== "done" && parallelIds.has(t.id)), [tasks, parallelIds]);
   const setFoco = (id) => { setFocoEmpresa(id); try { if (id) localStorage.setItem(focoKey, id); else localStorage.removeItem(focoKey); } catch { /* ignore */ } };
 
-  // Línea de tiempo del día: reuniones con hora ordenadas + HUECOS libres entre ellas (para foco).
+  // Línea de tiempo del día: reuniones con hora + HUECOS libres dentro de la JORNADA (inicio–fin),
+  // incluyendo antes de la primera reunión y después de la última hasta el fin de la jornada.
   const agendaTimeline = useMemo(() => {
+    const GAP_MIN = 20;
+    const dayStart = hhmmToMin(jornada.inicio) ?? 8 * 60;
+    const dayEnd = hhmmToMin(jornada.fin) ?? 18 * 60;
     const timed = agenda.filter((m) => hhmmToMin(m.hora) != null)
       .map((m) => ({ ...m, start: hhmmToMin(m.hora), end: hhmmToMin(m.hora) + (Number(m.dur) || 60) }))
       .sort((a, b) => a.start - b.start);
     const untimed = agenda.filter((m) => hhmmToMin(m.hora) == null);
     const items = [];
+    let cursor = dayStart;
     for (let i = 0; i < timed.length; i++) {
-      items.push({ type: "meet", ...timed[i] });
-      const next = timed[i + 1];
-      if (next) { const gap = next.start - timed[i].end; if (gap >= 20) items.push({ type: "gap", start: timed[i].end, end: next.start, mins: gap }); }
+      const m = timed[i];
+      if (m.start - cursor >= GAP_MIN) items.push({ type: "gap", start: cursor, end: m.start, mins: m.start - cursor });
+      items.push({ type: "meet", ...m });
+      cursor = Math.max(cursor, m.end);
     }
+    if (dayEnd - cursor >= GAP_MIN) items.push({ type: "gap", start: cursor, end: dayEnd, mins: dayEnd - cursor });
     return { items, untimed, freeMins: items.filter((x) => x.type === "gap").reduce((s, x) => s + x.mins, 0) };
-  }, [agenda]);
+  }, [agenda, jornada]);
   // A cada reunión de POCA atención se le asigna (en orden) una tarea en paralelo concreta.
   const parallelByMeeting = useMemo(() => {
     const map = {};
@@ -1939,6 +1953,16 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 )}
               </div>
               <p className="mt-0.5 text-xs text-[#8b8272]">Sube tu agenda del día en PDF: el <strong>MD diario la lee y ajusta tus prioridades</strong>. También puedes cargar reuniones a mano. En las de poca/ninguna atención puedes adelantar tareas en paralelo.</p>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-[#667085]">
+                <span className="inline-flex items-center gap-1"><Clock size={12} /> Jornada</span>
+                <input type="time" value={jornada.inicio} onChange={(e) => setJornadaField("inicio", e.target.value)}
+                  className="rounded-md border border-[#D0D5DD] px-1.5 py-1 font-normal text-[#344054]" />
+                <span>–</span>
+                <input type="time" value={jornada.fin} onChange={(e) => setJornadaField("fin", e.target.value)}
+                  className="rounded-md border border-[#D0D5DD] px-1.5 py-1 font-normal text-[#344054]" />
+                <span className="font-normal text-[#98A2B3]">El tiempo libre para foco se calcula dentro de esta franja.</span>
+              </div>
 
               {/* Agenda como PDF → la procesa el MD diario (revisa si existe y ajusta prioridades). */}
               <div className="mt-2 rounded-lg border border-dashed border-[#BBD8DA] bg-[#F5FAFA] p-2.5">

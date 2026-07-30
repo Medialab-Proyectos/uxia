@@ -246,6 +246,10 @@ Si existe la agenda de hoy:
    "Plan del día") y **ella misma borra el archivo** (queda libre para una nueva agenda). El MD solo
    deja el `raw_text` listo. Incluir el mismo Plan del día también en el reporte del run.
 
+Para estimar los **huecos libres**, asumir la **jornada** del CEO (por defecto 08:00–18:00, ajustable
+en Foco): cuentan los espacios ANTES de la primera reunión, entre reuniones y DESPUÉS de la última
+hasta el fin de la jornada — no solo lo que queda entre reuniones.
+
 Si NO hay agenda para hoy, se prioriza normal (la agenda es opcional), pero el run **igual** debe dejar
 un breve **Plan del día** en el reporte con el foco recomendado y qué avanzar.
 
