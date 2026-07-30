@@ -947,7 +947,10 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   useEffect(() => {
     try { const saved = localStorage.getItem(focoKey); if (saved) setFocoEmpresa(saved); } catch { /* ignore */ }
   }, [focoKey]);
+  // Solo se calcula en la vista Foco: recorrer empresas×tareas con scoreTask es costoso y no debe
+  // correr en cada tecla mientras editas una tarea en otra vista (era la causa del lag al escribir).
   const focoSugerida = useMemo(() => {
+    if (activeView !== "foco") return focoEmpresa || "";
     const activas = companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar");
     let best = "", bestScore = -1;
     for (const c of activas) {
@@ -956,17 +959,17 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       if (s > bestScore) { bestScore = s; best = c.id; }
     }
     return best;
-  }, [companies, tasks]);
+  }, [companies, tasks, activeView, focoEmpresa]);
   const focoId = (focoEmpresa && companies.some((c) => c.id === focoEmpresa && c.status !== "inactiva")) ? focoEmpresa : focoSugerida;
   const focoCompany = companies.find((c) => c.id === focoId) || null;
   const focoTop3 = useMemo(() => {
-    if (!focoId) return [];
+    if (activeView !== "foco" || !focoId) return [];
     return tasks
       .filter((t) => t.companyId === focoId && t.status !== "done" && t.status !== "espera" && t.status !== "notificado" && t.status !== "verificacion" && !parallelIds.has(t.id))
       .map((t) => ({ ...t, _s: scoreTask(t).score }))
       .sort((a, b) => b._s - a._s)
       .slice(0, 3);
-  }, [focoId, tasks, parallelIds]);
+  }, [focoId, tasks, parallelIds, activeView]);
   // Tareas marcadas "en paralelo" (activas), para listarlas en la vista Foco.
   const parallelTasks = useMemo(() => tasks.filter((t) => t.status !== "done" && parallelIds.has(t.id)), [tasks, parallelIds]);
   const setFoco = (id) => { setFocoEmpresa(id); try { if (id) localStorage.setItem(focoKey, id); else localStorage.removeItem(focoKey); } catch { /* ignore */ } };
@@ -974,6 +977,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // Línea de tiempo del día: reuniones con hora + HUECOS libres dentro de la JORNADA (inicio–fin),
   // incluyendo antes de la primera reunión y después de la última hasta el fin de la jornada.
   const agendaTimeline = useMemo(() => {
+    if (activeView !== "foco") return { items: [], untimed: [], freeMins: 0 };
     const GAP_MIN = 20;
     const dayStart = hhmmToMin(jornada.inicio) ?? 8 * 60;
     const dayEnd = hhmmToMin(jornada.fin) ?? 18 * 60;
@@ -996,7 +1000,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     }
     if (dayEnd - cursor >= GAP_MIN) items.push({ type: "gap", start: cursor, end: dayEnd, mins: dayEnd - cursor });
     return { items, untimed, freeMins: items.filter((x) => x.type === "gap").reduce((s, x) => s + x.mins, 0) };
-  }, [agenda, jornada, tasks]);
+  }, [agenda, jornada, tasks, activeView]);
   // A cada reunión de POCA atención se le asigna (en orden) una tarea en paralelo concreta.
   const parallelByMeeting = useMemo(() => {
     const map = {};
@@ -1012,13 +1016,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // administrativo de MediaLab que vence hoy). Así lo de más valor siempre aparece.
   const FOCO_BONUS = 6;
   const sVal = (t) => scoreTask(t).score; // scoreTask devuelve {score, reasons}: usar .score
-  const deepPool = useMemo(() => tasks
+  const deepPool = useMemo(() => activeView !== "foco" ? [] : tasks
     .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked")
     .sort((a, b) => (sVal(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (sVal(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
-    [tasks, focoId]);
-  const lightPool = useMemo(() => tasks
+    [tasks, focoId, activeView]);
+  const lightPool = useMemo(() => activeView !== "foco" ? [] : tasks
     .filter((t) => RECO_ACTIVE(t) && (parallelIds.has(t.id) || t.category === "Administrativa" || t.category === "Apoyo" || t.designPoints === 0.5))
-    .sort((a, b) => sVal(b) - sVal(a)), [tasks, parallelIds]);
+    .sort((a, b) => sVal(b) - sVal(a)), [tasks, parallelIds, activeView]);
   // Asigna una tarea DISTINTA a cada hueco/reunión de poca atención, en orden del día.
   const slotRecs = useMemo(() => {
     const map = {}; let gi = 0, pi = 0;
