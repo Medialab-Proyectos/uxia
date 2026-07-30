@@ -77,6 +77,13 @@ function categoryColor(category) {
   return CATEGORY_TONE[category] || "#667085";
 }
 
+// Nivel de atención que exige una reunión. En "ninguna" el CEO puede avanzar tareas en paralelo.
+const ATENCION = {
+  alta:    { short: "Alta",  desc: "Requiere toda tu atención", tone: { bg: "#FEF3F2", border: "#FDA29B", text: "#B42318" } },
+  media:   { short: "Media", desc: "Atención parcial",          tone: { bg: "#FFFAEB", border: "#FEDF89", text: "#B54708" } },
+  ninguna: { short: "Poca",  desc: "Poca/ninguna — puedes avanzar en paralelo", tone: { bg: "#ECFDF3", border: "#A6F4C5", text: "#067647" } },
+};
+
 // --- Horas laborales Colombia -------------------------------------------------
 // Jornada 8:00–12:00 y 13:00–17:00 (8h, 1h de almuerzo), lunes a viernes,
 // excluyendo festivos colombianos. Se usa para "horas cumplidas" al terminar una tarea.
@@ -617,6 +624,21 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     try { localStorage.setItem("uxia.parallel", JSON.stringify([...n])); } catch { /* ignore */ }
     return n;
   }), []);
+  // Agenda del día: reuniones con NIVEL DE ATENCIÓN. En las de poca/ninguna atención el CEO puede
+  // adelantar tareas "en paralelo" (colas de la IA, dev que corre solo). Marca personal por día.
+  const [agenda, setAgenda] = useState(() => { try { return JSON.parse(localStorage.getItem(`uxia.agenda.${todayIso()}`) || "[]"); } catch { return []; } });
+  const persistAgenda = useCallback((next) => {
+    setAgenda(next);
+    try { localStorage.setItem(`uxia.agenda.${todayIso()}`, JSON.stringify(next)); } catch { /* ignore */ }
+  }, []);
+  const [newMeet, setNewMeet] = useState({ hora: "", titulo: "", atencion: "media" });
+  const addMeeting = () => {
+    const titulo = newMeet.titulo.trim();
+    if (!titulo) return;
+    persistAgenda([...agenda, { id: `m-${Date.now()}`, hora: newMeet.hora || "", titulo, atencion: newMeet.atencion }]);
+    setNewMeet({ hora: "", titulo: "", atencion: newMeet.atencion });
+  };
+  const removeMeeting = (id) => persistAgenda(agenda.filter((m) => m.id !== id));
   const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
   const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
   const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
@@ -1770,6 +1792,66 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             ) : (
               <div className="rounded-xl border border-dashed border-[#C8BFB3] bg-white p-6 text-center text-sm text-[#667085]">Agrega una empresa con tareas para ver tu foco del día.</div>
             )}
+
+            {/* AGENDA DEL DÍA — reuniones con nivel de atención; en las de poca atención, avanza en paralelo. */}
+            <div className="rounded-xl border border-[#D9D2C7] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CalendarDays size={15} className="text-[#17727A]" />
+                  <h3 className="text-sm font-semibold text-[#1D2939]">Agenda de hoy</h3>
+                  <span className="rounded-full bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-semibold text-[#475467]">{agenda.length}</span>
+                </div>
+                {parallelTasks.length > 0 && agenda.some((m) => m.atencion === "ninguna") && (
+                  <span className="text-[11px] font-semibold text-[#067647]">Hay huecos de poca atención → adelanta lo que corre en paralelo.</span>
+                )}
+              </div>
+              <p className="mt-0.5 text-xs text-[#8b8272]">Marca el nivel de atención de cada reunión. En las de poca/ninguna atención puedes adelantar tareas en paralelo (colas de la IA, dev que corre solo).</p>
+
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="text-[11px] font-semibold text-[#667085]">Hora
+                  <input type="time" value={newMeet.hora} onChange={(e) => setNewMeet({ ...newMeet, hora: e.target.value })}
+                    className="mt-0.5 block rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm font-normal text-[#344054]" />
+                </label>
+                <label className="min-w-0 flex-1 text-[11px] font-semibold text-[#667085]">Reunión
+                  <input value={newMeet.titulo} onChange={(e) => setNewMeet({ ...newMeet, titulo: e.target.value })}
+                    placeholder="Con quién / sobre qué" onKeyDown={(e) => e.key === "Enter" && addMeeting()}
+                    className="mt-0.5 block w-full rounded-md border border-[#D0D5DD] px-2.5 py-1.5 text-sm font-normal text-[#344054]" />
+                </label>
+                <label className="text-[11px] font-semibold text-[#667085]">Atención
+                  <select value={newMeet.atencion} onChange={(e) => setNewMeet({ ...newMeet, atencion: e.target.value })}
+                    className="mt-0.5 block rounded-md border border-[#D0D5DD] px-2 py-1.5 text-sm font-normal text-[#344054]">
+                    <option value="alta">Alta</option>
+                    <option value="media">Media</option>
+                    <option value="ninguna">Poca / ninguna</option>
+                  </select>
+                </label>
+                <button type="button" onClick={addMeeting} disabled={!newMeet.titulo.trim()}
+                  className="inline-flex items-center gap-1 rounded-md bg-[#17727A] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+                  <Plus size={14} /> Agregar
+                </button>
+              </div>
+
+              {agenda.length > 0 ? (
+                <ul className="mt-3 space-y-1.5">
+                  {[...agenda].sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99")).map((m) => {
+                    const a = ATENCION[m.atencion] || ATENCION.media;
+                    return (
+                      <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
+                        <span className="w-12 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{m.hora || "—"}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{m.titulo}</span>
+                        {m.atencion === "ninguna" && parallelTasks.length > 0 && (
+                          <span className="shrink-0 text-[11px] font-semibold text-[#067647]">↳ en paralelo</span>
+                        )}
+                        <span className="shrink-0 rounded-full border bg-white px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: a.tone.border, color: a.tone.text }}>{a.short}</span>
+                        <button type="button" onClick={() => removeMeeting(m.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="mt-3 text-xs text-[#98A2B3]">Sin reuniones cargadas. Agrega las de hoy para proteger tu foco y saber dónde puedes avanzar en paralelo.</p>
+              )}
+            </div>
 
             <div className="rounded-xl border border-[#D9D2C7] bg-white p-4">
               <div className="flex items-center gap-2">
