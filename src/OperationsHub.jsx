@@ -250,14 +250,19 @@ function firstLink(value) {
   return String(value || "").match(/https?:\/\/\S+/i)?.[0] || "";
 }
 
+// Fecha LOCAL (no UTC): en Colombia (UTC-5) usar toISOString() corría el "hoy" un día en la tarde/noche
+// y descuadraba vencidas/vence-hoy. Devuelve YYYY-MM-DD según la zona del navegador.
+function localIso(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIso(new Date());
 }
 
 function addDays(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return localIso(date);
 }
 
 // Tareas RECURRENTES: cadencia + fin opcional (null = continua). La siguiente ocurrencia se
@@ -3629,6 +3634,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
                 {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
               </span>
+              {!overdue && task.dueDate === todayIso() && !["done", "review", "verificacion", "notificado", "espera"].includes(task.status) && (
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#F2C879", background: "#FFF7E6", color: "#B76E00" }}>
+                  <Clock size={11} /> Vence hoy
+                </span>
+              )}
               {task.category && (
                 <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: `${categoryColor(task.category)}66`, background: `${categoryColor(task.category)}14`, color: categoryColor(task.category) }}>
                   <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: categoryColor(task.category) }} />
