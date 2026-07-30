@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, PauseCircle, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, BarChart3, Bell, Building2, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Construction, Contrast, Download, ExternalLink, FileText, HelpCircle, Layers, Link2, ListChecks, ListOrdered, LoaderCircle, MessageCircle, Paperclip, PauseCircle, Pencil, Plus, Power, Save, Send, Sparkles, Star, Target, Trash2, UserRound, X } from "lucide-react";
 import * as opsData from "./opsData.js";
 import logoUrl from "./logos/logo-medialab.png";
 import { openDesignOpsReport } from "./designopsReport.js";
@@ -608,6 +608,14 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [highlightTaskId, setHighlightTaskId] = useState(null);
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
   const [focoEmpresa, setFocoEmpresa] = useState("");     // "Empresa del día": foco elegido (persist por día)
+  // "En paralelo": pocas tareas (típicamente dev) que corren solas/delegadas y NO requieren tu foco.
+  // Marca personal (este navegador); salen del top-3 del foco y se listan aparte en la vista Foco.
+  const [parallelIds, setParallelIds] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem("uxia.parallel") || "[]")); } catch { return new Set(); } });
+  const toggleParallel = useCallback((id) => setParallelIds((prev) => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id);
+    try { localStorage.setItem("uxia.parallel", JSON.stringify([...n])); } catch { /* ignore */ }
+    return n;
+  }), []);
   const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
   const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
   const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
@@ -796,11 +804,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const focoTop3 = useMemo(() => {
     if (!focoId) return [];
     return tasks
-      .filter((t) => t.companyId === focoId && t.status !== "done" && t.status !== "espera" && t.status !== "notificado" && t.status !== "verificacion")
+      .filter((t) => t.companyId === focoId && t.status !== "done" && t.status !== "espera" && t.status !== "notificado" && t.status !== "verificacion" && !parallelIds.has(t.id))
       .map((t) => ({ ...t, _s: scoreTask(t).score }))
       .sort((a, b) => b._s - a._s)
       .slice(0, 3);
-  }, [focoId, tasks]);
+  }, [focoId, tasks, parallelIds]);
+  // Tareas marcadas "en paralelo" (activas), para listarlas en la vista Foco.
+  const parallelTasks = useMemo(() => tasks.filter((t) => t.status !== "done" && parallelIds.has(t.id)), [tasks, parallelIds]);
   const setFoco = (id) => { setFocoEmpresa(id); try { if (id) localStorage.setItem(focoKey, id); else localStorage.removeItem(focoKey); } catch { /* ignore */ } };
 
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
@@ -1680,47 +1690,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
           )}
         </div>
 
-        {/* EMPRESA DEL DÍA (sistema de foco): elige una cuenta foco y entrégale un incremento COMPLETO
-            hoy, en vez de repartir pedazos entre todas. Sugerida = la de más trabajo pendiente de alto
-            impacto; la puedes cambiar. Muestra su top-3 por prioridad. Se recuerda por día. */}
-        {focoCompany && (
-          <div className="mb-4 rounded-lg border border-[#E8751A] bg-[#FFF7EF] p-3 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#B54708]"><Target size={13} /> Empresa del día</span>
-                <select value={focoId} onChange={(e) => setFoco(e.target.value)}
-                  className="rounded-md border border-[#F2C879] bg-white px-2 py-1 text-sm font-semibold text-[#8A5700] outline-none focus:border-[#E8751A]">
-                  {companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                {(!focoEmpresa || focoEmpresa !== focoId) && focoId === focoSugerida && (
-                  <span className="rounded-full bg-[#FDE8CF] px-2 py-0.5 text-[10px] font-semibold text-[#B54708]">sugerida por carga</span>
-                )}
-              </div>
-              <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(focoId); }}
-                className="inline-flex items-center gap-1 rounded-md bg-[#E8751A] px-3 py-1.5 text-xs font-semibold text-white">
-                Ir a la empresa <ChevronRight size={14} />
-              </button>
-            </div>
-            {focoTop3.length > 0 ? (
-              <ol className="mt-2.5 space-y-1">
-                {focoTop3.map((t, i) => (
-                  <li key={t.id}>
-                    <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(focoId); setHighlightTaskId(t.id); }}
-                      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-[#FDE8CF]">
-                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E8751A] text-[10px] font-bold text-white">{i + 1}</span>
-                      <span className="min-w-0 flex-1 truncate font-semibold text-[#1D2939]">{t.title}</span>
-                      <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: `${statusTone(t.status).border}`, background: statusTone(t.status).bg, color: statusTone(t.status).text }}>{STATUS[t.status] || t.status}</span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-2 text-xs text-[#8b8272]">Sin tareas pendientes en esta empresa hoy. 👌</p>
-            )}
-            <p className="mt-1.5 text-[11px] text-[#8b8272]">Pareto: cierra estas 3 y entrega un incremento completo hoy. Lo demás puede esperar su turno.</p>
-          </div>
-        )}
-
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <Metric label="Tareas abiertas" value={metrics.open} tone="#17727A" icon={ListChecks} />
           <button type="button" onClick={() => { setActiveView("tasks"); setActiveStatus("review"); setCompanyFilter("all"); setAssignFilter("all"); setTaskQuery(""); }} className="text-left" title="Ver las tareas en revisión (por aprobar / pedir cambios)">
@@ -1736,6 +1705,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
 
         <div className="mt-5 flex gap-2 overflow-x-auto border-b border-[#D9D2C7]">
           {[
+            ["foco", "Foco"],
             ["companies", "Empresas"],
             ["tasks", "Todas las tareas"],
             ["priority", "Prioridad"],
@@ -1754,6 +1724,78 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             </button>
           ))}
         </div>
+
+        {/* VISTA FOCO — ventana aparte para NO saturar la principal. Solo lo que trabajas hoy:
+            la empresa del día + su top-3, y lo que corre en paralelo (no requiere tu foco). */}
+        {activeView === "foco" && (
+          <section className="mt-6 space-y-5">
+            {focoCompany ? (
+              <div className="rounded-xl border border-[#E8751A] bg-[#FFF7EF] p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#B54708]"><Target size={13} /> Empresa del día</span>
+                    <select value={focoId} onChange={(e) => setFoco(e.target.value)}
+                      className="rounded-md border border-[#F2C879] bg-white px-2 py-1 text-base font-semibold text-[#8A5700] outline-none focus:border-[#E8751A]">
+                      {companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    {(!focoEmpresa || focoEmpresa === focoId) && focoId === focoSugerida && (
+                      <span className="rounded-full bg-[#FDE8CF] px-2 py-0.5 text-[10px] font-semibold text-[#B54708]">sugerida por carga</span>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(focoId); }}
+                    className="inline-flex items-center gap-1 rounded-md bg-[#E8751A] px-3 py-1.5 text-xs font-semibold text-white">
+                    Ir a la empresa <ChevronRight size={14} />
+                  </button>
+                </div>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-[#B54708]">Top 3 · Pareto</p>
+                {focoTop3.length > 0 ? (
+                  <ol className="mt-1.5 space-y-1.5">
+                    {focoTop3.map((t, i) => (
+                      <li key={t.id}>
+                        <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(focoId); setHighlightTaskId(t.id); }}
+                          className="flex w-full items-center gap-2.5 rounded-md border border-transparent bg-white px-2.5 py-2 text-left text-sm hover:border-[#F2C879]">
+                          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#E8751A] text-xs font-bold text-white">{i + 1}</span>
+                          <span className="min-w-0 flex-1 truncate font-semibold text-[#1D2939]">{t.title}</span>
+                          <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: statusTone(t.status).border, background: statusTone(t.status).bg, color: statusTone(t.status).text }}>{STATUS[t.status] || t.status}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="mt-2 text-sm text-[#8b8272]">Sin tareas pendientes en esta empresa hoy. 👌</p>
+                )}
+                <p className="mt-2 text-[12px] text-[#8b8272]">Cierra estas 3 y entrega un incremento COMPLETO hoy. Lo demás puede esperar su turno.</p>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[#C8BFB3] bg-white p-6 text-center text-sm text-[#667085]">Agrega una empresa con tareas para ver tu foco del día.</div>
+            )}
+
+            <div className="rounded-xl border border-[#D9D2C7] bg-white p-4">
+              <div className="flex items-center gap-2">
+                <Layers size={15} className="text-[#6941C6]" />
+                <h3 className="text-sm font-semibold text-[#1D2939]">Corriendo en paralelo</h3>
+                <span className="rounded-full bg-[#F2F4F7] px-1.5 py-0.5 text-[10px] font-semibold text-[#475467]">{parallelTasks.length}</span>
+              </div>
+              <p className="mt-0.5 text-xs text-[#8b8272]">Tareas que avanzan solas o delegadas (típicamente desarrollo). No requieren tu foco; las marcas con “En paralelo” dentro de la tarea.</p>
+              {parallelTasks.length > 0 ? (
+                <ul className="mt-2 space-y-1.5">
+                  {parallelTasks.map((t) => (
+                    <li key={t.id}>
+                      <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }}
+                        className="flex w-full items-center gap-2.5 rounded-md border border-[#EDE9FE] bg-[#FBFAFF] px-2.5 py-2 text-left text-sm hover:border-[#C4B5FD]">
+                        <Layers size={13} className="shrink-0 text-[#6941C6]" />
+                        <span className="min-w-0 flex-1 truncate font-semibold text-[#1D2939]">{t.title}</span>
+                        <span className="shrink-0 text-[11px] text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-[#98A2B3]">Nada en paralelo ahora. Marca aquí las pocas tareas (p. ej. desarrollo) que corren solas.</p>
+              )}
+            </div>
+          </section>
+        )}
 
         {activeView === "companies" && insumos.length > 0 && (
           <section className="mt-6 rounded-md border border-[#F2C879] bg-[#FFF7E6] p-4 shadow-sm">
@@ -1826,6 +1868,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
               highlightId={highlightTaskId}
               tasks={tasks}
               people={people}
+              parallelIds={parallelIds}
+              onToggleParallel={toggleParallel}
               growthPractices={growthPractices}
               onConvertPractice={convertPracticeToTask}
               onDismissPractice={dismissPractice}
@@ -1963,6 +2007,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             tasks={visibleTasks}
             companies={companies}
             people={people}
+            parallelIds={parallelIds}
+            onToggleParallel={toggleParallel}
             activeStatus={activeStatus}
             onStatus={setActiveStatus}
             assignFilter={assignFilter}
@@ -2056,24 +2102,6 @@ function scoreTask(task) {
   return { score: Math.min(100, score), reasons };
 }
 
-// "Despachar a la IA": arma un prompt LISTO PARA PEGAR en Claude/ChatGPT, adaptado al tipo de tarea.
-// La IA hace el primer 80% (borrador/research/diseño) mientras el CEO hace otras cosas; luego revisa.
-function buildAiPrompt(task, companyName) {
-  const proyecto = [companyName, task.client].filter(Boolean).join(" · ") || "el proyecto";
-  const titulo = task.title || "esta tarea";
-  const ctx = (task.description || "").trim();
-  const ctxBlock = ctx ? `\n\nContexto de la tarea:\n${ctx}` : "";
-  const cat = task.category || "";
-  const base = `Trabajo en MediaLab Ingeniería (estudio de diseño de producto/UX). Para el proyecto "${proyecto}", ayúdame con esta tarea: "${titulo}".`;
-  let ask;
-  if (cat === "Producto") ask = "Conviértelo en un PRD/borrador accionable: historia de usuario, criterios de aceptación, pain points, alcance y supuestos. Señala qué necesitas confirmar conmigo.";
-  else if (cat === "UX Research") ask = "Propón un plan de research o un benchmark de competidores (LATAM cuando aplique): preguntas, método y la síntesis de hallazgos esperada.";
-  else if (cat === "Documentación") ask = "Redacta un primer borrador del documento, claro y estructurado en español, listo para pulir. Usa encabezados y viñetas.";
-  else if (cat === "Diseño UX/UI" || cat === "Diseño gráfico") ask = "Propón la estructura de la(s) pantalla(s): objetivo, secciones, jerarquía visual, estados (vacío/carga/error) y criterios, para que un líder lo lleve a Figma. No inventes datos reales del cliente.";
-  else if (cat === "Desarrollo de software") ask = "Propón el enfoque técnico: pasos, estructura/endpoints, riesgos y un esqueleto. Marca las decisiones que dependan de mí.";
-  else ask = "Prepárame un borrador práctico (correo, agenda, checklist o resumen, según aplique) listo para usar/enviar.";
-  return `${base}\n\n${ask}${ctxBlock}\n\nResponde en español y entrega el 80% listo, para que yo solo revise y decida.`;
-}
 
 // Candidatos de prefijo para una empresa, en orden de preferencia (2-3 letras).
 function prefixCandidates(name) {
@@ -2346,6 +2374,8 @@ function TasksTable({
   tasks,
   companies,
   people,
+  parallelIds,
+  onToggleParallel,
   activeStatus,
   onStatus,
   assignFilter,
@@ -2557,6 +2587,8 @@ function TasksTable({
                 company={companies.find((item) => item.id === task.companyId) || companies[0]}
                 companies={companies}
                 people={people}
+                parallel={parallelIds?.has(task.id)}
+                onToggleParallel={() => onToggleParallel?.(task.id)}
                 open={openTaskId === task.id}
                 onOpenChange={(isOpen) => setOpenTaskId((prev) => (isOpen ? task.id : prev === task.id ? null : prev))}
                 onChangeTask={onChangeTask}
@@ -2849,7 +2881,7 @@ function DoneFeedbackModal({ task, onSave, onDirect, onClose }) {
   );
 }
 
-function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onSaveTask, onUploadAttachment, onDeleteAttachment }) {
+function ProjectTaskAccordion({ task, company, companies = [], people = [], open: openProp, onOpenChange, onChangeTask, onDeleteTask, onSaveTask, onUploadAttachment, onDeleteAttachment, parallel = false, onToggleParallel }) {
   // Tag "IA": la tarea la generó el MD (source ≠ Manual) y el admin AÚN NO la ha revisado. Es un
   // aviso de "historia de IA pendiente de revisar": desaparece en cuanto el admin la toca o la
   // GUARDA (adminTouchedAt). No se muestra si ya lleva "IA actualizó" (mdTouchedAt).
@@ -2886,23 +2918,6 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
   const [crText, setCrText] = useState("");
   const [crBy, setCrBy] = useState("ceo");
   const [crModal, setCrModal] = useState(false);
-  // Despachar a la IA: modal con prompt listo para pegar + marca "despachada" (cola personal por navegador).
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiCopied, setAiCopied] = useState(false);
-  const [dispatched, setDispatched] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("uxia.ai.dispatched") || "[]").includes(task.id); } catch { return false; }
-  });
-  const openAi = () => { setAiPrompt(buildAiPrompt(task, company?.name)); setAiCopied(false); setAiOpen(true); };
-  const copyAiPrompt = async () => { try { await navigator.clipboard.writeText(aiPrompt); setAiCopied(true); setTimeout(() => setAiCopied(false), 2000); } catch { /* ignore */ } };
-  const toggleDispatched = () => {
-    try {
-      const set = new Set(JSON.parse(localStorage.getItem("uxia.ai.dispatched") || "[]"));
-      if (set.has(task.id)) set.delete(task.id); else set.add(task.id);
-      localStorage.setItem("uxia.ai.dispatched", JSON.stringify([...set]));
-      setDispatched(set.has(task.id));
-    } catch { /* ignore */ }
-  };
   const changeRequests = Array.isArray(task.changeRequests) ? task.changeRequests : [];
   const openCRs = changeRequests.filter((c) => !c.resolved);
   function addChangeRequest() {
@@ -3128,11 +3143,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 <span className="inline-flex items-center gap-1 font-semibold text-[#0D7A4F]"><Clock size={11} />{task.workedHours} h</span>
               )}
             </span>
-            {(showIA || task.employeeTouchedAt || task.mdTouchedAt || dispatched || (Array.isArray(task.comments) && task.comments.length > 0)) && (
+            {(showIA || task.employeeTouchedAt || task.mdTouchedAt || parallel || (Array.isArray(task.comments) && task.comments.length > 0)) && (
               <span className="flex flex-wrap items-center gap-1.5">
-                {dispatched && (
-                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6941C6" }} title="Despachada a la IA (tu cola del día)">
-                    <Sparkles size={11} /> IA
+                {parallel && (
+                  <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: "#C4B5FD", background: "#F5F3FF", color: "#6941C6" }} title="Corriendo en paralelo (no requiere tu foco)">
+                    <Layers size={11} /> Paralelo
                   </span>
                 )}
                 {showIA && (
@@ -3562,13 +3577,16 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             {Array.isArray(task.tools) && task.tools.length > 0 && <p className="mt-0.5 text-xs text-[#6941C6]">Herramientas: {task.tools.join(", ")}</p>}
           </div>
         )}
-        {/* Despachar a la IA: genera un prompt listo para pegar en Claude/ChatGPT (segunda jornada). */}
-        <div className="border-t border-[#E4DED6] pt-2">
-          <button type="button" onClick={openAi}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[#6941C6] bg-[#F5F3FF] px-3 py-2 text-sm font-semibold text-[#6941C6]">
-            <Sparkles size={15} /> {dispatched ? "Despachada a IA · ver prompt" : "Despachar a la IA"}
-          </button>
-        </div>
+        {/* "En paralelo": marca las POCAS tareas que corren solas/delegadas (dev). Salen de tu foco. */}
+        {onToggleParallel && (
+          <div className="border-t border-[#E4DED6] pt-2">
+            <button type="button" onClick={onToggleParallel}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold"
+              style={parallel ? { borderColor: "#6941C6", background: "#F5F3FF", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#475467" }}>
+              <Layers size={15} /> {parallel ? "En paralelo · corriendo (no requiere tu foco)" : "Marcar “En paralelo” (corre sola / delegada)"}
+            </button>
+          </div>
+        )}
         {/* Guardar TAREA (guardado por tarjeta, a ancho completo, con confirmación). */}
         {onSaveTask && (
           <div className="border-t border-[#E4DED6] pt-2">
@@ -3582,35 +3600,6 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
           </div>
         )}
       </div>
-      {aiOpen && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) setAiOpen(false); }}>
-          <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md bg-white shadow-xl">
-            <div className="flex items-start justify-between border-b border-[#E4DED6] p-4">
-              <div>
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#1D2939]"><Sparkles size={15} className="text-[#6941C6]" /> Despachar a la IA</h3>
-                <p className="mt-0.5 text-xs text-[#667085]">Copia este prompt y pégalo en Claude o ChatGPT mientras haces otras cosas. La IA hace el primer borrador; tú revisas y decides.</p>
-              </div>
-              <button type="button" onClick={() => setAiOpen(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#667085] hover:bg-[#F2F4F7]"><X size={16} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <textarea value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} rows={10}
-                className="w-full resize-y rounded-md border border-[#D0D5DD] bg-[#FBFAF7] px-3 py-2 text-xs leading-relaxed text-[#344054] outline-none focus:border-[#6941C6]" />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 border-t border-[#E4DED6] p-4">
-              <button type="button" onClick={copyAiPrompt} className="inline-flex items-center gap-1.5 rounded-md bg-[#6941C6] px-3 py-2 text-sm font-semibold text-white">
-                <Save size={14} /> {aiCopied ? "Copiado ✓" : "Copiar prompt"}
-              </button>
-              <button type="button" onClick={toggleDispatched}
-                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-semibold"
-                style={dispatched ? { borderColor: "#6941C6", background: "#F5F3FF", color: "#6941C6" } : { borderColor: "#D0D5DD", color: "#475467" }}>
-                {dispatched ? <><CheckCircle2 size={14} /> Despachada</> : <>Marcar como despachada</>}
-              </button>
-              <span className="text-[11px] text-[#98A2B3]">La marca es tuya (este navegador) para tu cola del día.</span>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
       {doneModal && (
         <DoneFeedbackModal
           task={task}
@@ -3672,6 +3661,8 @@ function CompanyPanel({
   companies = [],
   highlightId,
   tasks = [],
+  parallelIds,
+  onToggleParallel,
   people = [],
   growthPractices = [],
   onConvertPractice,
@@ -4336,6 +4327,8 @@ function CompanyPanel({
                           company={company}
                           companies={companies}
                           people={companyPeople}
+                          parallel={parallelIds?.has(task.id)}
+                          onToggleParallel={() => onToggleParallel?.(task.id)}
                           open={openTaskId === task.id}
                           onOpenChange={(isOpen) => setOpenTaskId((prev) => (isOpen ? task.id : prev === task.id ? null : prev))}
                           onChangeTask={onChangeTask}
