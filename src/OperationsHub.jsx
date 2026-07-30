@@ -690,6 +690,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
             id: `md-${i}-${Date.now()}`, hora: m.hora || "", dur: Number(m.dur) || 60,
             titulo: m.titulo || m.title || "Reunión",
             atencion: ["alta", "media", "ninguna"].includes(m.atencion) ? m.atencion : "media",
+            almuerzo: /almuerzo/i.test(m.titulo || ""),
           }));
           if (ms.length) persistAgenda(ms);
           if (doc.plan) { setPlanTexto(doc.plan); try { localStorage.setItem(`uxia.plandia.${todayIso()}`, doc.plan); } catch { /* ignore */ } }
@@ -719,12 +720,21 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     setAgendaBusy(true);
     try { await opsData.deleteAgendaDia(token, agendaDoc.id); setAgendaDoc(null); } catch { /* ignore */ } finally { setAgendaBusy(false); }
   };
-  const importAgendaFromDoc = () => {
-    const ms = (agendaDoc?.meetings || []).map((m, i) => ({
+  const importAgendaFromDoc = async () => {
+    if (!agendaDoc) return;
+    const ms = (agendaDoc.meetings || []).map((m, i) => ({
       id: `md-${i}-${Date.now()}`, hora: m.hora || "", dur: Number(m.dur) || 60,
       titulo: m.titulo || m.title || "Reunión", atencion: ["alta", "media", "ninguna"].includes(m.atencion) ? m.atencion : "media",
+      almuerzo: /almuerzo/i.test(m.titulo || ""),
     }));
     if (ms.length) persistAgenda(ms);
+    if (agendaDoc.plan) { setPlanTexto(agendaDoc.plan); try { localStorage.setItem(`uxia.plandia.${todayIso()}`, agendaDoc.plan); } catch { /* ignore */ } }
+    try { localStorage.setItem(`uxia.agenda.imported.${todayIso()}`, "1"); } catch { /* ignore */ }
+    // Ya cargada → se BORRA el PDF (queda el espacio libre para una nueva agenda).
+    const id = agendaDoc.id;
+    setAgendaDoc(null);
+    if (id) await opsData.deleteAgendaDia(token, id).catch(() => {});
+    setNotice("Agenda cargada. El PDF se eliminó; el espacio queda libre para una nueva.");
   };
   // Persiste el sistema de foco en la DB (debounced) cuando cambia algo. Guarda los últimos ~10 días.
   useEffect(() => {
@@ -982,12 +992,14 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // (tareas de mayor prioridad, la empresa del día primero); reuniones de POCA atención → algo
   // ligero (en paralelo, administrativo o trámite) que se puede adelantar mientras se escucha.
   const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
-  const deepPool = useMemo(() => {
-    const pool = tasks.filter((t) => RECO_ACTIVE(t) && t.status !== "blocked");
-    const foco = pool.filter((t) => t.companyId === focoId).sort((a, b) => scoreTask(b) - scoreTask(a));
-    const rest = pool.filter((t) => t.companyId !== focoId).sort((a, b) => scoreTask(b) - scoreTask(a));
-    return [...foco, ...rest];
-  }, [tasks, focoId]);
+  // Ordena por VALOR real (scoreTask), con un empujón leve a la empresa del día para favorecer la
+  // concentración SIN enterrar una tarea de otra empresa que valga claramente más (p. ej. un trámite
+  // administrativo de MediaLab que vence hoy). Así lo de más valor siempre aparece.
+  const FOCO_BONUS = 6;
+  const deepPool = useMemo(() => tasks
+    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked")
+    .sort((a, b) => (scoreTask(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (scoreTask(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
+    [tasks, focoId]);
   const lightPool = useMemo(() => tasks
     .filter((t) => RECO_ACTIVE(t) && (parallelIds.has(t.id) || t.category === "Administrativa" || t.category === "Apoyo" || t.designPoints === 0.5))
     .sort((a, b) => scoreTask(b) - scoreTask(a)), [tasks, parallelIds]);
@@ -996,20 +1008,22 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const map = {}; let gi = 0, pi = 0;
     for (const it of agendaTimeline.items) {
       if (it.type === "gap") { if (deepPool[gi]) map[`gap-${it.start}`] = deepPool[gi]; gi++; }
-      else if (it.atencion === "ninguna") { if (lightPool[pi]) map[it.id] = lightPool[pi]; pi++; }
+      else if (it.atencion === "ninguna" && !(it.almuerzo || /almuerzo/i.test(it.titulo || ""))) { if (lightPool[pi]) map[it.id] = lightPool[pi]; pi++; }
     }
     return map;
   }, [agendaTimeline, deepPool, lightPool]);
-  const markLunch = (startMin) => persistAgenda([...agenda, { id: `lunch-${Date.now()}`, hora: minToHhmm(startMin), dur: 60, titulo: "Almuerzo", atencion: "ninguna" }]);
+  const markLunch = (startMin) => persistAgenda([...agenda, { id: `lunch-${Date.now()}`, hora: minToHhmm(startMin), dur: 60, titulo: "Almuerzo", atencion: "ninguna", almuerzo: true }]);
   // Nombre de empresa por id (para las etiquetas de la vista Foco).
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
   // Plan del día: síntesis para la franja de Foco (reuniones por atención + tiempo libre + paralelo).
   const planDia = useMemo(() => {
+    const isLunch = (m) => m.almuerzo || /almuerzo/i.test(m.titulo || "");
+    const reales = agenda.filter((m) => !isLunch(m));
     const cnt = { alta: 0, media: 0, ninguna: 0 };
     let busy = 0;
-    agenda.forEach((m) => { cnt[m.atencion] = (cnt[m.atencion] || 0) + 1; busy += Number(m.dur) || 60; });
+    reales.forEach((m) => { cnt[m.atencion] = (cnt[m.atencion] || 0) + 1; busy += Number(m.dur) || 60; });
     const gaps = agendaTimeline.items.filter((x) => x.type === "gap").length;
-    return { cnt, busy, total: agenda.length, free: agendaTimeline.freeMins, gaps, lowSlots: cnt.ninguna + gaps, cargado: (cnt.alta * 2 + cnt.media) >= 4 };
+    return { cnt, busy, total: reales.length, free: agendaTimeline.freeMins, gaps, lowSlots: cnt.ninguna + gaps, cargado: (cnt.alta * 2 + cnt.media) >= 4 };
   }, [agenda, agendaTimeline]);
   const todayLabel = useMemo(() => {
     try { return new Date().toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" }); } catch { return todayIso(); }
@@ -2142,22 +2156,27 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                           </li>
                         );
                       }
-                      const a = ATENCION[it.atencion] || ATENCION.media;
-                      const sug = parallelByMeeting[it.id] || slotRecs[it.id];
+                      const isLunch = it.almuerzo || /almuerzo/i.test(it.titulo || "");
+                      const a = isLunch ? { tone: { bg: "#FFF7EF", border: "#F2C879", text: "#8A5700" } } : (ATENCION[it.atencion] || ATENCION.media);
+                      const sug = isLunch ? null : (parallelByMeeting[it.id] || slotRecs[it.id]);
                       return (
                         <li key={it.id} className="rounded-md border p-2" style={{ borderColor: a.tone.border, background: a.tone.bg }}>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="w-24 shrink-0 text-sm font-bold tabular-nums" style={{ color: a.tone.text }}>{it.hora || "—"}<span className="ml-1 text-[10px] font-semibold opacity-70">{fmtDur(Number(it.dur) || 60)}</span></span>
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{it.titulo}</span>
-                            <select value={it.atencion} onChange={(e) => updateMeeting(it.id, { atencion: e.target.value })} title="Nivel de atención"
-                              className="shrink-0 cursor-pointer rounded-full border bg-white px-1.5 py-0.5 text-[10px] font-bold outline-none" style={{ borderColor: a.tone.border, color: a.tone.text }}>
-                              <option value="alta">Alta</option>
-                              <option value="media">Media</option>
-                              <option value="ninguna">Poca</option>
-                            </select>
-                            <button type="button" onClick={() => removeMeeting(it.id)} title="Quitar" className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1D2939]">{isLunch ? "🍽 " : ""}{it.titulo}</span>
+                            {isLunch ? (
+                              <span className="shrink-0 rounded-full border border-[#F2C879] bg-white px-2 py-0.5 text-[10px] font-bold text-[#8A5700]">Descanso</span>
+                            ) : (
+                              <select value={it.atencion} onChange={(e) => updateMeeting(it.id, { atencion: e.target.value })} title="Nivel de atención"
+                                className="shrink-0 cursor-pointer rounded-full border bg-white px-1.5 py-0.5 text-[10px] font-bold outline-none" style={{ borderColor: a.tone.border, color: a.tone.text }}>
+                                <option value="alta">Alta</option>
+                                <option value="media">Media</option>
+                                <option value="ninguna">Poca</option>
+                              </select>
+                            )}
+                            <button type="button" onClick={() => removeMeeting(it.id)} title={isLunch ? "Quitar almuerzo" : "Quitar"} className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={14} /></button>
                           </div>
-                          {it.atencion === "ninguna" && (
+                          {!isLunch && it.atencion === "ninguna" && (
                             sug ? (
                               <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(sug.companyId); setHighlightTaskId(sug.id); }}
                                 className="mt-1.5 flex w-full items-center gap-1.5 rounded border border-[#A6F4C5] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#067647]">
