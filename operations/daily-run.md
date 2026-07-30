@@ -155,8 +155,29 @@ menor según el contexto. Antes de fijar intensidades, el MD DEBE:
    extraer el TEXTO (sin render visual), advertir que puede haberse perdido severidad visual
    (gráficas, mapas de calor) y validar la lectura contra la amplitud antes de fijar la intensidad.
 
-El resultado del run sin insumos es: tareas repriorizadas + un reporte de que señales
-faltan por adaptar en cada empresa.
+#### Campo `weight` de la señal = AMPLITUD del subproyecto (OBLIGATORIO llenarlo)
+
+Cada señal (`product_signals`) tiene además de `intensity` (0–1, severidad del dolor) un campo
+**`weight` (0.3–1.0)** = **cuánta amplitud/negocio mueve el SUBPROYECTO** donde vive la señal. Separa
+"qué tan grave es el dolor" (intensity) de "qué tanto importa ese subproyecto" (weight). La
+**prioridad efectiva** de una señal = `intensity × weight`.
+
+El MD DEBE fijar `weight` a cada señal según la amplitud de su subproyecto (mismo `weight` para las
+señales del mismo subproyecto, salvo matiz justificado). Escala guía:
+
+- **0.9–1.0** — Producto de cliente en su **flujo NÚCLEO**, **previo a lanzamiento**, o cliente
+  **estratégico/ingresos altos** (p. ej. BID/Interfaz Fiduciaria, Ecopetrol/REVO en operación crítica).
+- **0.6–0.8** — Construcción activa, importante pero sin criticidad inmediata (Backoffice, módulos
+  secundarios, productos en desarrollo temprano-medio con cliente real).
+- **0.3–0.5** — **Interno/soporte/descubrimiento** o exploración sin cliente aún (proyectos internos,
+  bandeja "Por asignar", pruebas).
+
+Criterios que suben el `weight`: cercanía al lanzamiento, criticidad del flujo, alcance contratado
+grande, cliente clave/ingresos, muchas dependencias esperando. Si **falta contexto** para calibrar la
+amplitud de un subproyecto, NO poner weight bajo por defecto: reportarlo y pedir contexto.
+
+El resultado del run sin insumos es: tareas repriorizadas + un reporte de qué señales faltan por
+adaptar (incluido `weight`) en cada empresa.
 
 ## Lista de BUENAS PRÁCTICAS DE CRECIMIENTO por proyecto (el MD la genera)
 
@@ -236,8 +257,14 @@ Si existe la agenda de hoy:
    - En los **huecos libres** y en las reuniones de **atención `ninguna`**, sugerir avanzar las tareas
      marcadas **"En paralelo"** (colas de la IA, desarrollo que corre solo) y las de tipo `Administrativa`
      rápidas (trámites) — nunca trabajo que exija foco profundo.
-   - Señalar **conflictos**: una entrega con vencimiento hoy que choca con un día lleno de reuniones →
-     proponer mover la fecha (con motivo) o delegar.
+   - **Conflictos de reuniones (pueden ser VARIOS en un día):** dos o más reuniones que se cruzan en
+     horario. El CEO NO puede estar en dos a la vez, así que la ÚNICA salida es **DELEGAR** (no "elegir
+     a cuál va"): se mantiene la de **mayor valor/atención** y se **delega la(s) otra(s)** en quien
+     pueda cubrirla (equipo interno, líder del subproyecto, un asistente clave de esa reunión). En el
+     `titulo` de la reunión delegada agregar `"(delegar → <a quién, si se sabe>)"` y dejarlo explícito
+     en el Plan del día. **Revisar TODOS los cruces del día**, no solo el primero.
+   - **Conflicto tarea vs. día lleno:** una entrega que vence hoy y no cabe en los huecos → proponer
+     mover la fecha (con motivo) o delegar la tarea.
 3. **Redactar el "Plan del día"** en texto: 3–6 líneas en español claro — carga de reuniones por
    atención, dónde caben las tareas de fondo/paralelo, foco recomendado y qué se reprioriza hoy.
 4. **Escribir en `raw_text` de ESA fila** (PATCH) un JSON **objeto** con las reuniones **y** el plan:
