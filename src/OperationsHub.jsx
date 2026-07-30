@@ -276,6 +276,29 @@ function nextOccurrence(baseIso, cadence) {
 // Tarea "activa" para recomendaciones/rituales (no terminada ni en un estado que no depende de mí).
 const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
 
+// Campo de texto con BORRADOR LOCAL: al escribir solo se re-renderiza este campo (no toda la app con
+// sus 131 tarjetas). Confirma al estado global al PAUSAR (debounce) y al salir del campo (blur). Así la
+// escritura es fluida y el estado/guardado siguen consistentes. `as`: "input" | "textarea".
+function DraftField({ value = "", onCommit, as = "input", commitMs = 450, ...rest }) {
+  const [v, setV] = useState(value);
+  const last = useRef(value);
+  const timer = useRef(null);
+  useEffect(() => { // re-sincroniza si el valor externo cambió (p. ej. otra tarea)
+    if (value !== last.current) { setV(value); last.current = value; }
+  }, [value]);
+  const commit = (nv) => { if (nv !== last.current) { last.current = nv; onCommit(nv); } };
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const Comp = as;
+  return (
+    <Comp
+      {...rest}
+      value={v}
+      onChange={(e) => { const nv = e.target.value; setV(nv); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => commit(nv), commitMs); }}
+      onBlur={(e) => { if (timer.current) clearTimeout(timer.current); commit(e.target.value); }}
+    />
+  );
+}
+
 function displayDate(value) {
   if (!value) return "Sin fecha";
   return String(value).slice(0, 10);
@@ -918,18 +941,20 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // con debounce.
   useEffect(() => {
     if (!loadedState) return undefined;
-    // El caché local es INMEDIATO (nada se pierde aunque el guardado a la base tarde).
-    localStorage.setItem(STORE_KEY, JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany }));
-    if (!opsData.opsDataReady()) return undefined;
+    // Caché local DIFERIDO (~1 s): antes hacía JSON.stringify de TODO en cada tecla y trababa la
+    // escritura. Con debounce corto no se pierde nada práctico y el hilo queda libre al escribir.
+    const localTimer = setTimeout(() => {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify({ companies, tasks, sourceRecords, people, activeCompany })); } catch { /* ignore */ }
+    }, 1000);
     // Debounce largo (8 s) para AGRUPAR ediciones y no escribir la base en cada campo. En una base
     // gratuita eso importa. El guardado inmediato/visible es el botón "Guardar tarea" (por tarea);
     // este autosave es solo la red de seguridad para cambios estructurales (empresas/personas/mover).
-    const timer = setTimeout(() => {
+    const dbTimer = opsData.opsDataReady() ? setTimeout(() => {
       opsData.saveState(token, { companies, tasks, sourceRecords, people, activeCompany })
         .then((saved) => { if (saved?.warning) setSaveStatus(`⚠ ${saved.warning}`); })
         .catch((e) => { if (opsData.isAuthError(e)) onAuthError?.(); });
-    }, 8000);
-    return () => clearTimeout(timer);
+    }, 8000) : null;
+    return () => { clearTimeout(localTimer); if (dbTimer) clearTimeout(dbTimer); };
   }, [companies, tasks, sourceRecords, people, activeCompany, loadedState, token]);
 
   // Asigna el codigo de referencia FIJO (AR01…) a las tareas que no lo tienen y lo persiste.
@@ -3758,18 +3783,19 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
         )}
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Título</span>
-          <input
+          <DraftField
             value={task.title}
-            onChange={(event) => onChangeTask(task.id, { title: event.target.value })}
+            onCommit={(val) => onChangeTask(task.id, { title: val })}
             className="w-full rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm font-semibold leading-snug text-[#1D2939] outline-none focus:border-[#17727A]"
             placeholder="Título de la tarea"
           />
         </label>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#667085]">Descripción</span>
-          <textarea
+          <DraftField
+            as="textarea"
             value={task.description || ""}
-            onChange={(event) => onChangeTask(task.id, { description: event.target.value })}
+            onCommit={(val) => onChangeTask(task.id, { description: val })}
             rows={4}
             className="min-h-[88px] w-full resize-y rounded-md border border-[#D0D5DD] bg-white px-3 py-2 text-sm leading-relaxed text-[#344054] outline-none focus:border-[#17727A]"
             placeholder="Descripción de la tarea"
