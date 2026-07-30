@@ -269,10 +269,18 @@ hábiles. La agenda es una entrada más que refina esa actualización; nada qued
 
 ### Tareas RECURRENTES (rituales diarios/semanales)
 
-Una tarea puede ser **recurrente**: campo `recurrence` = `{cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null}`
-(`until` nulo = continua, sin fin). Ejemplos: "planear agenda" (diario), "cerrar agenda" (diario),
-"reporte semanal" (semanal). Al **completarse**, la app genera sola la siguiente ocurrencia (misma
-tarea, nueva fecha). El MD, en cada corrida, **mantiene** estos rituales:
+Una tarea puede ser **recurrente**: campo `recurrence` = `{cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null, at:'HH:MM'|null}`
+(`until` nulo = continua, sin fin; `at` = **momento del día** en que se ejecuta). Ejemplos:
+"planear agenda" (diario, `at:'08:00'`), "cerrar agenda" (diario, `at:'17:30'`), "reporte semanal"
+(semanal). Al **completarse**, la app genera sola la siguiente ocurrencia (misma tarea, nueva fecha).
+
+**Momento del día (`at`) y agenda:** las recurrentes que necesitan **supervisión del CEO** llevan `at`
+y aparecen como **rituales en su Agenda de Foco** a esa hora (entre las reuniones). Al definir/mantener
+una recurrente de este tipo, el MD DEBE ponerle `at` coherente (rituales de arranque temprano,
+cierres al final de la jornada) para que caigan en el momento correcto del día. Cuentan como bloque
+ocupado al calcular huecos.
+
+El MD, en cada corrida, **mantiene** estos rituales:
 
 - Si una tarea recurrente **vigente** no tiene una ocurrencia pendiente para el período actual, la crea.
 - Respeta `until`: si ya pasó, no regenera (la recurrencia terminó).

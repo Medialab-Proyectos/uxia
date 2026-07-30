@@ -273,6 +273,8 @@ function nextOccurrence(baseIso, cadence) {
   d.setDate(d.getDate() + (cadence === "semanal" ? 7 : 1));
   return d.toISOString().slice(0, 10);
 }
+// Tarea "activa" para recomendaciones/rituales (no terminada ni en un estado que no depende de mí).
+const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
 
 function displayDate(value) {
   if (!value) return "Sin fecha";
@@ -975,21 +977,26 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const GAP_MIN = 20;
     const dayStart = hhmmToMin(jornada.inicio) ?? 8 * 60;
     const dayEnd = hhmmToMin(jornada.fin) ?? 18 * 60;
-    const timed = agenda.filter((m) => hhmmToMin(m.hora) != null)
-      .map((m) => ({ ...m, start: hhmmToMin(m.hora), end: hhmmToMin(m.hora) + (Number(m.dur) || 60) }))
-      .sort((a, b) => a.start - b.start);
+    const meetItems = agenda.filter((m) => hhmmToMin(m.hora) != null)
+      .map((m) => ({ type: "meet", ...m, start: hhmmToMin(m.hora), end: hhmmToMin(m.hora) + (Number(m.dur) || 60) }));
+    // RITUALES: tareas recurrentes con un "momento del día" (recurrence.at). Necesitan tu supervisión,
+    // así que aparecen en la agenda a su hora (p. ej. planear/cerrar agenda).
+    const ritualItems = tasks
+      .filter((t) => t.recurrence?.at && hhmmToMin(t.recurrence.at) != null && RECO_ACTIVE(t) && (!t.dueDate || t.dueDate <= todayIso()))
+      .map((t) => ({ type: "ritual", id: t.id, titulo: t.title, task: t, dur: 15, start: hhmmToMin(t.recurrence.at), end: hhmmToMin(t.recurrence.at) + 15 }));
+    const timed = [...meetItems, ...ritualItems].sort((a, b) => a.start - b.start);
     const untimed = agenda.filter((m) => hhmmToMin(m.hora) == null);
     const items = [];
     let cursor = dayStart;
     for (let i = 0; i < timed.length; i++) {
       const m = timed[i];
       if (m.start - cursor >= GAP_MIN) items.push({ type: "gap", start: cursor, end: m.start, mins: m.start - cursor });
-      items.push({ type: "meet", ...m });
+      items.push(m);
       cursor = Math.max(cursor, m.end);
     }
     if (dayEnd - cursor >= GAP_MIN) items.push({ type: "gap", start: cursor, end: dayEnd, mins: dayEnd - cursor });
     return { items, untimed, freeMins: items.filter((x) => x.type === "gap").reduce((s, x) => s + x.mins, 0) };
-  }, [agenda, jornada]);
+  }, [agenda, jornada, tasks]);
   // A cada reunión de POCA atención se le asigna (en orden) una tarea en paralelo concreta.
   const parallelByMeeting = useMemo(() => {
     const map = {};
@@ -1000,7 +1007,6 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // Recomendaciones de tareas por HORA (sin marcar nada a mano): huecos libres → foco profundo
   // (tareas de mayor prioridad, la empresa del día primero); reuniones de POCA atención → algo
   // ligero (en paralelo, administrativo o trámite) que se puede adelantar mientras se escucha.
-  const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
   // Ordena por VALOR real (scoreTask), con un empujón leve a la empresa del día para favorecer la
   // concentración SIN enterrar una tarea de otra empresa que valga claramente más (p. ej. un trámite
   // administrativo de MediaLab que vence hoy). Así lo de más valor siempre aparece.
@@ -2172,6 +2178,20 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                                 <span className="shrink-0 text-[10px] text-[#98A2B3]">{nameOf(rec.companyId)}</span>
                               </button>
                             )}
+                          </li>
+                        );
+                      }
+                      if (it.type === "ritual") {
+                        return (
+                          <li key={it.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-[#D9CFF3] bg-[#F7F5FE] p-2">
+                            <span className="w-24 shrink-0 text-sm font-bold tabular-nums text-[#6941C6]">{minToHhmm(it.start)}<span className="ml-1 text-[10px] font-semibold opacity-70">ritual</span></span>
+                            <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(it.task.companyId); setHighlightTaskId(it.id); }}
+                              className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm font-semibold text-[#1D2939]">
+                              🔁 <span className="min-w-0 flex-1 truncate">{it.titulo}</span>
+                            </button>
+                            <span className="shrink-0 rounded-full border border-[#D9CFF3] bg-white px-2 py-0.5 text-[10px] font-bold text-[#6941C6]" title="Requiere tu supervisión a esta hora">supervisar</span>
+                            <button type="button" onClick={() => updateTask(it.id, { status: "done" })} title="Marcar hecho (genera la siguiente)"
+                              className="shrink-0 rounded-md bg-[#6941C6] px-2 py-0.5 text-[10px] font-bold text-white">✓ Hecho</button>
                           </li>
                         );
                       }
@@ -3789,6 +3809,10 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
                   className="rounded-md border border-[#D0D5DD] px-2 py-1 font-normal text-[#344054]">
                   {RECURRENCE_CADENCES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
+                <span className="text-[#667085]">a las</span>
+                <input type="time" value={task.recurrence.at || ""} onChange={(e) => onChangeTask(task.id, { recurrence: { ...task.recurrence, at: e.target.value || null } })}
+                  title="Momento del día en que la ejecutas (aparece en tu agenda de Foco)"
+                  className="rounded-md border border-[#D0D5DD] px-2 py-1 font-normal text-[#344054]" />
                 <span className="text-[#667085]">hasta</span>
                 <input type="date" value={task.recurrence.until || ""} onChange={(e) => onChangeTask(task.id, { recurrence: { ...task.recurrence, until: e.target.value || null } })}
                   className="rounded-md border border-[#D0D5DD] px-2 py-1 font-normal text-[#344054]" />
