@@ -607,6 +607,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [taskQuery, setTaskQuery] = useState("");
   const [highlightTaskId, setHighlightTaskId] = useState(null);
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
+  const [focoEmpresa, setFocoEmpresa] = useState("");     // "Empresa del día": foco elegido (persist por día)
   const [dateField, setDateField] = useState("reportada"); // reportada (createdAt) | vence (dueDate)
   const [dateFrom, setDateFrom] = useState("");            // rango de fecha: desde (YYYY-MM-DD)
   const [dateTo, setDateTo] = useState("");                // rango de fecha: hasta (YYYY-MM-DD)
@@ -772,6 +773,35 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const { tasks: withRefs, changed } = withAssignedRefs(tasks, companies);
     if (changed) setTasks(withRefs);
   }, [loadedState, tasks, companies]);
+
+  // "Empresa del día": el foco se guarda por DÍA en el navegador (personal, no en la base). Al
+  // cargar, si ya elegiste una hoy, se toma esa; si no, se usa la SUGERIDA (la empresa con más
+  // trabajo pendiente de alto impacto). Sistema de foco: entregar un producto completo por día.
+  const focoKey = `uxia.foco.${todayIso()}`;
+  useEffect(() => {
+    try { const saved = localStorage.getItem(focoKey); if (saved) setFocoEmpresa(saved); } catch { /* ignore */ }
+  }, [focoKey]);
+  const focoSugerida = useMemo(() => {
+    const activas = companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar");
+    let best = "", bestScore = -1;
+    for (const c of activas) {
+      const ct = tasks.filter((t) => t.companyId === c.id && t.status !== "done" && t.status !== "espera" && t.status !== "notificado" && t.status !== "verificacion");
+      const s = ct.reduce((a, t) => a + scoreTask(t).score, 0);
+      if (s > bestScore) { bestScore = s; best = c.id; }
+    }
+    return best;
+  }, [companies, tasks]);
+  const focoId = (focoEmpresa && companies.some((c) => c.id === focoEmpresa && c.status !== "inactiva")) ? focoEmpresa : focoSugerida;
+  const focoCompany = companies.find((c) => c.id === focoId) || null;
+  const focoTop3 = useMemo(() => {
+    if (!focoId) return [];
+    return tasks
+      .filter((t) => t.companyId === focoId && t.status !== "done" && t.status !== "espera" && t.status !== "notificado" && t.status !== "verificacion")
+      .map((t) => ({ ...t, _s: scoreTask(t).score }))
+      .sort((a, b) => b._s - a._s)
+      .slice(0, 3);
+  }, [focoId, tasks]);
+  const setFoco = (id) => { setFocoEmpresa(id); try { if (id) localStorage.setItem(focoKey, id); else localStorage.removeItem(focoKey); } catch { /* ignore */ } };
 
   const company = companies.find((item) => item.id === activeCompany) || companies[0];
   const activeCompanyClients = activeClients(company);
@@ -1649,6 +1679,47 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             </div>
           )}
         </div>
+
+        {/* EMPRESA DEL DÍA (sistema de foco): elige una cuenta foco y entrégale un incremento COMPLETO
+            hoy, en vez de repartir pedazos entre todas. Sugerida = la de más trabajo pendiente de alto
+            impacto; la puedes cambiar. Muestra su top-3 por prioridad. Se recuerda por día. */}
+        {focoCompany && (
+          <div className="mb-4 rounded-lg border border-[#E8751A] bg-[#FFF7EF] p-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#B54708]"><Target size={13} /> Empresa del día</span>
+                <select value={focoId} onChange={(e) => setFoco(e.target.value)}
+                  className="rounded-md border border-[#F2C879] bg-white px-2 py-1 text-sm font-semibold text-[#8A5700] outline-none focus:border-[#E8751A]">
+                  {companies.filter((c) => c.status !== "inactiva" && c.id !== "por-asignar").map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                {(!focoEmpresa || focoEmpresa !== focoId) && focoId === focoSugerida && (
+                  <span className="rounded-full bg-[#FDE8CF] px-2 py-0.5 text-[10px] font-semibold text-[#B54708]">sugerida por carga</span>
+                )}
+              </div>
+              <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(focoId); }}
+                className="inline-flex items-center gap-1 rounded-md bg-[#E8751A] px-3 py-1.5 text-xs font-semibold text-white">
+                Ir a la empresa <ChevronRight size={14} />
+              </button>
+            </div>
+            {focoTop3.length > 0 ? (
+              <ol className="mt-2.5 space-y-1">
+                {focoTop3.map((t, i) => (
+                  <li key={t.id}>
+                    <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(focoId); setHighlightTaskId(t.id); }}
+                      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs hover:bg-[#FDE8CF]">
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#E8751A] text-[10px] font-bold text-white">{i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate font-semibold text-[#1D2939]">{t.title}</span>
+                      <span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold" style={{ borderColor: `${statusTone(t.status).border}`, background: statusTone(t.status).bg, color: statusTone(t.status).text }}>{STATUS[t.status] || t.status}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-2 text-xs text-[#8b8272]">Sin tareas pendientes en esta empresa hoy. 👌</p>
+            )}
+            <p className="mt-1.5 text-[11px] text-[#8b8272]">Pareto: cierra estas 3 y entrega un incremento completo hoy. Lo demás puede esperar su turno.</p>
+          </div>
+        )}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <Metric label="Tareas abiertas" value={metrics.open} tone="#17727A" icon={ListChecks} />

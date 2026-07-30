@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw, ChevronUp } from "lucide-react";
+import { Sun, Moon, Bell, BellRing, Menu, X, LayoutDashboard, Radar, LogOut, User, Eye, EyeOff, Lock, RotateCw, ChevronUp, Target } from "lucide-react";
 // Vistas grandes divididas en chunks (React.lazy): cada usuario descarga SOLO la que usa
 // (admin → OperationsHub/Radar; empleado → EmployeePortal), no las tres. Baja el JS inicial.
 // Si el chunk falla al cargar (típico tras un DEPLOY NUEVO: la página vieja referencia un hash que
@@ -545,6 +545,13 @@ function AppShell() {
           <div className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-1`}>
             {esCEO && <ModuleBtn id="operations" label="Centro operativo" Icon={LayoutDashboard} activeColor="#17727A" />}
             <ModuleBtn id="radar" label="Radar oportunidades" Icon={Radar} activeColor="#E8751A" />
+            {esCEO && (
+              <a href="/sistema-foco.html" target="_blank" rel="noopener noreferrer" title="Sistema de foco del CEO"
+                className="flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm font-semibold sm:min-h-0 sm:px-2.5 sm:py-1.5"
+                style={{ color: navText }}>
+                <Target size={16} /> Sistema de foco
+              </a>
+            )}
             <div className="my-1 h-px w-full sm:my-0 sm:mx-1 sm:h-5 sm:w-px" style={{ backgroundColor: navBorder }} />
             <UserMenu email={session.user?.email || session.user?.user_metadata?.email || ""} onChangePassword={handleChangePassword} navText={navText} navDim={navDim} ctrlBg={ctrlBg} navBorder={navBorder} />
             <button
