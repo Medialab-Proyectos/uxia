@@ -685,15 +685,17 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const focusDaysRef = useRef({});     // { 'YYYY-MM-DD': {empresa, agenda, plan} } de días previos
   const focusHydrated = useRef(false); // true tras hidratar desde DB (no persistir antes de cargar)
   useEffect(() => {
-    if (!token || !opsData.opsDataReady()) return;
+    if (!loadedState || !token || !opsData.opsDataReady()) return; // corre DESPUÉS de hidratar (así la
+    // agenda del MD, con acentos, gana sobre lo que pudiera haber quedado en app_state.focus).
     (async () => {
       try {
         const doc = await opsData.getAgendaDia(token, todayIso());
         if (!doc) { setAgendaDoc(null); return; }
-        const importedKey = `uxia.agenda.imported.${todayIso()}`;
-        // Ya analizada por el MD (trae reuniones y/o plan): se CARGAN al día, se guarda el Plan del
-        // día, se BORRA el archivo y el slot queda libre. Solo una vez por día (bandera localStorage).
-        if ((doc.meetings?.length || doc.plan) && !localStorage.getItem(importedKey)) {
+        // Ya analizada por el MD (trae reuniones y/o plan): se CARGAN al día (con acentos correctos),
+        // se guarda el Plan del día, se BORRA el archivo y el slot queda libre. Como al consumir se
+        // borra la fila, no vuelve a entrar aquí — no hace falta bandera (antes se quedaba pegado en
+        // una versión vieja). Si el borrado falla, la próxima carga re-importa lo mismo (idempotente).
+        if (doc.meetings?.length || doc.plan) {
           const ms = (doc.meetings || []).map((m, i) => ({
             id: `md-${i}-${Date.now()}`, hora: m.hora || "", dur: Number(m.dur) || 60,
             titulo: m.titulo || m.title || "Reunión",
@@ -702,7 +704,6 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
           }));
           if (ms.length) persistAgenda(ms);
           if (doc.plan) { setPlanTexto(doc.plan); try { localStorage.setItem(`uxia.plandia.${todayIso()}`, doc.plan); } catch { /* ignore */ } }
-          try { localStorage.setItem(importedKey, "1"); } catch { /* ignore */ }
           await opsData.deleteAgendaDia(token, doc.id).catch(() => {});
           setAgendaDoc(null); // consumida: espera una nueva
         } else {
@@ -710,7 +711,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         }
       } catch { /* ignore */ }
     })();
-  }, [token]);
+  }, [loadedState, token]);
   const uploadAgenda = async (file) => {
     if (!file) return;
     setAgendaBusy(true);
