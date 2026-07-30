@@ -1052,24 +1052,27 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // administrativo de MediaLab que vence hoy). Así lo de más valor siempre aparece.
   const FOCO_BONUS = 6;
   const sVal = (t) => scoreTask(t).score; // scoreTask devuelve {score, reasons}: usar .score
-  // Bloques de foco = TRABAJO del CEO → solo SUS tareas (sin responsable del equipo). Las del equipo no
-  // se hacen aquí, se les hace "push" (mensaje) aparte.
+  // El CEO/admin (Christian) tiene sus tareas ASIGNADAS a él → esas son SUYAS (foco), no pushes.
+  const ceoId = useMemo(() => (people.find((p) => /christ/i.test(p.name || "") && /benavid/i.test(p.name || "")) || {}).id || "", [people]);
+  const esMia = (t) => !t.assigneeId || t.assigneeId === ceoId; // sin responsable o asignada al CEO
+  // Bloques de foco = TRABAJO del CEO → solo SUS tareas (suyas o sin responsable). Las de OTROS del
+  // equipo no se hacen aquí: se les hace "push" (mensaje) aparte.
   const deepPool = useMemo(() => activeView !== "foco" ? [] : tasks
-    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked" && !t.assigneeId)
+    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked" && esMia(t))
     .sort((a, b) => (sVal(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (sVal(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
-    [tasks, focoId, activeView]);
-  // PUSHES = mensajes rápidos: tareas del EQUIPO (con responsable) cerca de vencer/entregar. Cada una
-  // es "solo un mensaje" para preguntar cómo va — no ocupa bloque de foco.
+    [tasks, focoId, activeView, ceoId]);
+  // PUSHES = mensajes rápidos: tareas de OTROS del equipo (no del CEO) cerca de vencer/entregar. Cada
+  // una es "solo un mensaje" para preguntar cómo va — no ocupa bloque de foco.
   const pushList = useMemo(() => {
     if (activeView !== "foco") return [];
     const limite = addDays(2);
     return tasks
-      .filter((t) => t.assigneeId && t.status !== "done" && t.status !== "notificado" && t.status !== "espera")
+      .filter((t) => t.assigneeId && t.assigneeId !== ceoId && t.status !== "done" && t.status !== "notificado" && t.status !== "espera")
       .filter((t) => t.status === "review" || t.status === "verificacion" || (t.dueDate && t.dueDate <= limite))
       .map((t) => ({ ...t, _resp: personById(people, t.assigneeId)?.name || "Alguien" }))
       .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
       .slice(0, 12);
-  }, [tasks, people, activeView]);
+  }, [tasks, people, activeView, ceoId]);
   const lightPool = useMemo(() => activeView !== "foco" ? [] : tasks
     .filter((t) => RECO_ACTIVE(t) && (parallelIds.has(t.id) || t.category === "Administrativa" || t.category === "Apoyo" || t.designPoints === 0.5))
     .sort((a, b) => sVal(b) - sVal(a)), [tasks, parallelIds, activeView]);
@@ -1077,8 +1080,13 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const slotRecs = useMemo(() => {
     const map = {}; let gi = 0, pi = 0;
     for (const it of agendaTimeline.items) {
-      if (it.type === "gap") { if (deepPool[gi]) map[`gap-${it.start}`] = deepPool[gi]; gi++; }
-      else if (it.atencion === "ninguna" && !(it.almuerzo || /almuerzo/i.test(it.titulo || ""))) { if (lightPool[pi]) map[it.id] = lightPool[pi]; pi++; }
+      if (it.type === "gap") {
+        // Un hueco grande cabe VARIAS tareas: ~1 por cada 75 min (mín 1, máx 4).
+        const n = Math.max(1, Math.min(4, Math.round(it.mins / 75)));
+        const arr = deepPool.slice(gi, gi + n);
+        if (arr.length) map[`gap-${it.start}`] = arr;
+        gi += arr.length;
+      } else if (it.atencion === "ninguna" && !(it.almuerzo || /almuerzo/i.test(it.titulo || ""))) { if (lightPool[pi]) map[it.id] = lightPool[pi]; pi++; }
     }
     return map;
   }, [agendaTimeline, deepPool, lightPool]);
@@ -2231,20 +2239,24 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   <ul className="mt-2 space-y-1.5">
                     {agendaTimeline.items.map((it) => {
                       if (it.type === "gap") {
-                        const rec = slotRecs[`gap-${it.start}`];
+                        const recs = slotRecs[`gap-${it.start}`] || [];
                         return (
                           <li key={`gap-${it.start}`} className="rounded-md border border-dashed border-[#BBD8DA] bg-[#F5FAFA] px-2.5 py-1.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <Target size={13} className="shrink-0 text-[#17727A]" />
-                              <span className="text-[11px] font-semibold text-[#17727A]">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)}) → foco</span>
+                              <span className="text-[11px] font-semibold text-[#17727A]">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)}) → foco{recs.length > 1 ? ` · ${recs.length} para avanzar` : ""}</span>
                               <button type="button" onClick={() => markLunch(it.start)} className="ml-auto rounded-full border border-[#D0D5DD] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#667085] hover:border-[#17727A] hover:text-[#17727A]">🍽 Marcar almuerzo</button>
                             </div>
-                            {rec && (
-                              <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(rec.companyId); setHighlightTaskId(rec.id); }}
-                                className="mt-1 flex w-full items-center gap-1.5 rounded border border-[#BBD8DA] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#0F5C63]">
-                                <Target size={11} className="shrink-0" /> Aprovecha para: <span className="min-w-0 flex-1 truncate">{rec.title}</span>
-                                <span className="shrink-0 text-[10px] text-[#98A2B3]">{nameOf(rec.companyId)}</span>
-                              </button>
+                            {recs.length > 0 && (
+                              <div className="mt-1 space-y-1">
+                                {recs.map((rec) => (
+                                  <button key={rec.id} type="button" onClick={() => { setActiveView("companies"); setActiveCompany(rec.companyId); setHighlightTaskId(rec.id); }}
+                                    className="flex w-full items-center gap-1.5 rounded border border-[#BBD8DA] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#0F5C63]">
+                                    <Target size={11} className="shrink-0" /> <span className="min-w-0 flex-1 truncate">{rec.title}</span>
+                                    <span className="shrink-0 text-[10px] text-[#98A2B3]">{nameOf(rec.companyId)}</span>
+                                  </button>
+                                ))}
+                              </div>
                             )}
                           </li>
                         );
