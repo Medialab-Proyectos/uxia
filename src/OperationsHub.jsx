@@ -1001,6 +1001,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     return map;
   }, [agendaTimeline, deepPool, lightPool]);
   const markLunch = (startMin) => persistAgenda([...agenda, { id: `lunch-${Date.now()}`, hora: minToHhmm(startMin), dur: 60, titulo: "Almuerzo", atencion: "ninguna" }]);
+  // Nombre de empresa por id (para las etiquetas de la vista Foco).
+  const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
   // Plan del día: síntesis para la franja de Foco (reuniones por atención + tiempo libre + paralelo).
   const planDia = useMemo(() => {
     const cnt = { alta: 0, media: 0, ninguna: 0 };
