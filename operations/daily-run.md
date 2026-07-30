@@ -267,6 +267,19 @@ un breve **Plan del día** en el reporte con el foco recomendado y qué avanzar.
 (`espera`/vencidas), señales MDSSP, `designPoints` de tareas activas, lista de crecimiento y fechas
 hábiles. La agenda es una entrada más que refina esa actualización; nada queda a medias.
 
+### Tareas RECURRENTES (rituales diarios/semanales)
+
+Una tarea puede ser **recurrente**: campo `recurrence` = `{cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null}`
+(`until` nulo = continua, sin fin). Ejemplos: "planear agenda" (diario), "cerrar agenda" (diario),
+"reporte semanal" (semanal). Al **completarse**, la app genera sola la siguiente ocurrencia (misma
+tarea, nueva fecha). El MD, en cada corrida, **mantiene** estos rituales:
+
+- Si una tarea recurrente **vigente** no tiene una ocurrencia pendiente para el período actual, la crea.
+- Respeta `until`: si ya pasó, no regenera (la recurrencia terminó).
+- En **festivos/fin de semana** no genera trabajo ese día; si el ritual implica **reportar/enviar**,
+  lo mueve al día hábil anterior (ver arriba).
+- No duplica: una sola ocurrencia pendiente por ritual y período.
+
 ## Priorizacion de tareas (SIEMPRE, despues de analizar)
 
 Cada vez que se analizan tareas o documentos nuevos y ya estan depuradas/asignadas, el MD

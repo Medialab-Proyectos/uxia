@@ -338,6 +338,10 @@ create trigger app_guard_task_update before update on tasks
 -- LÍDERES DE SUBPROYECTO (empleados MediaLab): crean tareas/insumos en su subproyecto y editan
 -- SOLO las tareas que ellos crean (created_by). Ver supabase/migration-subproject-leads.sql.
 alter table tasks add column if not exists created_by text;
+-- Tareas recurrentes: {cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null}. Se regeneran al completarse.
+alter table tasks add column if not exists recurrence jsonb;
+-- Estado del sistema de foco persistido en DB (cross-device): jornada, foco por día, agenda, plan, paralelo.
+alter table app_state add column if not exists focus jsonb not null default '{}'::jsonb;
 create table if not exists subproject_leads (
   id uuid primary key default gen_random_uuid(),
   company_id text not null, client text not null, email text not null,
