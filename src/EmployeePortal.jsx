@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound, ExternalLink, Download, ChevronRight } from "lucide-react";
+import { Bell, Clock, CheckCircle2, LoaderCircle, MessageCircle, Send, ListChecks, AlertTriangle, KeyRound, Paperclip, Trash2, UserRound, ExternalLink, Download, ChevronRight, Receipt } from "lucide-react";
 import { notifyEvent } from "./notify.js";
 import * as opsData from "./opsData.js";
 
@@ -74,6 +74,59 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
   const [noveltyReady, setNoveltyReady] = React.useState(true); // false si la base aún no tiene las columnas
 
   const headers = React.useMemo(() => ({ apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` }), [token]);
+
+  // Cuenta de cobro del mes en curso.
+  const period = React.useMemo(() => new Date().toISOString().slice(0, 7), []); // 'YYYY-MM'
+  const monthLabel = React.useMemo(() => {
+    try { return new Date(period + "-01T12:00:00").toLocaleDateString("es-CO", { month: "long", year: "numeric" }); }
+    catch { return period; }
+  }, [period]);
+  const [cuenta, setCuenta] = React.useState(null);
+  const [cuentaAmount, setCuentaAmount] = React.useState("");
+  const [cuentaNote, setCuentaNote] = React.useState("");
+  const [cuentaSaving, setCuentaSaving] = React.useState(false);
+  const [cuentaMsg, setCuentaMsg] = React.useState("");
+  const [cuentaOpen, setCuentaOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!email) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/cuentas_cobro?email=eq.${encodeURIComponent(email)}&period=eq.${period}&select=*`, { headers });
+        if (!alive || !r.ok) return;
+        const rows = await r.json();
+        if (rows && rows[0]) { setCuenta(rows[0]); setCuentaAmount(rows[0].amount ?? ""); setCuentaNote(rows[0].note || ""); }
+      } catch { /* la tabla puede no existir aún (migración pendiente) */ }
+    })();
+    return () => { alive = false; };
+  }, [email, period, headers]);
+
+  async function submitCuenta() {
+    setCuentaSaving(true); setCuentaMsg("");
+    try {
+      const body = {
+        email, period, status: "entregada",
+        amount: cuentaAmount === "" ? null : Number(cuentaAmount),
+        note: cuentaNote.trim() || null,
+        submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      };
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/cuentas_cobro?on_conflict=email,period`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(r.status === 404 || /relation .* does not exist/i.test(t) ? "Falta correr la migración de la tabla en Supabase." : `No se pudo guardar (código ${r.status}).`);
+      }
+      const rows = await r.json().catch(() => []);
+      setCuenta((rows && rows[0]) || body);
+      setCuentaMsg("Cuenta de cobro entregada ✓");
+      setCuentaOpen(false);
+    } catch (e) { setCuentaMsg(e.message || "Error al guardar."); }
+    finally { setCuentaSaving(false); }
+  }
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -521,6 +574,42 @@ export default function EmployeePortal({ token, user, theme = "light", onAlerts,
             {pwdMsg && <p className="mt-2 text-xs font-semibold" style={{ color: pwdMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{pwdMsg}</p>}
           </div>
         )}
+
+        {/* Cuenta de cobro del mes */}
+        <div className="mb-4 rounded-lg border p-3" style={{ borderColor: cuenta?.status === "entregada" ? "#A6D9C4" : "#EBB65C", background: card }}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Receipt size={16} style={{ color: "#17727A", flexShrink: 0 }} />
+              <p className="truncate text-sm font-semibold">Cuenta de cobro · <span className="capitalize">{monthLabel}</span></p>
+            </div>
+            <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold"
+              style={cuenta?.status === "entregada" ? { background: "#E5F5EE", color: "#0D7A4F" } : { background: "#FFF4DE", color: "#8A5700" }}>
+              {cuenta?.status === "entregada" ? "Entregada ✓" : "Pendiente"}
+            </span>
+          </div>
+
+          {cuenta?.status === "entregada" && !cuentaOpen ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs" style={{ color: dim }}>
+              {cuenta.amount != null && <span>Monto: <strong style={{ color: text }}>{Number(cuenta.amount).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}</strong></span>}
+              {cuenta.note && <span className="truncate">· {cuenta.note}</span>}
+              <button type="button" onClick={() => { setCuentaOpen(true); setCuentaMsg(""); }} className="font-semibold" style={{ color: "#17727A" }}>Editar</button>
+            </div>
+          ) : (
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <input value={cuentaAmount} onChange={(e) => setCuentaAmount(e.target.value.replace(/[^\d.]/g, ""))} inputMode="numeric"
+                placeholder="Monto (COP, opcional)"
+                className="w-full rounded-md border px-3 py-2 text-sm sm:w-40" style={{ borderColor: border, background: bg, color: text }} />
+              <input value={cuentaNote} onChange={(e) => setCuentaNote(e.target.value)} placeholder="Concepto / nota (opcional)"
+                onKeyDown={(e) => e.key === "Enter" && !cuentaSaving && submitCuenta()}
+                className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm" style={{ borderColor: border, background: bg, color: text }} />
+              <button type="button" onClick={submitCuenta} disabled={cuentaSaving}
+                className="shrink-0 rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-40" style={{ background: "#17727A" }}>
+                {cuentaSaving ? "Guardando…" : cuenta?.status === "entregada" ? "Actualizar" : "Entregar cuenta"}
+              </button>
+            </div>
+          )}
+          {cuentaMsg && <p className="mt-1.5 text-xs font-semibold" style={{ color: cuentaMsg.includes("✓") ? "#0D7A4F" : "#B42318" }}>{cuentaMsg}</p>}
+        </div>
 
         <div className="-mt-2 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: dim }}>
           <span>Estas son tus tareas y su prioridad.</span>
