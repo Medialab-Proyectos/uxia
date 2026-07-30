@@ -1052,10 +1052,24 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // administrativo de MediaLab que vence hoy). Así lo de más valor siempre aparece.
   const FOCO_BONUS = 6;
   const sVal = (t) => scoreTask(t).score; // scoreTask devuelve {score, reasons}: usar .score
+  // Bloques de foco = TRABAJO del CEO → solo SUS tareas (sin responsable del equipo). Las del equipo no
+  // se hacen aquí, se les hace "push" (mensaje) aparte.
   const deepPool = useMemo(() => activeView !== "foco" ? [] : tasks
-    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked")
+    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked" && !t.assigneeId)
     .sort((a, b) => (sVal(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (sVal(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
     [tasks, focoId, activeView]);
+  // PUSHES = mensajes rápidos: tareas del EQUIPO (con responsable) cerca de vencer/entregar. Cada una
+  // es "solo un mensaje" para preguntar cómo va — no ocupa bloque de foco.
+  const pushList = useMemo(() => {
+    if (activeView !== "foco") return [];
+    const limite = addDays(2);
+    return tasks
+      .filter((t) => t.assigneeId && t.status !== "done" && t.status !== "notificado" && t.status !== "espera")
+      .filter((t) => t.status === "review" || t.status === "verificacion" || (t.dueDate && t.dueDate <= limite))
+      .map((t) => ({ ...t, _resp: personById(people, t.assigneeId)?.name || "Alguien" }))
+      .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
+      .slice(0, 12);
+  }, [tasks, people, activeView]);
   const lightPool = useMemo(() => activeView !== "foco" ? [] : tasks
     .filter((t) => RECO_ACTIVE(t) && (parallelIds.has(t.id) || t.category === "Administrativa" || t.category === "Apoyo" || t.designPoints === 0.5))
     .sort((a, b) => sVal(b) - sVal(a)), [tasks, parallelIds, activeView]);
@@ -2195,6 +2209,20 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 </button>
               </div>
 
+              {pushList.length > 0 && (
+                <div className="mt-3 rounded-lg border border-[#F2C879] bg-[#FFF9EE] p-2.5">
+                  <p className="text-[11px] font-bold text-[#8A5700]">👋 Pushes rápidos (solo un mensaje — no ocupan tu foco): {pushList.length}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {pushList.map((t) => (
+                      <button key={t.id} type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }}
+                        title={`${t.title} · ${nameOf(t.companyId)} · ${t.status === "review" || t.status === "verificacion" ? "por entregar" : (taskIsOverdue(t) ? "vencida" : t.dueDate === todayIso() ? "vence hoy" : "vence " + displayDate(t.dueDate))}`}
+                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#EBB65C] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#8A5700]">
+                        <UserRound size={11} className="shrink-0" /> {t._resp.split(" ")[0]}: <span className="min-w-0 truncate">{t.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {agenda.length > 0 ? (
                 <>
                   {agendaTimeline.freeMins > 0 && (
@@ -2211,23 +2239,13 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                               <span className="text-[11px] font-semibold text-[#17727A]">Libre · {fmtDur(it.mins)} ({minToHhmm(it.start)}–{minToHhmm(it.end)}) → foco</span>
                               <button type="button" onClick={() => markLunch(it.start)} className="ml-auto rounded-full border border-[#D0D5DD] bg-white px-2 py-0.5 text-[10px] font-semibold text-[#667085] hover:border-[#17727A] hover:text-[#17727A]">🍽 Marcar almuerzo</button>
                             </div>
-                            {rec && (() => {
-                              // Si la tarea es de alguien del equipo (tiene responsable) → PUSH (preguntar
-                              // cómo va, no hacerla). Si no tiene responsable → es tuya, hazla.
-                              const resp = personById(people, rec.assigneeId);
-                              const esPush = !!resp;
-                              return (
-                                <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(rec.companyId); setHighlightTaskId(rec.id); }}
-                                  className="mt-1 flex w-full items-center gap-1.5 rounded border bg-white px-2 py-1 text-left text-[11px] font-semibold"
-                                  style={esPush ? { borderColor: "#F2C879", color: "#B76E00" } : { borderColor: "#BBD8DA", color: "#0F5C63" }}>
-                                  {esPush
-                                    ? <><UserRound size={11} className="shrink-0" /> Push a {resp.name.split(" ")[0]}:</>
-                                    : <><Target size={11} className="shrink-0" /> Aprovecha para:</>}
-                                  <span className="min-w-0 flex-1 truncate">{rec.title}</span>
-                                  <span className="shrink-0 text-[10px] text-[#98A2B3]">{nameOf(rec.companyId)}</span>
-                                </button>
-                              );
-                            })()}
+                            {rec && (
+                              <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(rec.companyId); setHighlightTaskId(rec.id); }}
+                                className="mt-1 flex w-full items-center gap-1.5 rounded border border-[#BBD8DA] bg-white px-2 py-1 text-left text-[11px] font-semibold text-[#0F5C63]">
+                                <Target size={11} className="shrink-0" /> Aprovecha para: <span className="min-w-0 flex-1 truncate">{rec.title}</span>
+                                <span className="shrink-0 text-[10px] text-[#98A2B3]">{nameOf(rec.companyId)}</span>
+                              </button>
+                            )}
                           </li>
                         );
                       }
