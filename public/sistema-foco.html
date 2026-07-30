@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sistema de Foco — MediaLab</title>
+  <meta name="theme-color" content="#F7F4EF" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>" />
+  <style>
+    :root {
+      --bg: #FAF8F4; --panel: #FFFFFF; --panel-2: #F4F1EA; --ink: #1D2939;
+      --dim: #5B6A6B; --faint: #8A9391; --line: #E7E0D5;
+      --teal: #17727A; --teal-soft: #EAF4F2; --orange: #E8751A; --orange-soft: #FCEEDF;
+      --slate: #566072; --slate-soft: #EEF0F3; --red: #B42318; --green: #0D7A4F;
+      --shadow: 0 1px 2px rgba(29,41,57,.04), 0 8px 24px rgba(29,41,57,.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0E1116; --panel: #151B23; --panel-2: #1B232E; --ink: #E8EDF3;
+        --dim: #9DA8B4; --faint: #6B7686; --line: #28313E;
+        --teal: #4FD1C5; --teal-soft: #10262A; --orange: #F0994E; --orange-soft: #2A2410;
+        --slate: #97A2B2; --slate-soft: #1B222C; --red: #F08A80; --green: #4ED9A6;
+        --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: "Lato", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.55; -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 40px 24px 56px; }
+
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .back { font-size: 13px; font-weight: 600; color: var(--teal); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+    .back:hover { text-decoration: underline; }
+
+    .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--teal); }
+    h1 { font-size: clamp(30px, 6vw, 46px); line-height: 1.02; font-weight: 800; letter-spacing: -.02em; margin: 10px 0 0; text-wrap: balance; }
+    h1 .amp { color: var(--orange); }
+    .thesis { font-size: clamp(15px, 2.4vw, 18px); color: var(--dim); max-width: 62ch; margin: 14px 0 0; }
+
+    .problem { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .chip { font-size: 12px; font-weight: 600; color: var(--dim); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; }
+
+    .rule { height: 1px; background: var(--line); border: 0; margin: 34px 0; }
+
+    h2 { font-size: 13px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 0 0 16px; }
+
+    .rhythm { display: grid; gap: 12px; }
+    @media (min-width: 720px) { .rhythm { grid-template-columns: repeat(4, 1fr); } }
+    .step { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 15px 15px; box-shadow: var(--shadow); }
+    .step .when { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--teal); display: flex; align-items: center; gap: 7px; }
+    .step .when b { font-variant-numeric: tabular-nums; }
+    .step .num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--teal); color: #fff; font-size: 11px; font-weight: 800; }
+    @media (prefers-color-scheme: dark) { .step .num { color: #0E1116; } }
+    .step h3 { font-size: 15px; font-weight: 700; margin: 9px 0 5px; letter-spacing: -.01em; }
+    .step p { font-size: 13px; color: var(--dim); margin: 0; }
+    .step.spot { border-color: var(--orange); background: linear-gradient(var(--orange-soft), var(--panel)); }
+    .step.spot .when { color: var(--orange); }
+    .step.spot .num { background: var(--orange); }
+    .step .flag { margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--orange); }
+
+    .pillars { display: grid; gap: 14px; }
+    @media (min-width: 640px) { .pillars { grid-template-columns: repeat(2, 1fr); } }
+    .pill { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 17px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+    .pill .tag { align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; }
+    .pill h3 { font-size: 17px; font-weight: 700; margin: 4px 0 0; letter-spacing: -.01em; }
+    .pill p { font-size: 13.5px; color: var(--dim); margin: 0; }
+    .pill .kicker { font-size: 12px; color: var(--faint); font-style: italic; }
+    .t-teal { color: var(--teal); background: var(--teal-soft); }
+    .t-orange { color: var(--orange); background: var(--orange-soft); }
+    .t-slate { color: var(--slate); background: var(--slate-soft); }
+
+    .tablecard { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow-x: auto; box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; min-width: 460px; }
+    thead th { text-align: left; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 12px 16px; background: var(--panel-2); }
+    tbody td { padding: 11px 16px; font-size: 13.5px; border-top: 1px solid var(--line); vertical-align: top; }
+    tbody td.you { color: var(--ink); font-weight: 600; width: 42%; }
+    tbody td.ai { color: var(--dim); }
+    tbody td.ai::before { content: "→ "; color: var(--teal); font-weight: 800; }
+
+    .why { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+    @media (min-width: 760px) { .why { grid-template-columns: repeat(4, 1fr); } }
+    .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 15px; box-shadow: var(--shadow); }
+    .stat .big { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: var(--teal); font-variant-numeric: tabular-nums; }
+    .stat .lbl { font-size: 12px; color: var(--dim); margin-top: 3px; }
+
+    .golden { margin-top: 22px; border-left: 3px solid var(--orange); background: var(--orange-soft); border-radius: 0 10px 10px 0; padding: 14px 16px; }
+    .golden b { color: var(--orange); }
+    .golden p { margin: 0; font-size: 14px; color: var(--ink); }
+
+    .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--faint); }
+    .foot .dot { color: var(--orange); }
+
+    @media print { body { background: #fff; } .topbar { display: none; } .step, .pill, .stat, .tablecard { box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <a class="back" href="/">← Volver al Centro de Operaciones</a>
+    </div>
+    <header>
+      <div class="eyebrow">MediaLab Ingeniería · Operación multi-empresa</div>
+      <h1>Sistema de Foco <span class="amp">&amp;</span> segunda jornada con IA</h1>
+      <p class="thesis">Con poco tiempo y muchas empresas, la palanca no es hacer más rápido — es <strong>dejar de saltar</strong> entre cuentas y <strong>correr una segunda jornada con IA en paralelo</strong>. Menos WIP, foco por empresa, y lo que no depende de ti fuera de la vista.</p>
+      <div class="problem">
+        <span class="chip">9 empresas a la vez</span>
+        <span class="chip">saltar entre tareas</span>
+        <span class="chip">entregas por pedazos</span>
+        <span class="chip">reuniones que diluyen el día</span>
+      </div>
+    </header>
+
+    <hr class="rule" />
+
+    <section>
+      <h2>El ritmo del día — tus 2 bloques, blindados</h2>
+      <div class="rhythm">
+        <article class="step spot">
+          <div class="when"><span class="num">1</span> Bloque mañana · <b>1 h</b></div>
+          <h3>Fija el foco</h3>
+          <p>Elige la <strong>empresa del día</strong> + su <strong>top-3</strong> (Pareto). Manda lo externo a <strong>“En espera”</strong>.</p>
+          <div class="flag">→ Despacha 3–5 encargos a la IA</div>
+        </article>
+        <article class="step">
+          <div class="when"><span class="num">2</span> Media mañana</div>
+          <h3>Sube insumos</h3>
+          <p>Reuniones y notas → el <strong>MD</strong> los vuelve tareas y señales solo. Tu input también corre en paralelo.</p>
+        </article>
+        <article class="step">
+          <div class="when"><span class="num">3</span> El día</div>
+          <h3>Reuniones + criterio</h3>
+          <p>Tú pones decisión y relación con el cliente. <strong>La IA produce en paralelo</strong> para la empresa foco.</p>
+        </article>
+        <article class="step spot">
+          <div class="when"><span class="num">4</span> Bloque cierre · tarde</div>
+          <h3>Revisa y cierra</h3>
+          <p>Apruebas lo que la IA dejó listo y <strong>cierras un incremento completo</strong> de la empresa del día.</p>
+        </article>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section>
+      <h2>Los cuatro pilares</h2>
+      <div class="pillars">
+        <article class="pill">
+          <span class="tag t-orange">Foco</span>
+          <h3>Una empresa por día</h3>
+          <p>Rotas una cuenta foco al día y le entregas un <strong>producto completo</strong>, no pedazos a nueve. (Theme days — así corría Dorsey Twitter y Square.)</p>
+        </article>
+        <article class="pill">
+          <span class="tag t-teal">Prioridad</span>
+          <h3>Pareto + límite de WIP</h3>
+          <p><strong>Top-3</strong> de mayor impacto del día, no la lista entera. Máximo <strong>1–2 empresas en vuelo</strong>: menos WIP, más throughput.</p>
+        </article>
+        <article class="pill">
+          <span class="tag t-slate">Descarga</span>
+          <h3>“En espera” fuera de la vista</h3>
+          <p>Lo que depende de un <strong>tercero externo</strong> (cliente no responde, recurso de vacaciones) <strong>no vence, no exige prioridad, no suma a tu carga</strong>. Distinto de “Bloqueada” (que sí puedes accionar).</p>
+          <span class="kicker">Ya está en la plataforma.</span>
+        </article>
+        <article class="pill">
+          <span class="tag t-teal">Paralelo</span>
+          <h3>Segunda jornada con IA</h3>
+          <p>Delega el <strong>lenguaje</strong>, quédate con el <strong>criterio</strong>. La IA hace borradores, research y primeras versiones; tú decides, apruebas y das la cara.</p>
+        </article>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section>
+      <h2>Mientras tú avanzas, la IA produce en paralelo</h2>
+      <div class="tablecard">
+        <table>
+          <thead>
+            <tr><th>Lo hace la IA</th><th>Tú solo revisas / decides</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="you">PRD firmable (historia de usuario, criterios, pain points)</td><td class="ai">desde la transcripción de la reunión</td></tr>
+            <tr><td class="you">Copy de la web por sección (pymes vs enterprise)</td><td class="ai">tú + Emilio dan el visto bueno</td></tr>
+            <tr><td class="you">Encuesta de satisfacción · proceso de control de cambios</td><td class="ai">draft completo listo para pulir</td></tr>
+            <tr><td class="you">Reuniones → tareas y señales</td><td class="ai">graba, resume y las vuelve tareas (tu MD)</td></tr>
+            <tr><td class="you">Benchmark / investigación de mercado</td><td class="ai">de la empresa B mientras trabajas en la A</td></tr>
+            <tr><td class="you">Primeras pantallas / wireframes</td><td class="ai">el líder las refina; tú diriges, no dibujas</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <hr class="rule" />
+
+    <section>
+      <h2>Por qué funciona — no es opinión, es evidencia</h2>
+      <div class="why">
+        <div class="stat"><div class="big">−40%</div><div class="lbl">del día productivo se pierde al cambiar de contexto</div></div>
+        <div class="stat"><div class="big">23 min</div><div class="lbl">para recuperar el foco tras una interrupción (UC Irvine)</div></div>
+        <div class="stat"><div class="big">15–40%</div><div class="lbl">de “flow efficiency”: el resto del tiempo el trabajo solo espera</div></div>
+        <div class="stat"><div class="big">1</div><div class="lbl">cuello de botella: tú. Protégelo (Teoría de Restricciones, Goldratt)</div></div>
+      </div>
+      <div class="golden">
+        <p><b>Regla de oro:</b> graba todo → súbelo como insumo → el MD lo procesa. Tu recopilación también corre sola, para que tu bloque de la mañana sea decidir, no transcribir.</p>
+      </div>
+    </section>
+
+    <div class="foot">
+      <span>Sistema de Foco · MediaLab Ingeniería</span>
+      <span>Foco <span class="dot">·</span> Pareto <span class="dot">·</span> En espera <span class="dot">·</span> IA en paralelo</span>
+    </div>
+  </div>
+</body>
+</html>
