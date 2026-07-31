@@ -711,7 +711,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     persistAgenda([...agenda, { id: `m-${Date.now()}`, hora: newMeet.hora || "", dur: Number(newMeet.dur) || 60, titulo, atencion: newMeet.atencion }]);
     setNewMeet({ hora: "", dur: newMeet.dur, titulo: "", atencion: newMeet.atencion });
   };
-  const removeMeeting = (id) => persistAgenda(agenda.filter((m) => m.id !== id));
+  const removeMeeting = (id) => { if (id == null) return; persistAgenda(agenda.filter((m) => m.id !== id)); };
   const updateMeeting = (id, patch) => persistAgenda(agenda.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   // Delegar/undelegar una reunión (SOLO lo hace el CEO). Delegada = no ocupa su tiempo.
   const toggleDelegar = (id) => persistAgenda(agenda.map((m) => (m.id === id ? { ...m, delegada: !m.delegada } : m)));
@@ -860,7 +860,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         const dToday = focusDaysRef.current[todayIso()];
         if (dToday) {
           if (dToday.empresa) setFocoEmpresa(dToday.empresa);
-          if (Array.isArray(dToday.agenda) && dToday.agenda.length) setAgenda(dToday.agenda);
+          // Asegura un id por reunión (datos viejos podían venir sin id → quitar una las borraba todas).
+          if (Array.isArray(dToday.agenda) && dToday.agenda.length) setAgenda(dToday.agenda.map((m, i) => (m && m.id ? m : { ...m, id: `md-${i}-${Date.now()}` })));
           if (dToday.plan) setPlanTexto(dToday.plan);
           if (Array.isArray(dToday.pushesDone)) setPushesDone(new Set(dToday.pushesDone));
         }
