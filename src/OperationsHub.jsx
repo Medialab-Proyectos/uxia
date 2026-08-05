@@ -275,18 +275,34 @@ function dueHint(dueDate) {
   return "";
 }
 
-// Tareas RECURRENTES: cadencia + fin opcional (null = continua). La siguiente ocurrencia se
-// genera al completar la tarea (se regenera con nueva fecha). El MD también las mantiene.
-const RECURRENCE_CADENCES = [["diario", "Diario"], ["semanal", "Semanal"]];
+// Tareas RECURRENTES: cadencia (diario / semanal / días de la semana) + fin opcional (null = continua).
+// La siguiente ocurrencia se genera al completar la tarea (se regenera con nueva fecha).
+const RECURRENCE_CADENCES = [["diario", "Diario"], ["semanal", "Semanal"], ["dias", "Días de la semana"]];
+// Días de la semana (1=Lun … 7=Dom) con su etiqueta corta.
+const WEEKDAYS = [[1, "L"], [2, "M"], [3, "X"], [4, "J"], [5, "V"], [6, "S"], [7, "D"]];
+const isoWeekday = (date) => ((date.getDay() + 6) % 7) + 1; // getDay: 0=Dom → 7; 1=Lun … 7=Dom
 function recurrenceLabel(rec) {
   if (!rec || !rec.cadence) return "";
-  const base = rec.cadence === "semanal" ? "Semanal" : "Diario";
+  let base;
+  if (rec.cadence === "semanal") base = "Semanal";
+  else if (rec.cadence === "dias") base = (Array.isArray(rec.days) && rec.days.length)
+    ? rec.days.slice().sort().map((n) => (WEEKDAYS.find((w) => w[0] === n) || [])[1] || "").join(" ")
+    : "Días";
+  else base = "Diario";
   return rec.until ? `${base} · hasta ${String(rec.until).slice(0, 10)}` : base;
 }
-function nextOccurrence(baseIso, cadence) {
+function nextOccurrence(baseIso, rec) {
+  const cadence = (rec && rec.cadence) || "diario";
   const d = baseIso && /^\d{4}-\d{2}-\d{2}/.test(baseIso) ? new Date(baseIso + "T12:00:00") : new Date();
+  // Días específicos: avanzar al próximo día cuyo día de semana esté marcado.
+  if (cadence === "dias" && rec && Array.isArray(rec.days) && rec.days.length) {
+    for (let i = 1; i <= 7; i++) {
+      const nd = new Date(d); nd.setDate(d.getDate() + i);
+      if (rec.days.includes(isoWeekday(nd))) return localIso(nd);
+    }
+  }
   d.setDate(d.getDate() + (cadence === "semanal" ? 7 : 1));
-  return d.toISOString().slice(0, 10);
+  return localIso(d);
 }
 // Tarea "activa" para recomendaciones/rituales (no terminada ni en un estado que no depende de mí).
 const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
@@ -1325,7 +1341,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
         next.workedHours = businessHoursBetween(task.createdAt || next.completedAt, next.completedAt);
         // RECURRENTE: generar la siguiente ocurrencia (si no superó su fecha de fin).
         if (task.recurrence && task.recurrence.cadence) {
-          const nd = nextOccurrence(task.dueDate || todayIso(), task.recurrence.cadence);
+          const nd = nextOccurrence(task.dueDate || todayIso(), task.recurrence);
           if (!task.recurrence.until || nd <= String(task.recurrence.until).slice(0, 10)) {
             spawn = {
               ...task, id: uid(), status: "ready", dueDate: nd, prevDueDate: "", dueChangeReason: "",
@@ -3752,7 +3768,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               )}
               {task.recurrence && (
                 <span className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded border border-[#B7A6E0] bg-[#F3EFFB] px-1.5 py-0.5 font-semibold text-[#6941C6]" title={`Recurrente · ${recurrenceLabel(task.recurrence)}`}>
-                  🔁 {task.recurrence.cadence === "semanal" ? "Semanal" : "Diario"}
+                  🔁 {task.recurrence.cadence === "semanal" ? "Semanal" : task.recurrence.cadence === "dias" ? (recurrenceLabel({ cadence: "dias", days: task.recurrence.days }) || "Días") : "Diario"}
                 </span>
               )}
             </span>
@@ -3952,10 +3968,22 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             </label>
             {task.recurrence && (
               <>
-                <select value={task.recurrence.cadence || "diario"} onChange={(e) => onChangeTask(task.id, { recurrence: { ...task.recurrence, cadence: e.target.value } })}
+                <select value={task.recurrence.cadence || "diario"}
+                  onChange={(e) => { const cad = e.target.value; onChangeTask(task.id, { recurrence: { ...task.recurrence, cadence: cad, ...(cad === "dias" && !(task.recurrence.days || []).length ? { days: [1, 2, 3, 4, 5] } : {}) } }); }}
                   className="rounded-md border border-[#D0D5DD] px-2 py-1 font-normal text-[#344054]">
                   {RECURRENCE_CADENCES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
+                {task.recurrence.cadence === "dias" && (
+                  <span className="inline-flex items-center gap-0.5" title="Elige los días (ej. L M X J V)">
+                    {WEEKDAYS.map(([n, l]) => {
+                      const on = (task.recurrence.days || []).includes(n);
+                      return (
+                        <button key={n} type="button" onClick={() => { const cur = new Set(task.recurrence.days || []); if (cur.has(n)) cur.delete(n); else cur.add(n); onChangeTask(task.id, { recurrence: { ...task.recurrence, days: [...cur].sort((a, b) => a - b) } }); }}
+                          className={`h-6 w-6 rounded-full border text-[11px] font-bold ${on ? "border-[#6941C6] bg-[#6941C6] text-white" : "border-[#D0D5DD] bg-white text-[#98A2B3]"}`}>{l}</button>
+                      );
+                    })}
+                  </span>
+                )}
                 <span className="text-[#667085]">a las</span>
                 <input type="time" value={task.recurrence.at || ""} onChange={(e) => onChangeTask(task.id, { recurrence: { ...task.recurrence, at: e.target.value || null } })}
                   title="Momento del día en que la ejecutas (aparece en tu agenda de Foco)"
@@ -3967,7 +3995,7 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
               </>
             )}
           </div>
-          {task.recurrence && <p className="mt-1 text-[11px] text-[#8b8272]">Al finalizarla se genera automáticamente la siguiente ({task.recurrence.cadence === "semanal" ? "en 7 días" : "al día siguiente"}).</p>}
+          {task.recurrence && <p className="mt-1 text-[11px] text-[#8b8272]">Al finalizarla se genera la siguiente automáticamente ({task.recurrence.cadence === "semanal" ? "en 7 días" : task.recurrence.cadence === "dias" ? `próximo día marcado: ${recurrenceLabel({ cadence: "dias", days: task.recurrence.days })}` : "al día siguiente"}).</p>}
         </div>
         {/* DesignOps ligero: puntos (la IA los estima, el admin los puede ajustar) + Request review. */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
