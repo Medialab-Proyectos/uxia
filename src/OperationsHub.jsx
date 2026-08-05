@@ -277,7 +277,8 @@ function dueHint(dueDate) {
 
 // Tareas RECURRENTES: cadencia (diario / semanal / días de la semana) + fin opcional (null = continua).
 // La siguiente ocurrencia se genera al completar la tarea (se regenera con nueva fecha).
-const RECURRENCE_CADENCES = [["diario", "Diario"], ["semanal", "Semanal"], ["dias", "Días de la semana"]];
+// "Semanal" se retiró: equivale a "Días de la semana" con un solo día marcado (el día de entrega).
+const RECURRENCE_CADENCES = [["diario", "Diario"], ["dias", "Días de la semana"]];
 // Días de la semana (1=Lun … 7=Dom) con su etiqueta corta.
 const WEEKDAYS = [[1, "L"], [2, "M"], [3, "X"], [4, "J"], [5, "V"], [6, "S"], [7, "D"]];
 const isoWeekday = (date) => ((date.getDay() + 6) % 7) + 1; // getDay: 0=Dom → 7; 1=Lun … 7=Dom
