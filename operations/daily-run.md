@@ -260,10 +260,9 @@ Si existe la agenda de hoy:
      CEO**: solo les hace **PUSH** = un **mensaje corto** para preguntar cómo van (cerca de vencer ≤2
      días o por entregar en revisión/por notificar). Un push **no ocupa un bloque de foco**, es solo un
      mensaje. En el Plan del día, separar: qué avanza el CEO (foco) vs a quién hacerle push (mensaje).
-   - **FOCO vs RÁPIDAS (por esfuerzo):** los **bloques de foco** son para **trabajo profundo** = tareas
-     tuyas **sustanciales (≥1 pt)**. Los **trámites de 0.5 pt** (mandar un mensaje/agendar y quedar "En
-     espera", 5–15 min, p. ej. "Empujar propuesta …") **NO ocupan un bloque de foco**: van en la tira
-     **"Rápidas"** y se despachan rápido. No recomendar un trámite de 0.5 para llenar un bloque grande.
+   - **Llenar el hueco:** un hueco grande cabe VARIAS de tus tareas (se recomiendan ~1 por cada 40 min);
+     los trámites cortos (0.5 pt, "manda un mensaje y pasa a En espera") también cuentan para llenar ese
+     espacio junto con las de más fondo — no se separan en otra sección.
    - En las reuniones de **atención `ninguna`**, además, sugerir avanzar lo marcado **"En paralelo"**
      (colas de la IA, desarrollo que corre solo) y trámites `Administrativa` rápidos — nunca foco profundo.
    - **Conflictos de reuniones (pueden ser VARIOS en un día):** dos o más reuniones que se cruzan en

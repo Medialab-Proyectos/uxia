@@ -1075,24 +1075,12 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   // El CEO/admin (Christian) tiene sus tareas ASIGNADAS a él → esas son SUYAS (foco), no pushes.
   const ceoId = useMemo(() => (people.find((p) => /christ/i.test(p.name || "") && /benavid/i.test(p.name || "")) || {}).id || "", [people]);
   const esMia = (t) => !t.assigneeId || t.assigneeId === ceoId; // sin responsable o asignada al CEO
-  // Bloques de foco = TRABAJO PROFUNDO del CEO → sus tareas SUSTANCIALES (≥1 pt). Se excluyen los
-  // trámites de 0.5 (mandar un mensaje y quedar en espera, 5–15 min): esos no ocupan un bloque de foco,
-  // van en la tira "Rápidas" aparte. Las de OTROS del equipo tampoco: se les hace "push".
+  // Bloques de foco = TRABAJO del CEO → sus tareas (suyas o sin responsable), por prioridad. Un hueco
+  // grande recomienda VARIAS para llenar el espacio. Las de OTROS del equipo no: se les hace "push".
   const deepPool = useMemo(() => activeView !== "foco" ? [] : tasks
-    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked" && esMia(t) && t.designPoints !== 0.5)
+    .filter((t) => RECO_ACTIVE(t) && t.status !== "blocked" && esMia(t))
     .sort((a, b) => (sVal(b) + (b.companyId === focoId ? FOCO_BONUS : 0)) - (sVal(a) + (a.companyId === focoId ? FOCO_BONUS : 0))),
     [tasks, focoId, activeView, ceoId]);
-  // RÁPIDAS: trámites tuyos de 0.5 pt (≤15 min: mandar un mensaje/agendar y quedar en espera). Alta
-  // prioridad o cercanas a vencer. No ocupan bloque de foco; se despachan rápido.
-  const quickList = useMemo(() => {
-    if (activeView !== "foco") return [];
-    const limite = addDays(2);
-    return tasks
-      .filter((t) => esMia(t) && RECO_ACTIVE(t) && t.designPoints === 0.5)
-      .filter((t) => t.priority === "alta" || (t.dueDate && t.dueDate <= limite))
-      .sort((a, b) => sVal(b) - sVal(a))
-      .slice(0, 10);
-  }, [tasks, activeView, ceoId]);
   // PUSHES = mensajes rápidos: tareas de OTROS del equipo (no del CEO) cerca de vencer/entregar. Cada
   // una es "solo un mensaje" para preguntar cómo va — no ocupa bloque de foco.
   const pushList = useMemo(() => {
@@ -1113,8 +1101,8 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
     const map = {}; let gi = 0, pi = 0;
     for (const it of agendaTimeline.items) {
       if (it.type === "gap") {
-        // Un hueco grande cabe VARIAS tareas: ~1 por cada 75 min (mín 1, máx 4).
-        const n = Math.max(1, Math.min(4, Math.round(it.mins / 75)));
+        // Un hueco grande cabe VARIAS tareas para llenar el espacio: ~1 por cada 40 min (mín 1, máx 8).
+        const n = Math.max(1, Math.min(8, Math.round(it.mins / 40)));
         const arr = deepPool.slice(gi, gi + n);
         if (arr.length) map[`gap-${it.start}`] = arr;
         gi += arr.length;
@@ -2275,20 +2263,6 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   </div>
                 );
               })()}
-              {quickList.length > 0 && (
-                <div className="mt-2 rounded-lg border border-[#BBD8DA] bg-[#F5FAFA] p-2.5">
-                  <p className="text-[11px] font-bold text-[#0F5C63]">⚡ Rápidas ({quickList.length}) — trámites de ≤15 min (manda un mensaje/agenda y pasa a "En espera"). No ocupan tu foco.</p>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {quickList.map((t) => (
-                      <button key={t.id} type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }}
-                        title={`${t.title} · ${nameOf(t.companyId)} · ${taskIsOverdue(t) ? "vencida" : t.dueDate === todayIso() ? "vence hoy" : "vence " + displayDate(t.dueDate)}`}
-                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#9FCFCB] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#0F5C63]">
-                        <span className="min-w-0 truncate">{t.title}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {agenda.length > 0 ? (
                 <>
                   {agendaTimeline.freeMins > 0 && (
