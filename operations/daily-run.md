@@ -310,8 +310,9 @@ hábiles. La agenda es una entrada más que refina esa actualización; nada qued
 
 ### Tareas RECURRENTES (rituales diarios/semanales)
 
-Una tarea puede ser **recurrente**: campo `recurrence` = `{cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null, at:'HH:MM'|null}`
-(`until` nulo = continua, sin fin; `at` = **momento del día** en que se ejecuta). Ejemplos:
+Una tarea puede ser **recurrente**: campo `recurrence` = `{cadence:'diario'|'semanal'|'dias', until:'YYYY-MM-DD'|null, at:'HH:MM'|null, days:[1..7]}`
+(`until` nulo = continua; `at` = **momento del día**; `cadence:'dias'` usa `days` = días de la semana
+**1=Lun … 7=Dom**, p. ej. `[1,2,3,4,5]` = L–V). Ejemplos:
 "planear agenda" (diario, `at:'08:00'`), "cerrar agenda" (diario, `at:'17:30'`), "reporte semanal"
 (semanal). Al **completarse**, la app genera sola la siguiente ocurrencia (misma tarea, nueva fecha).
 
