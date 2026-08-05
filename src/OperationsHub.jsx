@@ -556,7 +556,12 @@ function taskIsOverdue(task) {
   // "En revisión", "Lista · por notificar", "Notificado" y "En espera" no cuentan como vencidas: ya
   // salieron de manos del equipo (feedback / entrega / notificado) o dependen de un tercero externo
   // (En espera: cliente no responde, recurso de vacaciones). No es atraso del que gestiona.
-  return Boolean(task?.dueDate && task.dueDate < todayIso() && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.status !== "espera");
+  const activa = task && task.status !== "done" && task.status !== "review" && task.status !== "verificacion" && task.status !== "notificado" && task.status !== "espera";
+  if (!activa) return false;
+  // RECURRENTE: no se vence cada día (se regenera). Su límite real es el "hasta" (until); solo está
+  // vencida si ese "hasta" ya pasó. Sin "hasta" (continua) nunca se marca vencida.
+  if (task.recurrence) return Boolean(task.recurrence.until && String(task.recurrence.until).slice(0, 10) < todayIso());
+  return Boolean(task.dueDate && task.dueDate < todayIso());
 }
 
 function isValidPhone(value) {
@@ -3756,7 +3761,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 {overdue ? <AlertTriangle size={11} /> : <Circle size={11} />}
                 {overdue ? "Vencida" : (STATUS[task.status] || task.status)}
               </span>
-              {!overdue && task.dueDate === todayIso() && !["done", "review", "verificacion", "notificado", "espera"].includes(task.status) && (
+              {!overdue && !task.recurrence && task.dueDate === todayIso() && !["done", "review", "verificacion", "notificado", "espera"].includes(task.status) && (
                 <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-semibold" style={{ borderColor: "#F2C879", background: "#FFF7E6", color: "#B76E00" }}>
                   <Clock size={11} /> Vence hoy
                 </span>
@@ -3779,9 +3784,12 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                 <span className="font-semibold text-[#667085]">Resp.:</span>{" "}
                 {assignedPerson ? assignedPerson.name : <span className="text-[#B76E00]">Sin asignar</span>}
               </span>
-              {task.dueDate && (
-                <span className="inline-flex items-center gap-1" title="Fecha de vencimiento">
-                  <CalendarDays size={11} className="shrink-0" /><span className="font-semibold text-[#667085]">Vence:</span> {displayDate(task.dueDate)}{dueHint(task.dueDate) && <span className="font-bold text-[#B76E00]">{dueHint(task.dueDate)}</span>}
+              {(task.dueDate || task.recurrence) && (
+                <span className="inline-flex items-center gap-1" title={task.recurrence ? "Recurrente: el límite es el 'hasta'" : "Fecha de vencimiento"}>
+                  <CalendarDays size={11} className="shrink-0" /><span className="font-semibold text-[#667085]">Vence:</span>{" "}
+                  {task.recurrence
+                    ? (task.recurrence.until ? `${displayDate(task.recurrence.until)} (hasta)` : <span className="font-semibold text-[#6941C6]">🔁 continua</span>)
+                    : <>{displayDate(task.dueDate)}{dueHint(task.dueDate) && <span className="font-bold text-[#B76E00]">{dueHint(task.dueDate)}</span>}</>}
                 </span>
               )}
               <span className="col-span-2 inline-flex items-center gap-1 whitespace-nowrap" title="Fecha y hora en que se reportó la tarea">
@@ -4113,13 +4121,19 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             <span className="shrink-0 font-semibold text-[#344054]">Reportada</span>
             <span className="min-w-0 truncate" title={`Reportada el ${displayDateTime(task.createdAt)}`}>{displayDateTime(task.createdAt)}</span>
           </div>
-          <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#475467]" style={task.recurrence ? { opacity: 0.7 } : undefined}>
+          {task.recurrence ? (
+            <span className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D9CFF3] bg-[#F7F5FE] px-2 py-1 text-xs text-[#6941C6]" title="Recurrente: el límite es el 'hasta' (arriba). Las fechas de cada ocurrencia las maneja la recurrencia.">
+              <CalendarDays size={13} className="shrink-0" />
+              <span className="shrink-0 font-semibold">Límite:</span>
+              <span className="min-w-0 truncate">{task.recurrence.until ? `${displayDate(task.recurrence.until)} (hasta)` : "🔁 continua"}</span>
+            </span>
+          ) : (
+          <label className="flex min-w-0 items-center gap-1.5 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-xs text-[#475467]">
             <CalendarDays size={13} className="shrink-0 text-[#667085]" />
             <span className="shrink-0 font-semibold text-[#344054]">Vence</span>
             <input
               type="date"
               value={task.dueDate || ""}
-              disabled={!!task.recurrence}
               onChange={(event) => {
                 const nueva = event.target.value;
                 if (nueva === task.dueDate) return;
@@ -4132,11 +4146,11 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
                 // Cambiar una fecha YA GUARDADA exige motivo: se abre el popup y no se aplica aún.
                 if (nueva) { setDueDraft(nueva); setDueReason(""); }
               }}
-              className="min-w-0 flex-1 bg-transparent text-xs text-[#344054] outline-none disabled:cursor-not-allowed"
-              title={task.recurrence ? "Bloqueado: la fecha la maneja la recurrencia (se avanza al completar)" : "Vencimiento"}
+              className="min-w-0 flex-1 bg-transparent text-xs text-[#344054] outline-none"
+              title="Vencimiento"
             />
-            {task.recurrence && <span className="shrink-0 text-[10px] font-semibold text-[#6941C6]" title="La recurrencia maneja las fechas">🔁 auto</span>}
           </label>
+          )}
         </div>
         {/* Última actualización de la tarea (se muestra al abrir la tarjeta). */}
         {lastUpdated && (
