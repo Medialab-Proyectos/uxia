@@ -529,16 +529,18 @@ Ademas de crear/priorizar tareas y mapear señales MDSSP, en cada run el MD DEBE
    desde la tarjeta (selector 1·2·4); esos cambios son metadata y no avisan al empleado.
 7. **Tags de IA en la tarjeta (obligatorio) + REPORTE**: cada tarea debe dejar VISIBLE en la app quién
    la tocó, y el MD debe además reportarlo por empresa/subproyecto:
-   - **Píldora "IA" (generada por IA, pendiente de revisar):** toda tarea que crea el MD lleva `source`
-     = "Run diario …" / "Insumo global …" (nunca "Manual"). La tarjeta muestra la píldora **"IA"** (teal)
-     mientras el admin **no la haya revisado** (sin `adminTouchedAt`). En cuanto el admin la toca (cambia
-     estado/persona/fecha…) o pulsa **Guardar tarea**, se sella `adminTouchedAt` y la píldora desaparece
-     (ya fue revisada). Las tareas hechas a mano (`source: "Manual"`) nunca muestran la píldora. Si la
-     tarea ya lleva "IA actualizó", tampoco se muestra "IA" (no se duplica).
-   - **Tag "IA actualizó" (`mdTouchedAt`):** cuando el MD **complementa** una tarea que YA existía, setea
-     `mdTouchedAt` = ahora; la tarjeta muestra el tag **"IA actualizó"** + banner para que el admin lo
-     revise. **Al pulsar "Guardar tarea" el tag se limpia** (`mdTouchedAt` = vacío): guardar = el admin
-     ya revisó lo que complementó la IA. En "Todas las tareas" hay un filtro **"Tocadas por IA"**.
+   - **Píldora "IA" = tarea NUEVA creada por el MD:** toda tarea que **crea** el MD lleva `source`
+     = "Run diario …" / "Insumo … (audio)" (nunca "Manual") y **NO lleva `md_touched_at`**. La tarjeta
+     muestra la píldora **"IA"** (teal) mientras el admin no la haya revisado (sin `adminTouchedAt`). En
+     cuanto el admin la toca (cambia estado/persona/fecha…) o pulsa **Guardar tarea**, se sella
+     `adminTouchedAt` y la píldora desaparece. Las tareas a mano (`source: "Manual"`) nunca la muestran.
+     ⚠ **Regla clave:** una tarea NUEVA muestra **"IA"**, NO "IA actualizó". Por eso al **crear** una
+     tarea el MD **NO debe setear `md_touched_at`** (si lo hace, se ve como "actualizó" y confunde).
+   - **Tag "IA actualizó" (`md_touched_at`) = tarea EXISTENTE que el MD mejoró:** SOLO cuando el MD
+     **complementa una tarea que YA existía** (encontró una similar y la mejoró), setea `md_touched_at`
+     = ahora; la tarjeta muestra **"IA actualizó"** + banner para revisar. **Al pulsar "Guardar tarea"
+     el tag se limpia.** En "Todas las tareas" hay un filtro **"Tocadas por IA"**. Si la tarea ya lleva
+     "IA actualizó", no se muestra también "IA" (no se duplica).
 
 ### Antes de complementar una tarea existente: VALIDAR el estado (obligatorio)
 
