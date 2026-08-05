@@ -265,6 +265,16 @@ function addDays(days) {
   return localIso(date);
 }
 
+// Etiqueta rápida junto al vencimiento: " (hoy)" / " (mañana)" para identificarlo de un vistazo.
+// Si no es hoy ni mañana, no agrega nada.
+function dueHint(dueDate) {
+  if (!dueDate) return "";
+  const d = String(dueDate).slice(0, 10);
+  if (d === todayIso()) return " (hoy)";
+  if (d === addDays(1)) return " (mañana)";
+  return "";
+}
+
 // Tareas RECURRENTES: cadencia + fin opcional (null = continua). La siguiente ocurrencia se
 // genera al completar la tarea (se regenera con nueva fecha). El MD también las mantiene.
 const RECURRENCE_CADENCES = [["diario", "Diario"], ["semanal", "Semanal"]];
@@ -2850,7 +2860,7 @@ function PriorityView({ tasks, companies, people = [], onOpenTask, onChangeStatu
             {t.ref && <span className="mr-2 rounded border border-[#D9D2C7] bg-[#F7F4EF] px-1.5 py-0.5 font-mono text-[11px] font-bold text-[#475467]">{t.ref}</span>}
             {t.title}
           </p>
-          <p className="truncate text-xs text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""} · {STATUS[t.status] || t.status}{t.dueDate ? ` · vence ${displayDate(t.dueDate)}` : ""}</p>
+          <p className="truncate text-xs text-[#667085]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""} · {STATUS[t.status] || t.status}{t.dueDate ? ` · vence ${displayDate(t.dueDate)}${dueHint(t.dueDate)}` : ""}</p>
           <p className="mt-0.5 flex items-center gap-1 truncate text-xs">
             <UserRound size={12} className={t.assigneeId ? "text-[#17727A]" : "text-[#B76E00]"} />
             <span className={t.assigneeId ? "font-semibold text-[#17727A]" : "font-semibold text-[#B76E00]"}>{assigneeOf(t)}</span>
@@ -3754,7 +3764,7 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
               </span>
               {task.dueDate && (
                 <span className="inline-flex items-center gap-1" title="Fecha de vencimiento">
-                  <CalendarDays size={11} className="shrink-0" /><span className="font-semibold text-[#667085]">Vence:</span> {displayDate(task.dueDate)}
+                  <CalendarDays size={11} className="shrink-0" /><span className="font-semibold text-[#667085]">Vence:</span> {displayDate(task.dueDate)}{dueHint(task.dueDate) && <span className="font-bold text-[#B76E00]">{dueHint(task.dueDate)}</span>}
                 </span>
               )}
               <span className="col-span-2 inline-flex items-center gap-1 whitespace-nowrap" title="Fecha y hora en que se reportó la tarea">
