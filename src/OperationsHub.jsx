@@ -1345,9 +1345,10 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       if (patch.status === "done" && task.status !== "done") {
         next.completedAt = new Date().toISOString();
         next.workedHours = businessHoursBetween(task.createdAt || next.completedAt, next.completedAt);
-        // RECURRENTE: generar la siguiente ocurrencia (si no superó su fecha de fin).
+        // RECURRENTE: generar la siguiente ocurrencia (si no superó su fecha de fin). Se calcula desde
+        // HOY (la fecha en que se completa), no desde el due_date viejo, para que caiga en el futuro.
         if (task.recurrence && task.recurrence.cadence) {
-          const nd = nextOccurrence(task.dueDate || todayIso(), task.recurrence);
+          const nd = nextOccurrence(todayIso(), task.recurrence);
           if (!task.recurrence.until || nd <= String(task.recurrence.until).slice(0, 10)) {
             spawn = {
               ...task, id: uid(), status: "ready", dueDate: nd, prevDueDate: "", dueChangeReason: "",
