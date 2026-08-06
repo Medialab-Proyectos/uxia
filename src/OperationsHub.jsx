@@ -2765,10 +2765,8 @@ function scoreTask(task) {
   if (task.status === "blocked") { score += 25; reasons.push("Cuello de botella"); }
   // En proceso avanzado tiene un pequeno empuje para cerrarlo (Gap and Gain).
   if (task.status === "doing") { score += 6; reasons.push("En proceso"); }
-  // DOFA/estratégica: empuja lo que mueve la posición del negocio, SIN tapar urgencia/impacto.
-  // Amenaza (riesgo) pesa más; operativa no suma.
-  const dofaBoost = { amenaza: 15, oportunidad: 10, debilidad: 8, fortaleza: 8 };
-  if (task.dofa && dofaBoost[task.dofa]) { score += dofaBoost[task.dofa]; reasons.push(DOFA[task.dofa]?.label || task.dofa); }
+  // NOTA: la DOFA NO suma aquí. El MD ya refleja la dimensión estratégica en el IMPACTO (priority) al
+  // correr ("actualizar el impacto"); sumarla también en el score sería doble conteo.
   return { score: Math.min(100, score), reasons };
 }
 
