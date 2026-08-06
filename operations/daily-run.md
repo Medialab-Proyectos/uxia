@@ -488,8 +488,11 @@ Reglas:
   (la app la crea así y la trata como operativa). Las de O/F/D/A además llevan `dofa_reason`; las
   `operativa` NO. Criterio de duda: ¿esta tarea **cambia la posición estratégica del negocio**? Si no →
   `operativa`.
-- `dofa` es **independiente** de `priority` (impacto), `designPoints` (esfuerzo) y `category` (tipo):
-  una tarea operativa puede ser urgente; una de oportunidad puede ser de bajo esfuerzo.
+- `dofa` es **independiente** del campo `priority` (impacto), `designPoints` (esfuerzo) y `category`
+  (tipo): una tarea operativa puede ser urgente; una de oportunidad puede ser de bajo esfuerzo. PERO la
+  DOFA **sí suma a la priorización efectiva** (`scoreTask`, que ordena foco/recomendaciones): **Amenaza
+  +15, Oportunidad +10, Debilidad/Fortaleza +8, Operativa +0** — empuja lo estratégico sin tapar la
+  urgencia (vencida +35) ni el impacto (prioridad alta +40).
 - La app muestra un **badge** (O/F/D/A u "Operativa") por tarea y un selector para ajustarla; en el
   reporte del run, resumir cuántas tareas hay por dimensión DOFA por empresa.
 
