@@ -458,6 +458,32 @@ El admin puede redefinir la fecha desde la tarjeta; al hacerlo se conserva la an
 `prev_due_date` (ver sección de cambios de fecha). La fecha propuesta por el MD es un punto de
 partida con criterio, no una imposición.
 
+## Clasificación estratégica DOFA/SWOT (OBLIGATORIO en CADA tarea)
+
+En cada run el MD DEBE **validar cada tarea contra su CONTEXTO y el NEGOCIO** y asignarle una
+clasificación estratégica **DOFA/SWOT** en el campo `dofa` (uno de: `oportunidad`, `fortaleza`,
+`debilidad`, `amenaza`, `operativa`):
+
+- **`oportunidad` (O)** — aprovecha una OPORTUNIDAD: crecer, nuevo negocio/cliente, mercado, propuesta,
+  expansión, IA que abre ingresos. Ej.: "Empujar propuesta Smart Data", "Landing AGA/DAGA".
+- **`fortaleza` (F)** — apalanca una FORTALEZA: lo que MediaLab/el producto ya hace bien y lo diferencia
+  (DesignOps, un flujo núcleo sólido, un cliente ancla). Ej.: "Crear PRD firmable Arcus", "Panel de uso de IA".
+- **`debilidad` (D)** — corrige una DEBILIDAD interna: gap, deuda técnica, proceso flojo, bug estructural,
+  falta de accesos/documentación. Ej.: "Rehacer el sistema de diseño", "Dar accesos a Carlos".
+- **`amenaza` (A)** — mitiga una AMENAZA externa: riesgo, competencia, fuga de cliente/leads, dependencia
+  crítica, cambio regulatorio. Ej.: "Caída de leads (Bubble)", "Cambio a Flowable de Nefi".
+- **`operativa`** — **si la tarea NO aporta a ninguna dimensión DOFA**, es **operativa/funcional**: el
+  trabajo del día a día que sostiene la operación pero no mueve la estrategia (trámites rutinarios,
+  ajustes menores, rituales). **Toda tarea que no encaje en D/O/F/A va aquí — nunca dejar `dofa` vacío.**
+
+Reglas:
+- **Ninguna tarea activa queda sin `dofa`** (igual que `designPoints`). Criterio de duda: ¿esta tarea
+  **cambia la posición estratégica del negocio**? Si no → `operativa`.
+- `dofa` es **independiente** de `priority` (impacto), `designPoints` (esfuerzo) y `category` (tipo):
+  una tarea operativa puede ser urgente; una de oportunidad puede ser de bajo esfuerzo.
+- La app muestra un **badge** (O/F/D/A u "Operativa") por tarea y un selector para ajustarla; en el
+  reporte del run, resumir cuántas tareas hay por dimensión DOFA por empresa.
+
 ## Instrumentacion DesignOps (SIEMPRE, en cada run — automatico)
 
 MediaLab se posiciona como **DesignOps**: el tablero de indicadores (solo del admin) y el

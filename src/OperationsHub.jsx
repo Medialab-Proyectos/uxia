@@ -308,6 +308,17 @@ function nextOccurrence(baseIso, rec) {
 // Tarea "activa" para recomendaciones/rituales (no terminada ni en un estado que no depende de mí).
 const RECO_ACTIVE = (t) => !["done", "review", "verificacion", "notificado", "espera"].includes(t.status);
 
+// Clasificación estratégica DOFA/SWOT: valida cada tarea contra el contexto y el negocio. Si no aporta
+// a ninguna dimensión estratégica, es "operativa" (trabajo funcional del día a día).
+const DOFA = {
+  oportunidad: { letter: "O", label: "Oportunidad", color: "#067647", bg: "#E5F5EE", desc: "Aprovecha una OPORTUNIDAD (crecimiento, nuevo negocio, mercado)" },
+  fortaleza: { letter: "F", label: "Fortaleza", color: "#0E7C74", bg: "#E6F6F4", desc: "Apalanca una FORTALEZA (lo que el negocio ya hace bien y diferencia)" },
+  debilidad: { letter: "D", label: "Debilidad", color: "#B54708", bg: "#FFF4E6", desc: "Corrige una DEBILIDAD interna (gap, deuda técnica, proceso flojo)" },
+  amenaza: { letter: "A", label: "Amenaza", color: "#B42318", bg: "#FEF3F2", desc: "Mitiga una AMENAZA externa (riesgo, competencia, fuga de cliente)" },
+  operativa: { letter: "·", label: "Operativa", color: "#667085", bg: "#F2F4F7", desc: "No mueve una dimensión DOFA: trabajo operativo/funcional" },
+};
+const DOFA_OPTIONS = [["oportunidad", "O · Oportunidad"], ["fortaleza", "F · Fortaleza"], ["debilidad", "D · Debilidad"], ["amenaza", "A · Amenaza"], ["operativa", "Operativa / funcional"]];
+
 // Campo de texto con BORRADOR LOCAL: al escribir solo se re-renderiza este campo (no toda la app con
 // sus 131 tarjetas). Confirma al estado global al PAUSAR (debounce) y al salir del campo (blur). Así la
 // escritura es fluida y el estado/guardado siguen consistentes. `as`: "input" | "textarea".
@@ -3778,6 +3789,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   🔁 {task.recurrence.cadence === "semanal" ? "Semanal" : task.recurrence.cadence === "dias" ? (recurrenceLabel({ cadence: "dias", days: task.recurrence.days }) || "Días") : "Diario"}
                 </span>
               )}
+              {task.dofa && DOFA[task.dofa] && (
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: DOFA[task.dofa].color + "66", background: DOFA[task.dofa].bg, color: DOFA[task.dofa].color }} title={`DOFA: ${DOFA[task.dofa].desc}`}>
+                  {DOFA[task.dofa].letter} {DOFA[task.dofa].label}
+                </span>
+              )}
             </span>
             <span className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[#8b8272]">
               <span className="inline-flex items-center gap-1 truncate" title="Responsable">
@@ -3965,6 +3981,16 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
               );
             })}
           </div>
+        </div>
+        {/* Clasificación estratégica DOFA/SWOT: la valida el MD contra el negocio; el admin la ajusta. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5 text-xs">
+          <span className="inline-flex items-center gap-1 font-semibold text-[#344054]">Estratégica (DOFA) <InfoTip text="¿A qué dimensión del negocio aporta? Oportunidad (crecer), Fortaleza (apalancar lo que hacemos bien), Debilidad (corregir gap interno), Amenaza (mitigar riesgo externo). Si no aporta a ninguna, es Operativa/funcional." />:</span>
+          <select value={task.dofa || ""} onChange={(e) => onChangeTask(task.id, { dofa: e.target.value || "" })}
+            className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 font-normal text-[#344054]">
+            <option value="">Sin clasificar</option>
+            {DOFA_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          {task.dofa && DOFA[task.dofa] && <span className="text-[11px] text-[#8b8272]">{DOFA[task.dofa].desc}</span>}
         </div>
         {/* Tarea RECURRENTE: se repite (diario/semanal) y se regenera al completarla. */}
         <div className="rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">

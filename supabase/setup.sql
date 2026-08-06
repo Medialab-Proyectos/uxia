@@ -340,6 +340,8 @@ create trigger app_guard_task_update before update on tasks
 alter table tasks add column if not exists created_by text;
 -- Tareas recurrentes: {cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null}. Se regeneran al completarse.
 alter table tasks add column if not exists recurrence jsonb;
+-- Clasificación estratégica DOFA/SWOT: 'fortaleza'|'oportunidad'|'debilidad'|'amenaza'|'operativa'.
+alter table tasks add column if not exists dofa text;
 -- Estado del sistema de foco persistido en DB (cross-device): jornada, foco por día, agenda, plan, paralelo.
 alter table app_state add column if not exists focus jsonb not null default '{}'::jsonb;
 create table if not exists subproject_leads (
