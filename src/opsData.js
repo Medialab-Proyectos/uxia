@@ -73,7 +73,7 @@ const rowToTask = (row) => ({
   designPoints: row.design_points ?? null, qaDefects: row.qa_defects ?? null, changeRequest: !!row.change_request,
   tools: asArray(row.tools), changeRequests: asArray(row.change_requests),
   mdTouchedAt: row.md_touched_at || "", createdBy: row.created_by || "",
-  recurrence: row.recurrence || null, dofa: row.dofa || "",
+  recurrence: row.recurrence || null, dofa: row.dofa || "", dofaReason: row.dofa_reason || "",
 });
 
 const taskToRow = (task) => ({
@@ -102,6 +102,7 @@ const taskToRow = (task) => ({
   created_by: task.createdBy || null, // preserva quién creó la tarea (líder) en los guardados del admin
   recurrence: task.recurrence || null, // {cadence:'diario'|'semanal', until:'YYYY-MM-DD'|null} — recurrente
   dofa: task.dofa || null, // clasificación DOFA/SWOT o 'operativa'
+  dofa_reason: task.dofaReason || null, // por qué esa dimensión, según el contexto de la tarea
 });
 
 const rowToPerson = (row) => ({
@@ -266,7 +267,7 @@ export async function saveState(token, state) {
   const taskRows = tasks.filter((t) => t.id).map(taskToRow);
   const changedTasks = taskRows.filter((r) => isChanged("tasks", r.id, r));
   if (changedTasks.length) {
-    const w = await upsertResilient(token, "tasks?on_conflict=id", changedTasks, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by", "recurrence", "dofa"]);
+    const w = await upsertResilient(token, "tasks?on_conflict=id", changedTasks, ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by", "recurrence", "dofa", "dofa_reason"]);
     if (w) warnings.push(w);
   }
   // NOTA: NO se borran tareas/personas ausentes del estado del cliente. Antes se usaba
@@ -305,7 +306,7 @@ export async function saveState(token, state) {
 export async function saveTask(token, task) {
   if (!task?.id) return;
   await upsertResilient(token, "tasks?on_conflict=id", [taskToRow(task)],
-    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by", "recurrence", "dofa"]);
+    ["category", "completed_at", "worked_hours", "rating", "rating_comment", "ai_usage", "task_ref", "comments", "employee_touched_at", "admin_touched_at", "design_points", "qa_defects", "change_request", "tools", "change_requests", "md_touched_at", "prev_due_date", "due_change_reason", "created_by", "recurrence", "dofa", "dofa_reason"]);
 }
 
 // Borrado EXPLÍCITO (una tarea/persona a la vez) — sustituye al deleteMissing masivo.
