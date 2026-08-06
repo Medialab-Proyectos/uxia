@@ -2494,7 +2494,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                     <li key={t.id} className="rounded-xl border p-4" style={{ borderColor: resuelta ? "#A6F4C5" : "#E4DED6", background: resuelta ? "#F0FDF4" : "#fff" }}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }} className="text-left text-sm font-semibold text-[#1D2939] hover:underline">{t.title}</button>
+                          <button type="button" onClick={() => { setActiveView("tasks"); setCompanyFilter(t.companyId); setAssignFilter("all"); setOwnerFilter("all"); setActiveStatus("open"); setDofaFilter("all"); setTaskQuery(""); setHighlightTaskId(null); setTimeout(() => setHighlightTaskId(t.id), 0); }} className="text-left text-sm font-semibold text-[#1D2939] hover:underline" title="Abrir la tarea en Todas las tareas">{t.title} ↗</button>
                           {t.description && <p className="mt-0.5 line-clamp-2 text-[11px] text-[#667085]" title={t.description}>{t.description}</p>}
                           <p className="mt-0.5 text-[11px] text-[#8b8272]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""}{t.dofa && DOFA[t.dofa] ? ` · ${DOFA[t.dofa].label}` : ""}</p>
                         </div>
@@ -2506,7 +2506,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         <p className="mt-2 rounded-md px-2 py-1.5 text-xs" style={a.required ? { background: "#FFF7E6", color: "#8A5700" } : { background: "#FBFAF7", color: "#475467" }}>
                           <span className="font-semibold">{a.required ? "🔴 Requiere (obligatorio):" : "🟢 Opcional:"}</span> {a.needs}{" "}
                           {a.required
-                            ? (hasInsumos ? <span className="font-semibold text-[#067647]">✓ insumos listos</span> : <span className="text-[#B76E00]">— sube archivo o pega el link para poder pedirla.</span>)
+                            ? (hasInsumos ? <span className="font-semibold text-[#067647]">✓ insumos listos ({(a.links || []).length} link, {nAtt} archivo — abajo)</span> : <span className="text-[#B76E00]">— sube archivo o pega el link para poder pedirla.</span>)
                             : <span className="text-[#98A2B3]">(puedo hacerla con el contexto; los insumos solo la mejoran).</span>}
                         </p>
                       )}
@@ -2522,8 +2522,20 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         <ul className="mt-1 space-y-0.5">
                           {(a.links || []).map((url, i) => (
                             <li key={i} className="flex items-center gap-1.5 text-[11px]">
+                              <Link2 size={11} className="shrink-0 text-[#17727A]" />
                               <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[#17727A] underline decoration-dotted">{url}</a>
                               <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, links: (a.links || []).filter((_, j) => j !== i) } })} className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={12} /></button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {(t.attachments || []).length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {(t.attachments || []).map((att, i) => (
+                            <li key={i} className="flex items-center gap-1.5 text-[11px]">
+                              <Paperclip size={11} className="shrink-0 text-[#667085]" />
+                              <a href={attachmentUrl(att)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[#344054] underline decoration-dotted">{att.name || att.fileName || "archivo"}</a>
+                              <button type="button" onClick={() => deleteTaskAttachment(t.id, i)} className="shrink-0 text-[#98A2B3] hover:text-[#B42318]" title="Quitar archivo"><X size={12} /></button>
                             </li>
                           ))}
                         </ul>
