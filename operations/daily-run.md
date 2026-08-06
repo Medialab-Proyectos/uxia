@@ -476,14 +476,16 @@ clasificación estratégica **DOFA/SWOT** en el campo `dofa` (uno de: `oportunid
   trabajo del día a día que sostiene la operación pero no mueve la estrategia (trámites rutinarios,
   ajustes menores, rituales). **Toda tarea que no encaje en D/O/F/A va aquí — nunca dejar `dofa` vacío.**
 
-Además, el MD DEBE escribir el **porqué** en `dofa_reason`: **una frase corta y específica a ESA
-tarea** que justifique la dimensión elegida (no la definición genérica). Ej.: "Reactivar Voltia =
-producto/negocio nuevo con potencial de ingresos" (oportunidad); "Faltan accesos para arrancar: gap
-que bloquea al equipo" (debilidad). La app muestra ese porqué en el editor y en el tooltip del badge.
+Además, **para las dimensiones estratégicas (O/F/D/A)** el MD DEBE escribir el **porqué** en
+`dofa_reason`: **una frase corta y específica a ESA tarea** que justifique la dimensión (no la
+definición genérica). Ej.: "Reactivar Voltia = producto/negocio nuevo con potencial de ingresos"
+(oportunidad); "Faltan accesos para arrancar: gap que bloquea al equipo" (debilidad). La app lo muestra
+en el editor y en el tooltip del badge. **`operativa` NO lleva `dofa_reason`** (es trabajo funcional,
+no necesita justificación estratégica): dejar `dofa_reason` vacío.
 
 Reglas:
-- **Ninguna tarea activa queda sin `dofa`** ni sin `dofa_reason` (igual que `designPoints`). Criterio de
-  duda: ¿esta tarea **cambia la posición estratégica del negocio**? Si no → `operativa`.
+- **Ninguna tarea activa queda sin `dofa`.** Las de O/F/D/A además llevan `dofa_reason`; las `operativa`
+  NO. Criterio de duda: ¿esta tarea **cambia la posición estratégica del negocio**? Si no → `operativa`.
 - `dofa` es **independiente** de `priority` (impacto), `designPoints` (esfuerzo) y `category` (tipo):
   una tarea operativa puede ser urgente; una de oportunidad puede ser de bajo esfuerzo.
 - La app muestra un **badge** (O/F/D/A u "Operativa") por tarea y un selector para ajustarla; en el

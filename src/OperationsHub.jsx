@@ -3990,7 +3990,7 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             <option value="">Sin clasificar</option>
             {DOFA_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          {task.dofa && DOFA[task.dofa] && (
+          {task.dofa && DOFA[task.dofa] && task.dofa !== "operativa" && (
             <DraftField value={task.dofaReason || ""} onCommit={(v) => onChangeTask(task.id, { dofaReason: v })}
               placeholder={`Por qué es ${DOFA[task.dofa].label} (según esta tarea)…`}
               className="min-w-[160px] flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-[11px] font-normal text-[#344054] outline-none" />
