@@ -712,6 +712,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [assignFilter, setAssignFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [dofaFilter, setDofaFilter] = useState("all"); // all | estrategica | oportunidad | fortaleza | debilidad | amenaza | operativa
+  const [aiLinkDraft, setAiLinkDraft] = useState({}); // borrador del link a agregar por tarea en el Asistente IA
   const [taskQuery, setTaskQuery] = useState("");
   const [highlightTaskId, setHighlightTaskId] = useState(null);
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
@@ -2492,22 +2493,45 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }} className="text-left text-sm font-semibold text-[#1D2939] hover:underline">{t.title}</button>
-                          <p className="text-[11px] text-[#8b8272]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""}{t.dofa && DOFA[t.dofa] ? ` · ${DOFA[t.dofa].label}` : ""}</p>
+                          {t.description && <p className="mt-0.5 line-clamp-2 text-[11px] text-[#667085]" title={t.description}>{t.description}</p>}
+                          <p className="mt-0.5 text-[11px] text-[#8b8272]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""}{t.dofa && DOFA[t.dofa] ? ` · ${DOFA[t.dofa].label}` : ""}</p>
                         </div>
                         <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold" style={resuelta ? { borderColor: "#6CE9A6", background: "#E5F5EE", color: "#067647" } : listo ? { borderColor: "#F2C879", background: "#FFF7E6", color: "#B76E00" } : { borderColor: "#D0D5DD", background: "#F2F4F7", color: "#667085" }}>
-                          {a.status === "aceptada" ? "✓ Aceptada" : resuelta ? "✓ Resuelta — revisar" : listo ? "En cola de la IA" : "Falta subir insumos"}
+                          {a.status === "aceptada" ? "✓ Aceptada" : resuelta ? "✓ Resuelta — revisar" : listo ? "En cola de la IA" : "Pendiente"}
                         </span>
                       </div>
-                      {a.needs && <p className="mt-2 rounded-md bg-[#FBFAF7] px-2 py-1.5 text-xs text-[#475467]"><span className="font-semibold text-[#344054]">Sube:</span> {a.needs}</p>}
+                      {a.needs && <p className="mt-2 rounded-md bg-[#FBFAF7] px-2 py-1.5 text-xs text-[#475467]"><span className="font-semibold text-[#344054]">Para hacerla necesito:</span> {a.needs} <span className="text-[#98A2B3]">(archivos/links opcionales si ya tengo contexto).</span></p>}
+                      {/* LINKS (Figma, Drive, etc.) */}
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <input value={aiLinkDraft[t.id] || ""} onChange={(e) => setAiLinkDraft((p) => ({ ...p, [t.id]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") { const u = (aiLinkDraft[t.id] || "").trim(); if (u) { updateTask(t.id, { aiAssist: { ...a, doable: true, links: [...(a.links || []), u] } }); setAiLinkDraft((p) => ({ ...p, [t.id]: "" })); } } }}
+                          placeholder="Pega un link (Figma, Drive, Jira…)" className="min-w-0 flex-1 rounded-md border border-[#D0D5DD] px-2 py-1 text-xs text-[#344054] outline-none" />
+                        <button type="button" onClick={() => { const u = (aiLinkDraft[t.id] || "").trim(); if (u) { updateTask(t.id, { aiAssist: { ...a, doable: true, links: [...(a.links || []), u] } }); setAiLinkDraft((p) => ({ ...p, [t.id]: "" })); } }}
+                          className="shrink-0 rounded-md border border-[#17727A] px-2 py-1 text-xs font-semibold text-[#17727A]"><Link2 size={12} className="mr-1 inline" />Agregar link</button>
+                      </div>
+                      {(a.links || []).length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {(a.links || []).map((url, i) => (
+                            <li key={i} className="flex items-center gap-1.5 text-[11px]">
+                              <a href={url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[#17727A] underline decoration-dotted">{url}</a>
+                              <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, links: (a.links || []).filter((_, j) => j !== i) } })} className="shrink-0 text-[#98A2B3] hover:text-[#B42318]"><X size={12} /></button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#17727A] px-2 py-1 text-xs font-semibold text-[#17727A]">
-                          <Paperclip size={12} /> Subir archivo
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#D0D5DD] px-2 py-1 text-xs font-semibold text-[#667085]">
+                          <Paperclip size={12} /> Subir archivo (opcional)
                           <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadTaskAttachment(t.id, f); if (e.target) e.target.value = ""; }} />
                         </label>
-                        <span className="text-[11px] text-[#98A2B3]">{nAtt} archivo(s)</span>
-                        {!resuelta && (
+                        {nAtt > 0 && <span className="text-[11px] text-[#98A2B3]">{nAtt} archivo(s)</span>}
+                        {!resuelta && !listo && (
                           <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, doable: true, status: "listo" } })}
                             className="rounded-md bg-[#6941C6] px-2.5 py-1 text-xs font-semibold text-white">Pedir a la IA</button>
+                        )}
+                        {listo && (
+                          <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, status: "pendiente" } })}
+                            className="rounded-md border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#667085]" title="Sacarla de la cola (me equivoqué)">↩ Cancelar / volver a pendiente</button>
                         )}
                       </div>
                       {resuelta && (
