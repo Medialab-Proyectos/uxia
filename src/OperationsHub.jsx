@@ -2558,8 +2558,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         )}
                       </div>
                       {resuelta && (
-                        <details className="mt-2 rounded-md border border-[#A6F4C5] bg-white p-2" open>
-                          <summary className="cursor-pointer text-xs font-bold text-[#067647]">Revisar resultado de la IA{a.resultAt ? ` · ${displayDateTime(a.resultAt)}` : ""}</summary>
+                        <details className="mt-2 rounded-md border border-[#A6F4C5] bg-white p-2">
+                          <summary className="cursor-pointer text-xs font-bold text-[#067647]">▸ Revisar resultado de la IA{a.resultAt ? ` · ${displayDateTime(a.resultAt)}` : ""}</summary>
                           <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-[#344054]" style={{ fontFamily: "inherit" }}>{a.result || "(sin contenido)"}</pre>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, status: "aceptada" } })} className="rounded-md bg-[#17727A] px-2.5 py-1 text-xs font-semibold text-white">Aceptar resultado</button>
