@@ -3985,15 +3985,16 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
         {/* Clasificación estratégica DOFA/SWOT: la valida el MD contra el negocio; el admin la ajusta. */}
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5 text-xs">
           <span className="inline-flex items-center gap-1 font-semibold text-[#344054]">Estratégica (DOFA) <InfoTip text="¿A qué dimensión del negocio aporta? Oportunidad (crecer), Fortaleza (apalancar lo que hacemos bien), Debilidad (corregir gap interno), Amenaza (mitigar riesgo externo). Si no aporta a ninguna, es Operativa/funcional." />:</span>
-          <select value={task.dofa || ""} onChange={(e) => onChangeTask(task.id, { dofa: e.target.value || "" })}
+          <select value={task.dofa || ""} onChange={(e) => onChangeTask(task.id, { dofa: e.target.value || "", dofaReason: "" })}
+            title="Dimensión estratégica (la propone el MD; puedes ajustarla). La justificación la escribe el MD."
             className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 font-normal text-[#344054]">
             <option value="">Sin clasificar</option>
             {DOFA_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {task.dofa && DOFA[task.dofa] && task.dofa !== "operativa" && (
-            <DraftField value={task.dofaReason || ""} onCommit={(v) => onChangeTask(task.id, { dofaReason: v })}
-              placeholder={`Por qué es ${DOFA[task.dofa].label} (según esta tarea)…`}
-              className="min-w-[160px] flex-1 rounded-md border border-[#D0D5DD] bg-white px-2 py-1 text-[11px] font-normal text-[#344054] outline-none" />
+            <span className="min-w-0 flex-1 text-[11px] italic text-[#8b8272]" title="Justificación generada por el MD (no editable)">
+              {task.dofaReason || "— la justificación la escribe el MD en la próxima corrida —"}
+            </span>
           )}
         </div>
         {/* Tarea RECURRENTE: se repite (diario/semanal) y se regenera al completarla. */}
