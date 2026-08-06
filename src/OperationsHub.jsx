@@ -711,6 +711,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const [activeStatus, setActiveStatus] = useState("open");
   const [assignFilter, setAssignFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
+  const [dofaFilter, setDofaFilter] = useState("all"); // all | estrategica | oportunidad | fortaleza | debilidad | amenaza | operativa
   const [taskQuery, setTaskQuery] = useState("");
   const [highlightTaskId, setHighlightTaskId] = useState(null);
   const [ownerFilter, setOwnerFilter] = useState("all"); // all | unowned (sin responsable)
@@ -1176,6 +1177,11 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const taskQ = taskQuery.trim().toLowerCase();
   const visibleTasks = tasks.filter((task) => {
     if (companyFilter !== "all" && task.companyId !== companyFilter) return false;
+    // Filtro por dimensión DOFA. "estrategica" = cualquiera de O/F/D/A (excluye operativa/sin clasificar).
+    if (dofaFilter !== "all") {
+      if (dofaFilter === "estrategica") { if (!task.dofa || task.dofa === "operativa") return false; }
+      else if ((task.dofa || "") !== dofaFilter) return false;
+    }
     // "Sin proyecto" = tareas en la bandeja "Por asignar" (companyId "por-asignar")
     // o sin subproyecto; "Con proyecto" = ya están en una empresa/subproyecto real.
     const sinProyecto = task.companyId === "por-asignar" || !task.client;
@@ -2680,6 +2686,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             onSortRecent={setSortRecent}
             companyFilter={companyFilter}
             onCompanyFilter={setCompanyFilter}
+            dofaFilter={dofaFilter}
+            onDofaFilter={setDofaFilter}
             taskQuery={taskQuery}
             onTaskQuery={setTaskQuery}
             highlightId={highlightTaskId}
@@ -3047,6 +3055,8 @@ function TasksTable({
   onSortRecent,
   companyFilter,
   onCompanyFilter,
+  dofaFilter,
+  onDofaFilter,
   taskQuery,
   onTaskQuery,
   highlightId,
@@ -3172,6 +3182,19 @@ function TasksTable({
                 <option value="all">Todos los responsables</option>
                 <option value="unowned">Sin responsable</option>
                 {(people || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-[#8b8272]">Estratégica (DOFA)</span>
+              <select value={dofaFilter || "all"} onChange={(event) => onDofaFilter?.(event.target.value)}
+                className="w-full rounded-md border border-[#D0D5DD] bg-white px-2 py-1.5 text-xs font-semibold text-[#344054] outline-none focus:border-[#6941C6]">
+                <option value="all">Todas las dimensiones</option>
+                <option value="estrategica">Solo estratégicas (O/F/D/A)</option>
+                <option value="oportunidad">Oportunidad</option>
+                <option value="fortaleza">Fortaleza</option>
+                <option value="debilidad">Debilidad</option>
+                <option value="amenaza">Amenaza</option>
+                <option value="operativa">Operativa / funcional</option>
               </select>
             </label>
           </div>
