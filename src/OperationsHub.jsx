@@ -2488,6 +2488,8 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                   const resuelta = a.status === "resuelta" || a.status === "aceptada";
                   const listo = a.status === "listo";
                   const nAtt = (t.attachments || []).length;
+                  const hasInsumos = (a.links || []).length > 0 || nAtt > 0;
+                  const faltaObligatorio = a.required && !hasInsumos; // requiere insumos y aún no hay
                   return (
                     <li key={t.id} className="rounded-xl border p-4" style={{ borderColor: resuelta ? "#A6F4C5" : "#E4DED6", background: resuelta ? "#F0FDF4" : "#fff" }}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -2500,7 +2502,14 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                           {a.status === "aceptada" ? "✓ Aceptada" : resuelta ? "✓ Resuelta — revisar" : listo ? "En cola de la IA" : "Pendiente"}
                         </span>
                       </div>
-                      {a.needs && <p className="mt-2 rounded-md bg-[#FBFAF7] px-2 py-1.5 text-xs text-[#475467]"><span className="font-semibold text-[#344054]">Para hacerla necesito:</span> {a.needs} <span className="text-[#98A2B3]">(archivos/links opcionales si ya tengo contexto).</span></p>}
+                      {a.needs && (
+                        <p className="mt-2 rounded-md px-2 py-1.5 text-xs" style={a.required ? { background: "#FFF7E6", color: "#8A5700" } : { background: "#FBFAF7", color: "#475467" }}>
+                          <span className="font-semibold">{a.required ? "🔴 Requiere (obligatorio):" : "🟢 Opcional:"}</span> {a.needs}{" "}
+                          {a.required
+                            ? (hasInsumos ? <span className="font-semibold text-[#067647]">✓ insumos listos</span> : <span className="text-[#B76E00]">— sube archivo o pega el link para poder pedirla.</span>)
+                            : <span className="text-[#98A2B3]">(puedo hacerla con el contexto; los insumos solo la mejoran).</span>}
+                        </p>
+                      )}
                       {/* LINKS (Figma, Drive, etc.) */}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <input value={aiLinkDraft[t.id] || ""} onChange={(e) => setAiLinkDraft((p) => ({ ...p, [t.id]: e.target.value }))}
@@ -2526,8 +2535,10 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                         </label>
                         {nAtt > 0 && <span className="text-[11px] text-[#98A2B3]">{nAtt} archivo(s)</span>}
                         {!resuelta && !listo && (
-                          <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, doable: true, status: "listo" } })}
-                            className="rounded-md bg-[#6941C6] px-2.5 py-1 text-xs font-semibold text-white">Pedir a la IA</button>
+                          faltaObligatorio
+                            ? <span className="text-[11px] font-semibold text-[#B76E00]">Sube el insumo obligatorio para pedirla ↑</span>
+                            : <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, doable: true, status: "listo" } })}
+                                className="rounded-md bg-[#6941C6] px-2.5 py-1 text-xs font-semibold text-white">Pedir a la IA</button>
                         )}
                         {listo && (
                           <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, status: "pendiente" } })}
@@ -4125,6 +4136,28 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
             </span>
           )}
         </div>
+        {/* Asistente IA: pedir/cancelar desde la tarjeta si la tarea es resoluble por IA. */}
+        {task.aiAssist?.doable && (() => {
+          const a = task.aiAssist; const hasInsumos = (a.links || []).length > 0 || (task.attachments || []).length > 0;
+          const faltaObl = a.required && !hasInsumos;
+          const resuelta = a.status === "resuelta" || a.status === "aceptada";
+          return (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#D9CFF3] bg-[#F7F5FE] px-2 py-1.5 text-xs">
+              <span className="font-semibold text-[#6941C6]">🤖 Asistente IA</span>
+              {a.needs && <span className="min-w-0 flex-1 text-[11px] text-[#6b5ca6]">{a.required ? "Requiere: " : "Opcional: "}{a.needs}</span>}
+              {resuelta ? (
+                <span className="font-semibold text-[#067647]">✓ Resuelta — revísala en la pestaña Asistente IA</span>
+              ) : a.status === "listo" ? (
+                <><span className="font-semibold text-[#B76E00]">En cola de la IA</span>
+                  <button type="button" onClick={() => onChangeTask(task.id, { aiAssist: { ...a, status: "pendiente" } })} className="rounded border border-[#D0D5DD] px-2 py-0.5 font-semibold text-[#667085]">↩ Cancelar</button></>
+              ) : faltaObl ? (
+                <span className="font-semibold text-[#B76E00]">Sube el insumo obligatorio en la pestaña Asistente IA</span>
+              ) : (
+                <button type="button" onClick={() => onChangeTask(task.id, { aiAssist: { ...a, doable: true, status: "listo" } })} className="rounded-md bg-[#6941C6] px-2.5 py-0.5 font-semibold text-white">Pedir a la IA</button>
+              )}
+            </div>
+          );
+        })()}
         {/* Tarea RECURRENTE: se repite (diario/semanal) y se regenera al completarla. */}
         <div className="rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-2 text-xs">
