@@ -344,6 +344,9 @@ alter table tasks add column if not exists recurrence jsonb;
 alter table tasks add column if not exists dofa text;
 -- Justificación (por qué esa dimensión DOFA según el contexto de la tarea).
 alter table tasks add column if not exists dofa_reason text;
+-- Asistente IA: {doable, needs, status:'pendiente'|'listo'|'resuelta', result, resultAt}. Tareas que la
+-- IA (MD) puede resolver con poca supervisión (sin tocar al cliente) y su entregable para revisar.
+alter table tasks add column if not exists ai_assist jsonb;
 -- Estado del sistema de foco persistido en DB (cross-device): jornada, foco por día, agenda, plan, paralelo.
 alter table app_state add column if not exists focus jsonb not null default '{}'::jsonb;
 create table if not exists subproject_leads (

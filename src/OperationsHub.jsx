@@ -1157,6 +1157,15 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const markLunch = (startMin) => persistAgenda([...agenda, { id: `lunch-${Date.now()}`, hora: minToHhmm(startMin), dur: 60, titulo: "Almuerzo", atencion: "ninguna", almuerzo: true }]);
   // Nombre de empresa por id (para las etiquetas de la vista Foco).
   const nameOf = (id) => companies.find((c) => c.id === id)?.name || id || "Sin empresa";
+  // ASISTENTE IA: tareas del CEO que la IA puede resolver (sin tocar al cliente). Resueltas primero, luego
+  // las que ya tienen insumos ("listo"), luego las pendientes de subir archivos.
+  const aiTasks = useMemo(() => {
+    if (activeView !== "asistente") return [];
+    const rank = (t) => (t.aiAssist?.status === "resuelta" ? 0 : t.aiAssist?.status === "listo" ? 1 : 2);
+    return tasks
+      .filter((t) => t.aiAssist?.doable && esMia(t) && t.status !== "done")
+      .sort((a, b) => rank(a) - rank(b) || scoreTask(b).score - scoreTask(a).score);
+  }, [tasks, activeView, ceoId]);
   // Plan del día: síntesis para la franja de Foco (reuniones por atención + tiempo libre + paralelo).
   const planDia = useMemo(() => {
     const isLunch = (m) => m.almuerzo || /almuerzo/i.test(m.titulo || "");
@@ -2092,6 +2101,7 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
             ["companies", "Empresas"],
             ["tasks", "Todas las tareas"],
             ["priority", "Prioridad"],
+            ["asistente", "🤖 Asistente IA"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -2458,6 +2468,63 @@ ${company?.connectors?.map((connector) => `- ${connector.name}: ${connector.stat
                 <p className="mt-2 text-xs text-[#98A2B3]">Nada en paralelo ahora. Marca aquí las pocas tareas (p. ej. desarrollo) que corren solas.</p>
               )}
             </div>
+          </section>
+        )}
+
+        {/* ASISTENTE IA — tareas del CEO que la IA puede resolver con poca supervisión (sin tocar cliente). */}
+        {activeView === "asistente" && (
+          <section className="mt-6 space-y-4">
+            <div className="rounded-xl border border-[#D9CFF3] bg-[#F7F5FE] p-4">
+              <h2 className="text-base font-semibold text-[#4C1D95]">🤖 Asistente IA — tareas que la IA puede adelantar</h2>
+              <p className="mt-1 text-sm text-[#6b5ca6]">Tareas <b>tuyas</b> que la IA resuelve con poca supervisión y sin tocar al cliente (specs, PRDs, borradores, análisis UX, traducciones). Sube los archivos que pide cada una y pulsa <b>“Pedir a la IA”</b>; el MD la resuelve en la próxima corrida y aquí queda el <b>resultado para revisar</b>.</p>
+            </div>
+            {aiTasks.length === 0 ? (
+              <p className="text-sm text-[#98A2B3]">Aún no hay tareas marcadas para el Asistente IA. El MD las va marcando (con qué subir) en cada corrida.</p>
+            ) : (
+              <ul className="space-y-3">
+                {aiTasks.map((t) => {
+                  const a = t.aiAssist || {};
+                  const resuelta = a.status === "resuelta" || a.status === "aceptada";
+                  const listo = a.status === "listo";
+                  const nAtt = (t.attachments || []).length;
+                  return (
+                    <li key={t.id} className="rounded-xl border p-4" style={{ borderColor: resuelta ? "#A6F4C5" : "#E4DED6", background: resuelta ? "#F0FDF4" : "#fff" }}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <button type="button" onClick={() => { setActiveView("companies"); setActiveCompany(t.companyId); setHighlightTaskId(t.id); }} className="text-left text-sm font-semibold text-[#1D2939] hover:underline">{t.title}</button>
+                          <p className="text-[11px] text-[#8b8272]">{nameOf(t.companyId)}{t.client ? ` · ${t.client}` : ""}{t.dofa && DOFA[t.dofa] ? ` · ${DOFA[t.dofa].label}` : ""}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold" style={resuelta ? { borderColor: "#6CE9A6", background: "#E5F5EE", color: "#067647" } : listo ? { borderColor: "#F2C879", background: "#FFF7E6", color: "#B76E00" } : { borderColor: "#D0D5DD", background: "#F2F4F7", color: "#667085" }}>
+                          {a.status === "aceptada" ? "✓ Aceptada" : resuelta ? "✓ Resuelta — revisar" : listo ? "En cola de la IA" : "Falta subir insumos"}
+                        </span>
+                      </div>
+                      {a.needs && <p className="mt-2 rounded-md bg-[#FBFAF7] px-2 py-1.5 text-xs text-[#475467]"><span className="font-semibold text-[#344054]">Sube:</span> {a.needs}</p>}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-[#17727A] px-2 py-1 text-xs font-semibold text-[#17727A]">
+                          <Paperclip size={12} /> Subir archivo
+                          <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadTaskAttachment(t.id, f); if (e.target) e.target.value = ""; }} />
+                        </label>
+                        <span className="text-[11px] text-[#98A2B3]">{nAtt} archivo(s)</span>
+                        {!resuelta && (
+                          <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, doable: true, status: "listo" } })}
+                            className="rounded-md bg-[#6941C6] px-2.5 py-1 text-xs font-semibold text-white">Pedir a la IA</button>
+                        )}
+                      </div>
+                      {resuelta && (
+                        <details className="mt-2 rounded-md border border-[#A6F4C5] bg-white p-2" open>
+                          <summary className="cursor-pointer text-xs font-bold text-[#067647]">Revisar resultado de la IA{a.resultAt ? ` · ${displayDateTime(a.resultAt)}` : ""}</summary>
+                          <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-[#344054]" style={{ fontFamily: "inherit" }}>{a.result || "(sin contenido)"}</pre>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, status: "aceptada" } })} className="rounded-md bg-[#17727A] px-2.5 py-1 text-xs font-semibold text-white">Aceptar resultado</button>
+                            <button type="button" onClick={() => updateTask(t.id, { aiAssist: { ...a, status: "listo", result: "" } })} className="rounded-md border border-[#D0D5DD] px-2.5 py-1 text-xs font-semibold text-[#667085]">Pedir de nuevo</button>
+                          </div>
+                        </details>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         )}
 
@@ -3822,6 +3889,16 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   {DOFA[dk].letter} {DOFA[dk].label}
                 </span>
               ); })()}
+              {(task.aiAssist?.status === "resuelta") && (
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-[#6CE9A6] bg-[#E5F5EE] px-1.5 py-0.5 font-bold text-[#067647]" title="La IA resolvió esta tarea — revisa el resultado en la pestaña Asistente IA">
+                  🤖 Revisar resultado
+                </span>
+              )}
+              {(task.aiAssist?.doable && task.aiAssist?.status !== "resuelta" && task.aiAssist?.status !== "aceptada") && (
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-[#D9CFF3] bg-[#F7F5FE] px-1.5 py-0.5 font-semibold text-[#6941C6]" title="La IA puede adelantar esta tarea (pestaña Asistente IA)">
+                  🤖 IA puede
+                </span>
+              )}
             </span>
             <span className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[#8b8272]">
               <span className="inline-flex items-center gap-1 truncate" title="Responsable">

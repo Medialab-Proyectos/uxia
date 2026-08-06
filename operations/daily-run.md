@@ -497,6 +497,24 @@ Reglas:
 - La app muestra un **badge** (O/F/D/A u "Operativa") por tarea y un selector para ajustarla; en el
   reporte del run, resumir cuántas tareas hay por dimensión DOFA por empresa.
 
+## Asistente IA — tareas que la IA resuelve para el CEO (pestaña "Asistente IA")
+
+Cada tarea tiene un campo `ai_assist` = `{doable, needs, status, result, resultAt}`. En cada run el MD:
+
+1. **MARCA como `doable`** las tareas del CEO (asignadas a Christian o sin responsable) que la IA puede
+   **adelantar con poca supervisión y SIN tocar al cliente**: redactar specs/PRD/criterios de
+   aceptación, borradores (pitch, emails, copy de ads, portafolio), análisis UX y recomendaciones
+   escritas, traducciones, mapear procesos/documentación. **NO marcar** lo que exige reunión/decisión
+   con cliente, aprobación, accesos, legal/financiero, diseño final en Figma o desplegar código.
+   - Pone en `needs` **qué archivos/insumos debe subir el CEO** para poder hacerla (p. ej. "el export o
+     link de lectura de Figma + los comentarios", "la lista de requerimientos", "los strings en ES").
+   - `status` inicial: `"pendiente"` (falta subir insumos).
+2. **RESUELVE** las que el CEO puso en `status:"listo"` (ya subió insumos): produce el entregable en
+   `result` (el documento/spec/análisis), pone `status:"resuelta"` y `resultAt`. Debe ser **profundo y
+   accionable según la tarea** (no un esbozo). En la tarjeta aparece "🤖 Revisar resultado"; el CEO
+   revisa en la pestaña y pulsa "Aceptar resultado" (o "Pedir de nuevo").
+3. No inventar: si faltan insumos clave, dejar `status:"pendiente"` y precisar en `needs` qué falta.
+
 ## Instrumentacion DesignOps (SIEMPRE, en cada run — automatico)
 
 MediaLab se posiciona como **DesignOps**: el tablero de indicadores (solo del admin) y el
