@@ -1177,10 +1177,11 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
   const taskQ = taskQuery.trim().toLowerCase();
   const visibleTasks = tasks.filter((task) => {
     if (companyFilter !== "all" && task.companyId !== companyFilter) return false;
-    // Filtro por dimensión DOFA. "estrategica" = cualquiera de O/F/D/A (excluye operativa/sin clasificar).
+    // Filtro por dimensión DOFA. Sin clasificar cuenta como "operativa". "estrategica" = O/F/D/A.
     if (dofaFilter !== "all") {
-      if (dofaFilter === "estrategica") { if (!task.dofa || task.dofa === "operativa") return false; }
-      else if ((task.dofa || "") !== dofaFilter) return false;
+      const dk = task.dofa || "operativa";
+      if (dofaFilter === "estrategica") { if (dk === "operativa") return false; }
+      else if (dk !== dofaFilter) return false;
     }
     // "Sin proyecto" = tareas en la bandeja "Por asignar" (companyId "por-asignar")
     // o sin subproyecto; "Con proyecto" = ya están en una empresa/subproyecto real.
@@ -1897,6 +1898,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       audience: "Interno MediaLab",
       syncMode: "Manual",
       evidence: "",
+      dofa: "operativa", // por defecto operativa/funcional; el MD la reclasifica si aporta a DOFA
       createdAt: new Date().toISOString(),
     };
     setTasks((current) => [
@@ -1929,6 +1931,7 @@ export default function OperationsHub({ token = "", theme = "light", onAuthError
       audience: "Interno MediaLab",
       syncMode: "Manual",
       evidence: "",
+      dofa: "operativa", // por defecto operativa/funcional; el MD la reclasifica si aporta a DOFA
       createdAt: new Date().toISOString(),
     };
     setTasks((current) => [nextTask, ...current]);
@@ -3812,11 +3815,11 @@ function ProjectTaskAccordion({ task, company, companies = [], people = [], open
                   🔁 {task.recurrence.cadence === "semanal" ? "Semanal" : task.recurrence.cadence === "dias" ? (recurrenceLabel({ cadence: "dias", days: task.recurrence.days }) || "Días") : "Diario"}
                 </span>
               )}
-              {task.dofa && DOFA[task.dofa] && (
-                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: DOFA[task.dofa].color + "66", background: DOFA[task.dofa].bg, color: DOFA[task.dofa].color }} title={task.dofaReason ? `${DOFA[task.dofa].label}: ${task.dofaReason}` : `DOFA · ${DOFA[task.dofa].desc}`}>
-                  {DOFA[task.dofa].letter} {DOFA[task.dofa].label}
+              {(() => { const dk = task.dofa || "operativa"; return DOFA[dk] && (
+                <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 font-bold" style={{ borderColor: DOFA[dk].color + "66", background: DOFA[dk].bg, color: DOFA[dk].color }} title={task.dofaReason && dk !== "operativa" ? `${DOFA[dk].label}: ${task.dofaReason}` : `DOFA · ${DOFA[dk].desc}`}>
+                  {DOFA[dk].letter} {DOFA[dk].label}
                 </span>
-              )}
+              ); })()}
             </span>
             <span className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[#8b8272]">
               <span className="inline-flex items-center gap-1 truncate" title="Responsable">
@@ -4008,10 +4011,9 @@ La IA (MD) complementó esta tarea · {new Date(task.mdTouchedAt).toLocaleString
         {/* Clasificación estratégica DOFA/SWOT: la valida el MD contra el negocio; el admin la ajusta. */}
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[#E4DED6] bg-[#FBFAF7] px-2 py-1.5 text-xs">
           <span className="inline-flex items-center gap-1 font-semibold text-[#344054]">Estratégica (DOFA) <InfoTip text="¿A qué dimensión del negocio aporta? Oportunidad (crecer), Fortaleza (apalancar lo que hacemos bien), Debilidad (corregir gap interno), Amenaza (mitigar riesgo externo). Si no aporta a ninguna, es Operativa/funcional." />:</span>
-          <select value={task.dofa || ""} onChange={(e) => onChangeTask(task.id, { dofa: e.target.value || "", dofaReason: "" })}
-            title="Dimensión estratégica (la propone el MD; puedes ajustarla). La justificación la escribe el MD."
+          <select value={task.dofa || "operativa"} onChange={(e) => onChangeTask(task.id, { dofa: e.target.value, dofaReason: "" })}
+            title="Dimensión estratégica (la propone el MD; puedes ajustarla). Sin clasificar = Operativa. La justificación la escribe el MD."
             className="rounded-md border border-[#D0D5DD] bg-white px-2 py-1 font-normal text-[#344054]">
-            <option value="">Sin clasificar</option>
             {DOFA_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {task.dofa && DOFA[task.dofa] && task.dofa !== "operativa" && (

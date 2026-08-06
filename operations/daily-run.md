@@ -484,8 +484,10 @@ en el editor y en el tooltip del badge. **`operativa` NO lleva `dofa_reason`** (
 no necesita justificación estratégica): dejar `dofa_reason` vacío.
 
 Reglas:
-- **Ninguna tarea activa queda sin `dofa`.** Las de O/F/D/A además llevan `dofa_reason`; las `operativa`
-  NO. Criterio de duda: ¿esta tarea **cambia la posición estratégica del negocio**? Si no → `operativa`.
+- **Ninguna tarea activa queda sin `dofa`.** Toda tarea **sin clasificar es `operativa`** por defecto
+  (la app la crea así y la trata como operativa). Las de O/F/D/A además llevan `dofa_reason`; las
+  `operativa` NO. Criterio de duda: ¿esta tarea **cambia la posición estratégica del negocio**? Si no →
+  `operativa`.
 - `dofa` es **independiente** de `priority` (impacto), `designPoints` (esfuerzo) y `category` (tipo):
   una tarea operativa puede ser urgente; una de oportunidad puede ser de bajo esfuerzo.
 - La app muestra un **badge** (O/F/D/A u "Operativa") por tarea y un selector para ajustarla; en el
